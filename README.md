@@ -129,6 +129,32 @@ Hammasi yashil bo'lgach:
 
 Kichik orb ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
 
+### Avtomatik ishga tushirish
+
+Terminal ochib yurish shart bo'lmasin — bir marta yoqib qo'ying:
+
+```bash
+./scripts/autostart.sh
+```
+
+Shundan keyin Jarvis har safar kompyuterga kirganingizda **o'zi ishga
+tushadi**: ertalab Mac'ni ochasiz, «Hey Jarvis» deysiz — ishlaydi. Yiqilib
+qolsa, tizim o'zi qayta ko'taradi.
+
+```bash
+./scripts/autostart.sh status   # holati
+./scripts/autostart.sh off      # o'chirish
+tail -f ~/.jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
+```
+
+Bitta eslatma: birinchi avtomatik ishga tushishda macOS mikrofon ruxsatini
+qaytadan so'rashi mumkin — bu safar so'rov terminal emas, python nomidan
+keladi. Bir marta «OK» deysiz.
+
+Avtomatik rejim yoqilganda `./scripts/run.sh` ni qo'lda ishga tushirish
+kerak emas — ikkita nusxa bir-biriga xalaqit beradi (ikkalasi ham bitta
+mikrofonni va 8765-portni talab qiladi).
+
 ### Orb: kichik, sudraladigan
 
 Orb ataylab kichik — 150 piksel, ish stolining bir burchagida turadi va
