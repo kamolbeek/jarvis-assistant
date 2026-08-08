@@ -5,8 +5,8 @@ Oqim:
         -> tinglash (VAD gapirish tugaganini aniqlaguncha)
         -> matnga aylantirish (STT)
         -> o'ylash va ish qilish (Claude Agent SDK + xavfsizlik darvozasi)
-        -> gapirish (TTS, gap-gap)
-        -> yana kutish
+        -> gapirish (TTS, gap-gap; foydalanuvchi gapirsa — to'xtash)
+        -> yana tinglash (uyg'otuvchi so'zsiz) yoki kutishga qaytish
 """
 
 from __future__ import annotations
@@ -15,10 +15,12 @@ import asyncio
 import logging
 import random
 import signal
+from contextlib import suppress
 from typing import Any
 
 import numpy as np
 
+from .audio.bargein import build_barge_in
 from .audio.clap import ClapDetector
 from .audio.mic import MicStream, frame_level
 from .audio.vad import Endpointer, build_speech_detector
@@ -127,9 +129,20 @@ class Jarvis:
             else None
         )
 
+        # Uzluksiz suhbat va gapni bo'lish — ikkisi ham bitta bo'limda.
+        self._talk = config.section("conversation")
+        self._barge_in = build_barge_in(
+            self._talk,
+            detector=build_speech_detector(
+                config.section("audio.endpointing"), config.sample_rate
+            ),
+            frame_ms=int(config.get("audio.frame_ms", 20)),
+        )
+
         self._activate = asyncio.Event()
         self._shutdown = asyncio.Event()
         self._greeted = False
+        self._interrupted = False
         self._heartbeat: asyncio.Task[None] | None = None
 
     # --- Hayot sikli ---
@@ -347,10 +360,17 @@ class Jarvis:
             await self._play_chime()
             await self._speak(item.text)
 
+            if self._interrupted:
+                # Foydalanuvchi eslatmani bo'lib javob bermoqda — bu suhbat
+                # boshlanishi. Qolgan eslatmalar navbatda turadi, keyin aytiladi.
+                log.info("Eslatma bo'lindi — foydalanuvchi javob bermoqda")
+                await self._converse()
+                return
+
         await self.bus.set_state(State.IDLE)
 
     async def _session(self, source: str = "so'z") -> None:
-        """Bitta muloqot sikli: uyg'onish -> tinglash -> javob."""
+        """Uyg'onish: signal, salomlashish, so'ng suhbat."""
         await self.bus.set_state(State.WAKE)
         await self._play_chime()
 
@@ -367,15 +387,58 @@ class Jarvis:
             pool = CLAP_GREETINGS if source == "qarsak" else GREETINGS
             await self._speak(random.choice(pool))
 
-        text = await self._capture_utterance()
-        if not text:
-            await self._speak(random.choice(NOT_UNDERSTOOD))
-            await self.bus.set_state(State.IDLE)
-            return
+        await self._converse()
 
-        await self._handle_utterance(text)
+    async def _converse(self) -> None:
+        """Tinglash -> javob -> yana tinglash.
 
-    async def _capture_utterance(self) -> str:
+        Javobdan keyin Jarvis darhol jim bo'lib qolmaydi — bir necha soniya
+        tinglab turadi. Foydalanuvchi davom etsa, uyg'otuvchi so'zni qaytadan
+        aytish shart emas; jim bo'lsa, o'zi kutish holatiga qaytadi.
+        """
+        follow_up = bool(self._talk.get("follow_up", True))
+        max_turns = int(self._talk.get("max_turns", 12))
+        turn = 0
+
+        while not self._shutdown.is_set():
+            # Gapni bo'lgan foydalanuvchi allaqachon gapirib turgan bo'ladi —
+            # unda kutish oynasi kerak emas, darhol tinglaymiz.
+            text = await self._capture_utterance(patience_sec=self._patience(turn))
+
+            if not text:
+                # Birinchi navbatda jimlik — "eshitmadim" deb aytamiz.
+                # Keyingi navbatlarda bu shunchaki suhbat tugagani.
+                if turn == 0:
+                    await self._speak(random.choice(NOT_UNDERSTOOD))
+                else:
+                    log.info("Suhbat tugadi: %d navbat", turn)
+                break
+
+            await self._handle_utterance(text)
+            turn += 1
+
+            if not follow_up:
+                break
+            if turn >= max_turns:
+                log.info("Suhbat navbatlari chegarasiga yetdi (%d)", max_turns)
+                break
+
+        await self.bus.set_state(State.IDLE)
+
+    def _patience(self, turn: int) -> float:
+        """Foydalanuvchi gapirishini shuncha soniya kutamiz.
+
+        Birinchi navbatda ko'proq kutamiz — odam uyg'otuvchi so'zni aytib,
+        keyin o'ylanib qolishi mumkin. Javobdan keyingi oyna qisqaroq,
+        aks holda Jarvis xonani keraksiz uzoq tinglab turardi.
+        """
+        if self._interrupted:
+            return 2.0
+        if turn == 0:
+            return float(self._talk.get("first_wait_sec", 6))
+        return float(self._talk.get("follow_up_sec", 8))
+
+    async def _capture_utterance(self, patience_sec: float = 6.0) -> str:
         """Foydalanuvchini tinglaydi va aytganini matnga aylantiradi."""
         await self.bus.set_state(State.LISTENING)
 
@@ -386,10 +449,14 @@ class Jarvis:
             silence_ms=int(endpoint_cfg.get("silence_ms", 900)),
             max_utterance_sec=float(endpoint_cfg.get("max_utterance_sec", 30)),
         )
+        # Gapni bo'lgan bo'lsa, aytilgan birinchi so'zlar shu buferda —
+        # ular yo'qolmasligi kerak.
         endpointer.prime(self.mic.take_preroll())
+        self._interrupted = False
 
         # Foydalanuvchi umuman gapirmasa, cheksiz kutib qolmaymiz.
-        silence_budget = int(6_000 / max(1, int(self.config.get("audio.frame_ms", 20))))
+        frame_ms = max(1, int(self.config.get("audio.frame_ms", 20)))
+        silence_budget = int(patience_sec * 1000 / frame_ms)
         idle_frames = 0
 
         async for frame in self.mic.frames():
@@ -425,25 +492,36 @@ class Jarvis:
         """
         await self.bus.set_state(State.THINKING)
         spoke_anything = False
+        answer = self.brain.ask(text)
 
         try:
             # Miya siferblati javob oqib kelayotgan butun davr davomida yonadi.
             async with self.health.busy(System.BRAIN):
-                async for sentence in self.brain.ask(text):
+                async for sentence in answer:
                     if self._shutdown.is_set():
                         return
                     spoke_anything = True
                     await self._speak(sentence, remote=remote)
+                    if self._interrupted:
+                        # Foydalanuvchi gapni bo'ldi — qolgan gaplarni aytmaymiz.
+                        # Javobning to'liq matni `last_reply` da qoladi.
+                        log.info("Javob to'xtatildi — foydalanuvchi gapirdi")
+                        break
         except Exception as exc:
             log.exception("Javob olishda xato")
             await self.bus.set_state(State.ERROR)
             await self._speak(ERROR_REPLY.format(error=type(exc).__name__), remote=remote)
         finally:
-            if not spoke_anything and self.brain.last_reply:
+            # Yarmida to'xtatilgan generator SDK seansini ochiq qoldirmasin.
+            await answer.aclose()
+            if not spoke_anything and self.brain.last_reply and not self._interrupted:
                 await self._speak(self.brain.last_reply, remote=remote)
             if remote is not None:
                 await self.ui.send_to(remote, {"type": "done"})
-            await self.bus.set_state(State.IDLE)
+            # Bo'lingan bo'lsa, sikl darhol tinglashga o'tadi — oradagi
+            # IDLE chaqnashi HUD'da keraksiz sakrash bo'lardi.
+            if not self._interrupted:
+                await self.bus.set_state(State.IDLE)
 
     # --- Ovoz chiqarish ---
 
@@ -471,12 +549,39 @@ class Jarvis:
             # animatsiya uchun, kechiksa yoki yo'qolsa ham ijroni to'xtatmasligi kerak.
             asyncio.ensure_future(self.bus.level(value))
 
+        # Ijro davomida mikrofonni kuzatamiz: foydalanuvchi gapirsa to'xtaymiz.
+        # Bu paytda asosiy sikl `_speak`ni kutib turadi, ya'ni kadrlarni
+        # boshqa hech kim o'qimaydi — navbat uchun kurash bo'lmaydi.
+        watcher = None
+        if self._barge_in is not None:
+            watcher = asyncio.create_task(self._watch_for_barge_in())
+
         try:
             async with self.health.busy(System.TTS):
                 await self.speaker.play(self.tts.stream(text), self.tts.sample_rate, on_level)
         except Exception:
             log.exception("Ovozga chiqarib bo'lmadi")
             await self.bus.log_line(f"[ovozsiz] {text}", level="warn")
+        finally:
+            if watcher is not None:
+                watcher.cancel()
+                with suppress(asyncio.CancelledError):
+                    await watcher
+
+    async def _watch_for_barge_in(self) -> None:
+        """Ijro paytida foydalanuvchi gapini kutadi va gapirsa ijroni to'xtatadi."""
+        assert self._barge_in is not None
+        self._barge_in.reset()
+
+        # Bu yerda o'qilgan kadrlar yo'qolmaydi: preroll buferi har bir kadrni
+        # o'qilganidan qat'i nazar saqlaydi, shuning uchun bo'lingandan keyin
+        # `_capture_utterance` aytilgan birinchi so'zni ham oladi.
+        async for frame in self.mic.frames():
+            if self._barge_in.push(frame):
+                self._interrupted = True
+                self.speaker.stop()
+                await self.health.ping(System.MIC)
+                return
 
     async def _speak_remote(self, text: str, client: str) -> None:
         """Javobni sintez qilib, mijozga PCM sifatida yuboradi."""

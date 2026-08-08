@@ -39,6 +39,10 @@ flowchart TD
 
 - **Ovoz bilan uyg'onadi** — «Hey Jarvis», ikki marta qarsak, yoki `⌘⇧J`.
   Qarsak bilan chaqirsangiz «Buyrug'ingizni kutyapman» deydi.
+- **Suhbatni davom ettiradi** — javobdan keyin tinglab turadi, har safar
+  «Hey Jarvis» deyish shart emas.
+- **Gapini bo'lish mumkin** — Jarvis gapirayotganda gapirsangiz, darhol jim
+  bo'lib sizni tinglaydi. Uzun javobni oxirigacha kutish kerak emas.
 - **O'zbekcha gapiradi va tushunadi** — savol ham, javob ham o'zbek tilida.
 - **Kompyuterni boshqaradi** — fayl o'qiydi/yozadi, shell buyruqlarini bajaradi,
   ilovalarni ochadi, kod yozadi, loyihani davom ettiradi.
@@ -178,6 +182,44 @@ Bitta bo'g'in buzilsa, HUD chekkasi ham qizg'ish tus oladi. Siferblat ustiga
 sichqonchani olib borsangiz, sabab yoziladi — jurnal titkilash shart emas.
 
 Butun ranglar tizimi bitta joyda: `ui/renderer/palette.js`.
+
+## Suhbat: uyg'otish bir marta
+
+Javob berib bo'lgach Jarvis darhol jim bo'lib qolmaydi — bir necha soniya
+tinglab turadi (HUD to'lqin holatida qoladi). Shu oynada gapirsangiz,
+«Hey Jarvis» ni takrorlash shart emas:
+
+> — Hey Jarvis, bugun nima ishlarim bor?
+> — Uchta: iLevel deploy, Alisher bilan qo'ng'iroq, hisobot.
+> — Hisobotni ertaga surib qo'y. ← uyg'otish kerak emas
+> — Bo'ldi, ertaga soat 10 ga surdim.
+
+Jim bo'lsangiz, o'zi kutish holatiga qaytadi.
+
+**Gapini bo'lish.** Jarvis gapirayotganda gapirsangiz, o'rtasida to'xtaydi va
+sizni tinglaydi. Aytib bo'lgan qismi xotirada qoladi, qolgani aytilmaydi.
+
+Bu yerdagi asosiy qiyinchilik — dinamikdan qaytgan Jarvisning **o'z ovozi**:
+mikrofon uni ham eshitadi va VAD uni ham "nutq" deb belgilaydi. Shuning uchun
+chegara qattiq yozilmagan, o'zi moslashadi: har kadrda "hozir eshitilib turgan
+fon" o'rtalanadi va sizning ovozingiz undan `barge_in_margin` baravar baland
+bo'lishi talab qilinadi. Quloqchinda fon deyarli nol — sezgirlik yuqori;
+baland dinamikda fon o'z-o'zidan ko'tariladi — yolg'on bo'linish bo'lmaydi.
+
+```yaml
+# config/jarvis.yaml
+conversation:
+  follow_up: true
+  follow_up_sec: 8                 # javobdan keyingi tinglash oynasi
+  max_turns: 12
+  barge_in: true
+  barge_in_min_speech_ms: 350      # shuncha uzluksiz nutqdan keyin to'xtaydi
+  barge_in_margin: 2.0             # foniga nisbatan shuncha baland bo'lishi kerak
+```
+
+Agar Jarvis o'z ovozidan bo'linib ketsa (dinamik juda baland), `barge_in_margin`
+ni 3.0 ga ko'taring. Aksincha, sizni eshitmasa — 1.5 ga tushiring yoki
+quloqchin ishlating.
 
 ## Telefonda ishlatish
 
@@ -346,7 +388,7 @@ xatolarga olib keladi. Muhim buyruqlarni sekinroq va aniq ayting.
 
 ```
 jarvis/
-├── audio/          mikrofon, uyg'otuvchi so'z, qarsak, gapirish tugashi (VAD)
+├── audio/          mikrofon, uyg'otuvchi so'z, qarsak, VAD, gapni bo'lish
 ├── voice/          STT va TTS provayderlari + ijro
 ├── brain/
 │   ├── agent.py    Claude Agent SDK ustidagi qatlam
@@ -393,8 +435,8 @@ Ovoz bilan aytishingiz mumkin:
 
 ## Keyingi bosqichlar
 
-- [ ] Uzluksiz suhbat rejimi — har safar «Hey Jarvis» demasdan davom ettirish
-- [ ] Jarvis gapirayotganda uni bo'lish (barge-in)
+- [x] Uzluksiz suhbat rejimi — har safar «Hey Jarvis» demasdan davom ettirish
+- [x] Jarvis gapirayotganda uni bo'lish (barge-in)
 - [ ] Tayyor o'zbekcha uyg'otuvchi so'z modeli («Salom Jarvis») repoda
 - [ ] Brauzer boshqaruvi (Playwright)
 - [ ] Kalendar integratsiyasi (Google Calendar / Apple Calendar)

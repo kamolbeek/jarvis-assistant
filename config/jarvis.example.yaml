@@ -52,6 +52,20 @@ audio:
     max_utterance_sec: 30
     preroll_ms: 300                # uyg'otuvchi so'zdan oldingi audio (kontekst uchun)
 
+conversation:
+  # Javobdan keyin Jarvis yana tinglab turadi — «Hey Jarvis» ni har safar
+  # takrorlash shart emas. false qilsangiz, har bir savol uchun uyg'otish kerak.
+  follow_up: true
+  first_wait_sec: 6                # uyg'ongandan keyin gapirishni shuncha kutadi
+  follow_up_sec: 8                 # javobdan keyingi tinglash oynasi
+  max_turns: 12                    # bitta suhbatdagi eng ko'p navbat
+
+  # Jarvis gapirayotganda uni bo'lish. Chegara o'zi moslashadi: quloqchinda
+  # sezgir, baland dinamikda esa o'z ovozidan bo'linib ketmaydi.
+  barge_in: true
+  barge_in_min_speech_ms: 350       # shuncha uzluksiz nutqdan keyin to'xtaydi
+  barge_in_margin: 2.0              # foniga nisbatan shuncha baland bo'lishi kerak
+
 voice:
   stt:
     provider: "elevenlabs"         # elevenlabs | mohir | whisper_local
