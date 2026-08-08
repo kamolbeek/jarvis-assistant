@@ -36,12 +36,18 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if [ -d ui/node_modules ]; then
-  echo "==> Orb ishga tushmoqda"
-  (cd ui && npm start >/dev/null 2>&1) &
-  ORB_PID=$!
+# Orbning yiqilishi jimgina o'tib ketmasligi kerak: chiqishi /dev/null ga
+# ketsa, "ekranda hech nima yo'q" degan holatning sababi ko'rinmay qoladi.
+# Aynan shunday bo'ldi — launchd ostida `node` PATH'da yo'q edi.
+if [ ! -d ui/node_modules ]; then
+  echo "==> Orb o'tkazib yuborildi (ui/node_modules yo'q — cd ui && npm install)"
+elif ! command -v npm >/dev/null 2>&1; then
+  echo "==> ORB ISHGA TUSHMADI: npm topilmadi (PATH: $PATH)"
+  echo "    Yadro ishlaydi, lekin ekranda HUD ko'rinmaydi."
 else
-  echo "==> Orb o'tkazib yuborildi (ui/node_modules yo'q)"
+  echo "==> Orb ishga tushmoqda ($(command -v npm))"
+  (cd ui && npm start 2>&1 | sed 's/^/    [orb] /') &
+  ORB_PID=$!
 fi
 
 echo "==> Jarvis yadrosi"

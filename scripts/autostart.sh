@@ -59,9 +59,17 @@ install() {
 
   mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
 
-  # launchd'ning PATH'i juda qisqa, va `bash -l` zsh'ning .zprofile'ini
-  # o'qimaydi — shuning uchun Homebrew/npm yo'llarini o'zimiz qo'shamiz.
-  # Busiz orb (node) va Claude Code (`claude`) topilmay qolardi.
+  # launchd'ning PATH'i juda qisqa va `bash -l` zsh'ning .zprofile'ini
+  # o'qimaydi. Taxmin qilingan yo'llar ham yetarli emas: node nvm yoki
+  # boshqa joyda bo'lishi mumkin. Shuning uchun HOZIRGI seansning PATH'ini
+  # o'zini yozib qo'yamiz — u yerda hammasi ishlayotgani tekshirilgan.
+  if ! command -v npm >/dev/null 2>&1; then
+    echo 'Ogohlantirish: npm shu seansda ham topilmadi — orb (HUD) ko'\''rinmaydi.'
+    echo "Yadro baribir ishlaydi. Node.js o'rnatsangiz, shu skriptni qayta ishga tushiring."
+  fi
+  if ! command -v claude >/dev/null 2>&1; then
+    echo 'Eslatma: claude topilmadi — miya API kaliti orqali ishlaydi.'
+  fi
   cat > "$PLIST" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -75,7 +83,7 @@ install() {
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:\$PATH"; exec "$REPO/scripts/run.sh"</string>
+    <string>export PATH="$PATH"; exec "$REPO/scripts/run.sh"</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -109,7 +117,19 @@ PLIST_EOF
   # Eski nusxasi yuklangan bo'lsa, avval chiqarib tashlaymiz — aks holda
   # bootstrap "allaqachon yuklangan" deb xato beradi.
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$PLIST"
+
+  # Eski jarayon to'liq yopilmaguncha launchd "Input/output error" beradi.
+  # Bir necha marta urinib ko'ramiz — bu kutilgan hol, xato emas.
+  for attempt in 1 2 3 4 5; do
+    if launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null; then
+      break
+    fi
+    if [ "$attempt" = 5 ]; then
+      echo "launchd yuklay olmadi. Qaytadan urinib ko'ring: ./scripts/autostart.sh"
+      exit 1
+    fi
+    sleep 2
+  done
 
   echo "Tayyor. Jarvis hozir ishga tushdi va endi har login'da o'zi ko'tariladi."
   echo
