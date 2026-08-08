@@ -293,16 +293,20 @@ async def check_tts(cfg: Config) -> Result:
     speaker = Speaker(device=cfg.get("audio.output_device"))
 
     print(f"      {DIM}Eshitilyaptimi?{RESET}")
-    try:
-        await speaker.play(provider.stream(phrase), provider.sample_rate)
-    except Exception as exc:
-        detail = f"{type(exc).__name__}: {exc}"
-        advice = hint_for(detail)
-        return Result(False, f"{detail}\n{advice}" if advice else detail)
-    finally:
-        await provider.aclose()
+    # Ovoz nomi topilmasa provayder zaxira ovozga o'tadi va buni jurnalga
+    # yozadi — o'sha ogohlantirish natijada ham ko'rinishi kerak.
+    with collect_logs("jarvis.voice") as logs:
+        try:
+            await speaker.play(provider.stream(phrase), provider.sample_rate)
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            advice = hint_for(detail)
+            return Result(False, f"{detail}\n{advice}" if advice else detail)
+        finally:
+            await provider.aclose()
 
-    return Result(True, f"«{phrase}»")
+    parts = [f"«{phrase}»", *logs.lines]
+    return Result(True, "\n".join(parts))
 
 
 async def check_brain(cfg: Config) -> Result:

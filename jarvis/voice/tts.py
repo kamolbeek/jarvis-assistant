@@ -69,13 +69,34 @@ class ElevenLabsTts(TtsProvider):
 
         response = await self._client.get(f"{self.BASE}/voices", headers={"xi-api-key": api_key})
         response.raise_for_status()
-        for voice in response.json().get("voices", []):
+        voices = response.json().get("voices", [])
+
+        for voice in voices:
             if str(voice.get("name", "")).lower() == self._voice.lower():
                 self._voice_id = str(voice["voice_id"])
                 log.info("ElevenLabs ovozi topildi: %s -> %s", self._voice, self._voice_id)
                 return self._voice_id
 
-        raise RuntimeError(f"ElevenLabs'da `{self._voice}` nomli ovoz topilmadi")
+        # So'ralgan ovoz yo'q. Har bir hisobdagi ovoz to'plami boshqacha, shuning
+        # uchun bu odatiy hol — Jarvisni butunlay ovozsiz qoldirgandan ko'ra
+        # mavjud birinchi ovozga o'tamiz va nimani ishlatganimizni aytamiz.
+        if voices:
+            fallback = voices[0]
+            self._voice_id = str(fallback["voice_id"])
+            log.warning(
+                "ElevenLabs'da `%s` ovozi yo'q — `%s` ishlatiladi. "
+                "Mavjud ovozlar: %s. Kerakligini config/jarvis.yaml da "
+                "`voice.tts.voice` ga yozing.",
+                self._voice,
+                fallback.get("name", self._voice_id),
+                ", ".join(str(v.get("name", "?")) for v in voices[:10]) or "—",
+            )
+            return self._voice_id
+
+        raise RuntimeError(
+            "ElevenLabs hisobingizda birorta ovoz yo'q. elevenlabs.io > Voices da "
+            "kutubxonadan ovoz qo'shing (masalan multilingual ovozlardan bittasi)."
+        )
 
     async def stream(self, text: str) -> AsyncIterator[np.ndarray]:
         api_key = require_env("ELEVENLABS_API_KEY", "ElevenLabs TTS uchun")
