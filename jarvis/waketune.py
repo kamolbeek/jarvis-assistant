@@ -138,6 +138,75 @@ async def measure(phrase: str, cfg, detector, threshold: float,
     return out
 
 
+async def check_noise(cfg, detector, seconds: float = 4.0) -> tuple[float, float]:
+    """Shovqin sinovi: jim xonada model qanday ball beradi?
+
+    Bu chegaraning pastki cheki. Chegarani shundan pastga qo'ysak, xonaning
+    o'zi Jarvisni uyg'otib yuboradi. Bu raqam har bir xonada boshqacha,
+    shuning uchun uni o'lchamasdan chegara tavsiya qilish taxmin bo'lardi.
+    Qaytadi: (ball, cho'qqi).
+    """
+    import numpy as np
+
+    from .audio.mic import MicStream, frame_peak
+
+    print(f"  {DIM}Jim turing — {seconds:.0f} soniya{RESET}")
+    mic = MicStream(
+        sample_rate=cfg.sample_rate,
+        frame_samples=cfg.frame_samples,
+        device=cfg.get("audio.input_device"),
+        gain=float(cfg.get("audio.input_gain", 1.0)),
+    )
+
+    frames: list = []
+    loudest = 0.0
+    needed = int(seconds * cfg.sample_rate / cfg.frame_samples)
+
+    await mic.start()
+    try:
+        async for frame in mic.frames():
+            frames.append(frame)
+            loudest = max(loudest, frame_peak(frame))
+            if len(frames) >= needed:
+                break
+    finally:
+        await mic.stop()
+
+    if not frames:
+        return 0.0, 0.0
+    return detector.scan(np.concatenate(frames), cfg.frame_samples), loudest
+
+
+# Chegara shovqindan shuncha baravar baland bo'lishi kerak. Pastroq qo'ysak
+# xona o'zi uyg'otadi, balandroq qo'ysak haqiqiy chaqiruv o'tmay qoladi.
+NOISE_MARGIN = 1.6
+# Ishlaydigan iboraning balidan shuncha ulush — bir kunlik o'lchov aynan
+# takrorlanmaydi, shuning uchun zaxira qoldiramiz.
+VOICE_HEADROOM = 0.85
+
+
+def recommend(noise: float, peaks: dict[str, float]) -> dict:
+    """O'lchovlardan chegara tavsiya qiladi.
+
+    Mantiq: chegara shovqindan yuqori, lekin ishlaydigan iboralarning
+    balidan past bo'lishi kerak. Ikki shart to'qnashsa — bu model shu
+    ovozga to'g'ri kelmagani, va buni aytish kerak.
+    """
+    floor = max(noise, 0.05) * NOISE_MARGIN
+    working = {p: v for p, v in peaks.items() if v >= floor}
+    hopeless = [p for p, v in peaks.items() if v < floor]
+
+    if not working:
+        return {"floor": floor, "threshold": None, "candidate": None,
+                "working": [], "hopeless": hopeless}
+
+    lowest = min(working.values())
+    threshold = round(max(floor, lowest * VOICE_HEADROOM), 2)
+    candidate = round(max(0.05, min(threshold * 0.75, floor)), 2)
+    return {"floor": floor, "threshold": threshold, "candidate": candidate,
+            "working": sorted(working), "hopeless": hopeless}
+
+
 async def synth(cfg, text: str) -> tuple:
     """TTS bilan iborani sintez qiladi. Qaytadi: (audio, sample_rate)."""
     import numpy as np
@@ -250,9 +319,19 @@ async def run() -> int:
     # yozuvni ham tanimasa, mikrofonni sozlash bilan vaqt yo'qotish behuda.
     pipeline = room = -1.0
     room_loud = 0.0
+    noise = noise_loud = 0.0
     results: dict[str, Measurement] = {}
     try:
-        print(f"\n{BOLD}1. Quvur sinovi{RESET} {DIM}— TTS aytadi, to'g'ridan-to'g'ri "
+        print(f"\n{BOLD}1. Shovqin sinovi{RESET} {DIM}— chegaraning pastki cheki: "
+              f"xonaning o'zi qanday ball beradi{RESET}")
+        try:
+            noise, noise_loud = await check_noise(cfg, detector)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  {AMBER}O'tkazib yuborildi: {type(exc).__name__}: {exc}{RESET}")
+        else:
+            print(f"  ball {DIM}{noise:.3f}{RESET} — cho'qqi {noise_loud:.2f}")
+
+        print(f"\n{BOLD}2. Quvur sinovi{RESET} {DIM}— TTS aytadi, to'g'ridan-to'g'ri "
               f"modelga beriladi (mikrofon qatnashmaydi){RESET}")
         try:
             pipeline = await check_pipeline(cfg, detector)
@@ -262,7 +341,7 @@ async def run() -> int:
             tint = colour(pipeline, threshold, candidate)
             print(f"  ball {tint}{pipeline:.3f}{RESET} [{tint}{bar(pipeline)}{RESET}]")
 
-        print(f"\n{BOLD}2. Xona sinovi{RESET} {DIM}— TTS dinamikdan chalinadi, "
+        print(f"\n{BOLD}3. Xona sinovi{RESET} {DIM}— TTS dinamikdan chalinadi, "
               f"mikrofon eshitadi{RESET}")
         try:
             room, room_loud = await check_room(cfg, detector)
@@ -273,7 +352,7 @@ async def run() -> int:
             print(f"  ball {tint}{room:.3f}{RESET} [{tint}{bar(room)}{RESET}] "
                   f"cho'qqi {room_loud:.2f}")
 
-        print(f"\n{BOLD}3. Sizning ovozingiz{RESET}")
+        print(f"\n{BOLD}4. Sizning ovozingiz{RESET}")
         for phrase in phrases:
             results[phrase] = await measure(phrase, cfg, detector, threshold, candidate)
     finally:
@@ -362,24 +441,35 @@ async def run() -> int:
               f"README: «To'liq lokal yechim».{RESET}")
         return 1
 
-    # Model umuman sezmagan iboralar uchun chegarani pasaytirish ma'nosiz —
-    # u shovqin darajasiga tushib ketadi.
-    weak = [p for p, m in results.items() if m.peak < candidate]
-    strong = [m.peak for m in results.values() if m.peak >= candidate]
+    # Chegarani o'lchovdan hisoblaymiz: shovqindan yuqori, lekin ishlaydigan
+    # iboralarning balidan past.
+    advice = recommend(noise, {p: m.peak for p, m in results.items()})
+    print(f"{DIM}Shovqin {noise:.3f} · ishonchli chegaraning pastki cheki "
+          f"{advice['floor']:.2f}{RESET}")
 
-    if strong:
-        floor = min(strong)
-        suggested = max(0.05, round(floor * 0.6, 2))
-        print(f"{DIM}Eng past sezilgan ball: {floor:.3f}. "
-              f"`candidate_threshold: {suggested}` qo'yib ko'ring.{RESET}")
-    if weak:
-        print(f"{AMBER}Model bu iboralarni sezmadi: {', '.join(weak)}{RESET}")
-        print(f"{DIM}Chegarani 0.05 dan pastga tushirish yaramaydi — shovqin ham\n"
-              f"o'tib ketadi va har safar STT chaqiriladi. Bu iboralar uchun\n"
-              f"o'z modelini o'rgatish kerak (README: «To'liq lokal yechim»)\n"
-              f"yoki Porcupine bilan tayyor ibora yasash.{RESET}")
-    else:
-        print(f"{GREEN}Hamma chaqiruv ishlaydi.{RESET}")
+    if advice["threshold"] is None:
+        print(f"\n{AMBER}{BOLD}Birorta ibora shovqindan yuqori chiqmadi{RESET}")
+        print(f"{DIM}Chegarani bunday holatda pasaytirish yaramaydi — xonaning\n"
+              f"o'zi Jarvisni uyg'otib yuboradi. Bu iboralar uchun o'z modelini\n"
+              f"o'rgatish kerak (README: «To'liq lokal yechim»).{RESET}")
+        return 1
+
+    print(f"\n{GREEN}{BOLD}Ishlaydigan chaqiruvlar: "
+          f"{', '.join(advice['working'])}{RESET}")
+    print(f"{DIM}config/jarvis.yaml ga shuni qo'ying:{RESET}")
+    print(f"""
+{CYAN}activation:
+  wake_word:
+    threshold: {advice['threshold']}
+    candidate_threshold: {advice['candidate']}{RESET}
+""")
+
+    if advice["hopeless"]:
+        print(f"{AMBER}Bu iboralar shovqindan ham past chiqdi: "
+              f"{', '.join(advice['hopeless'])}{RESET}")
+        print(f"{DIM}Ularni chegarani pasaytirib qutqarib bo'lmaydi — model bu\n"
+              f"iborani bilmaydi. O'z modelini o'rgatish kerak (README:\n"
+              f"«To'liq lokal yechim») yoki Porcupine bilan tayyor ibora yasash.{RESET}")
 
     return 0
 
