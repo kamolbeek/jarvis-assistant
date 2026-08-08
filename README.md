@@ -147,9 +147,29 @@ qolsa, tizim o'zi qayta ko'taradi.
 tail -f ~/.jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
 ```
 
-Bitta eslatma: birinchi avtomatik ishga tushishda macOS mikrofon ruxsatini
-qaytadan so'rashi mumkin — bu safar so'rov terminal emas, python nomidan
-keladi. Bir marta «OK» deysiz.
+**Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *ishga tushiruvchi
+dastur* bo'yicha beradi. Terminaldan ishga tushirsangiz javobgar Terminal
+bo'ladi va ruxsat ishlaydi; `launchd` ostida esa javobgar boshqa va macOS
+**so'ramaydi ham, xato ham bermaydi** — oqim ochiladi, ichida faqat nol
+keladi. Tashqaridan qaraganda Jarvis ishlab turadi, lekin hech nima
+eshitmaydi.
+
+Jarvis buni o'zi sezadi: ishga tushganda bir soniya tinglaydi va mutlaq nol
+kelsa, HUD'da mikrofon siferblati qizarib, jurnalga sabab yoziladi (haqiqiy
+jimlikda ham fon shovqini bo'ladi — mutlaq nol aynan bloklanganning
+belgisi).
+
+Tuzatish: **Tizim sozlamalari → Maxfiylik va xavfsizlik → Mikrofon** ro'yxatiga
+Python'ni qo'shing. Ro'yxatda `+` bo'lmasa, Finder'da `⌘⇧G` bilan yo'lni
+oching va binary'ni ro'yxatga sudrab tashlang. Yo'lni Jarvis jurnalda
+ko'rsatadi.
+
+Vaqtinchalik yechim — terminaldan ishlatish (u ruxsatga ega):
+
+```bash
+./scripts/autostart.sh off
+./scripts/run.sh
+```
 
 Avtomatik rejim yoqilganda `./scripts/run.sh` ni qo'lda ishga tushirish
 kerak emas — ikkita nusxa bir-biriga xalaqit beradi (ikkalasi ham bitta

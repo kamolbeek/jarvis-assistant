@@ -462,3 +462,57 @@ def test_clip_fraction_catches_both_polarities():
     negative = np.full(64, -32768, dtype=np.int16)
 
     assert clip_fraction(negative) == 1.0
+
+
+# --- Mikrofon haqiqatan ovoz beryaptimi ---------------------------------------
+#
+# macOS ruxsat bermaganda oqim ochiladi, xato bermaydi, lekin ichida faqat
+# NOL keladi. Jarvis «tayyor» deb turadi va chaqiruvni hech qachon
+# eshitmaydi. Haqiqiy jimlikda ham fon shovqini bo'ladi — mutlaq nol aynan
+# bloklanganning belgisi.
+
+
+class _SilentMic:
+    def __init__(self, value: int = 0, sample_rate: int = 16000, frame: int = 320):
+        self.value = value
+        self.sample_rate = sample_rate
+        self.frame_samples = frame
+
+    async def frames(self):
+        while True:
+            yield np.full(self.frame_samples, self.value, dtype=np.int16)
+
+
+async def _run_mic_check(value: int):
+    """Yadroning mikrofon tekshiruvini yolg'iz o'zi ishga tushiradi."""
+    from jarvis.app import Jarvis
+    from jarvis.bus import EventBus
+    from jarvis.config import Config
+    from jarvis.health import Health, System
+
+    jarvis = Jarvis.__new__(Jarvis)
+    jarvis.config = Config(data={"audio": {"sample_rate": 16000, "frame_ms": 20}})
+    jarvis.bus = EventBus()
+    jarvis.health = Health(jarvis.bus.emit)
+    jarvis.mic = _SilentMic(value)
+
+    await jarvis._check_mic_delivers_audio(seconds=0.1)
+    return jarvis.health.snapshot(), System
+
+
+@pytest.mark.asyncio
+async def test_silent_mic_is_reported_as_down():
+    snapshot, System = await _run_mic_check(0)
+
+    mic = next(s for s in snapshot["systems"] if s["id"] == System.MIC.value)
+    assert mic["status"] == "down"
+    assert "macOS" in (mic.get("detail") or ""), "sabab aytilishi kerak"
+
+
+@pytest.mark.asyncio
+async def test_working_mic_is_left_alone():
+    """Ovoz kelayotgan bo'lsa, tekshiruv hech nimaga tegmaydi."""
+    snapshot, System = await _run_mic_check(120)
+
+    mic = next(s for s in snapshot["systems"] if s["id"] == System.MIC.value)
+    assert mic["status"] != "down"

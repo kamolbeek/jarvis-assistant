@@ -15,6 +15,7 @@ import asyncio
 import logging
 import random
 import signal
+import sys
 from contextlib import suppress
 from typing import Any
 
@@ -180,6 +181,7 @@ class Jarvis:
         await self.brain.start()
         await self.scheduler.start()
         await self.mic.start()
+        await self._check_mic_delivers_audio()
         await self._mark_ready()
         self._heartbeat = asyncio.create_task(self.health.heartbeat())
         await self.bus.set_state(State.IDLE)
@@ -196,6 +198,50 @@ class Jarvis:
             log.info("Telefonda oching: %s", self._lan_phone_url())
 
         await self.bus.log_line("Jarvis tayyor. «Hey Jarvis» deb chaqiring.")
+
+    async def _check_mic_delivers_audio(self, seconds: float = 1.0) -> None:
+        """Mikrofon ochildi — lekin ovoz kelyaptimi?
+
+        macOS mikrofon ruxsatini ishga tushiruvchi dastur bo'yicha beradi.
+        Terminaldan ishga tushirilganda javobgar Terminal bo'ladi va ruxsat
+        bor; `launchd` ostida esa javobgar boshqa va ruxsat yo'q. Bunday
+        holatda macOS so'ramaydi ham, xato ham bermaydi — oqim ochiladi va
+        ichida faqat NOL keladi.
+
+        Natijada Jarvis «tayyor» deb turadi, chaqiruvni esa hech qachon
+        eshitmaydi. Shuning uchun boshida bir soniya tinglab, aynan shu
+        holatni ajratamiz: mutlaq nol — bu jimlik emas, bu bloklangan
+        mikrofon (haqiqiy jimlikda ham shovqin fon bo'ladi).
+        """
+        frames = int(seconds * self.config.sample_rate / self.config.frame_samples)
+        loudest = 0.0
+
+        try:
+            async with asyncio.timeout(seconds + 2):
+                seen = 0
+                async for frame in self.mic.frames():
+                    loudest = max(loudest, float(np.max(np.abs(frame.astype(np.int32)))))
+                    seen += 1
+                    if seen >= frames:
+                        break
+        except (TimeoutError, asyncio.CancelledError):
+            pass
+
+        if loudest > 0:
+            return
+
+        reason = "macOS mikrofonni bloklayapti (faqat nol keladi)"
+        log.error(
+            "MIKROFON OVOZ BERMAYAPTI. Oqim ochildi, lekin ichida faqat nol.\n"
+            "Bu deyarli har doim macOS ruxsati: Tizim sozlamalari > Maxfiylik "
+            "va xavfsizlik > Mikrofon.\n"
+            "Ro'yxatga Python qo'shilganini tekshiring: %s\n"
+            "Vaqtinchalik yechim: `./scripts/autostart.sh off` va terminaldan "
+            "`./scripts/run.sh` — terminal ruxsatga ega.",
+            sys.executable,
+        )
+        await self.health.mark(System.MIC, Status.DOWN, reason)
+        await self.bus.log_line(f"Mikrofon: {reason}", level="error")
 
     async def _mark_ready(self) -> None:
         """Ishga tushgach har bir bo'g'inning boshlang'ich holatini belgilaydi.
