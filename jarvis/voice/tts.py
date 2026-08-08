@@ -43,19 +43,57 @@ class TtsProvider(ABC):
         """Resurslarni bo'shatadi."""
 
 
+# ElevenLabs javobida `labels.gender` bo'ladi, lekin har doim emas. Shuning
+# uchun ikkinchi yo'l: kutubxonadagi tanish ovozlarning nomlari.
+KNOWN_VOICES: dict[str, frozenset[str]] = {
+    "female": frozenset({
+        "aria", "sarah", "laura", "charlotte", "alice", "matilda", "jessica",
+        "lily", "rachel", "domi", "bella", "elli", "freya", "gigi", "glinda",
+        "nicole", "dorothy", "serena", "grace", "emily",
+    }),
+    "male": frozenset({
+        "roger", "charlie", "george", "callum", "liam", "will", "eric", "chris",
+        "brian", "daniel", "adam", "antoni", "arnold", "josh", "sam", "bill",
+    }),
+}
+
+
 class ElevenLabsTts(TtsProvider):
     """ElevenLabs streaming TTS."""
 
     BASE = "https://api.elevenlabs.io/v1"
 
-    def __init__(self, voice: str = "Rachel", model: str = "eleven_multilingual_v2",
-                 speed: float = 1.0) -> None:
+    def __init__(self, voice: str = "Aria", model: str = "eleven_multilingual_v2",
+                 speed: float = 1.0, gender: str = "female") -> None:
         self.sample_rate = 24000
         self._voice = voice
         self._model = model
         self._speed = speed
+        self._gender = gender.lower().strip()
         self._voice_id: str | None = None
         self._client = httpx.AsyncClient(timeout=60.0)
+
+    def _pick_fallback(self, voices: list[dict]) -> dict:
+        """So'ralgan nom yo'q — jinsi mos keladigan ovozni topadi.
+
+        Avval ElevenLabs bergan yorliqqa ishonamiz, u bo'lmasa nomlar
+        ro'yxatiga qaraymiz, ikkisi ham yordam bermasa birinchisini olamiz.
+        """
+        if self._gender:
+            for voice in voices:
+                labels = voice.get("labels") or {}
+                if str(labels.get("gender", "")).lower() == self._gender:
+                    return voice
+
+            known = KNOWN_VOICES.get(self._gender, frozenset())
+            for voice in voices:
+                if str(voice.get("name", "")).lower() in known:
+                    return voice
+
+        return voices[0]
+
+    def _gender_word(self) -> str:
+        return {"female": "ayol", "male": "erkak"}.get(self._gender, self._gender)
 
     async def _resolve_voice_id(self, api_key: str) -> str:
         """Nom berilgan bo'lsa, uni ovoz ID'siga aylantiradi (bir marta)."""
@@ -81,13 +119,14 @@ class ElevenLabsTts(TtsProvider):
         # uchun bu odatiy hol — Jarvisni butunlay ovozsiz qoldirgandan ko'ra
         # mavjud birinchi ovozga o'tamiz va nimani ishlatganimizni aytamiz.
         if voices:
-            fallback = voices[0]
+            fallback = self._pick_fallback(voices)
             self._voice_id = str(fallback["voice_id"])
             log.warning(
-                "ElevenLabs'da `%s` ovozi yo'q — `%s` ishlatiladi. "
+                "ElevenLabs'da `%s` ovozi yo'q — %sovoz `%s` ishlatiladi. "
                 "Mavjud ovozlar: %s. Kerakligini config/jarvis.yaml da "
                 "`voice.tts.voice` ga yozing.",
                 self._voice,
+                f"{self._gender_word()} " if self._gender else "",
                 fallback.get("name", self._voice_id),
                 ", ".join(str(v.get("name", "?")) for v in voices[:10]) or "—",
             )
@@ -301,20 +340,40 @@ class Speaker:
         return completed
 
 
+# Har bir provayderning standart ovozi jinsga qarab. `voice.tts.gender`
+# sozlamada nom ko'rsatilmagan yoki topilmagan hollarda tanlovni boshqaradi.
+DEFAULT_VOICES: dict[str, dict[str, str]] = {
+    "azure": {"female": "uz-UZ-MadinaNeural", "male": "uz-UZ-SardorNeural"},
+    # Mohir.ai'da erkak ovozining nomini tasdiqlaganim yo'q — sozlamada
+    # `voice.tts.voice` ga yozib qo'yish kerak.
+    "mohir": {"female": "gulnoza"},
+    "macos": {"female": "Samantha", "male": "Daniel"},
+}
+
+
+def _default_voice(provider: str, gender: str) -> str:
+    choices = DEFAULT_VOICES[provider]
+    return choices.get(gender, choices["female"])
+
+
 def build_tts(cfg: dict) -> TtsProvider:
     provider = str(cfg.get("provider", "elevenlabs")).lower()
-    voice = str(cfg.get("voice", "Rachel"))
+    gender = str(cfg.get("gender", "female")).lower().strip()
+    voice = str(cfg.get("voice", "") or "")
     speed = float(cfg.get("speed", 1.0))
 
     if provider == "elevenlabs":
-        return ElevenLabsTts(voice=voice, model=str(cfg.get("model", "eleven_multilingual_v2")),
-                             speed=speed)
+        return ElevenLabsTts(voice=voice or "Aria", gender=gender, speed=speed,
+                             model=str(cfg.get("model", "eleven_multilingual_v2")))
     if provider == "azure":
-        return AzureTts(voice=voice if voice.startswith("uz-") else "uz-UZ-SardorNeural",
+        # Azure ovozlari `uz-UZ-...` ko'rinishida; boshqa nom kelsa e'tibor bermaymiz.
+        return AzureTts(voice=voice if voice.startswith("uz-") else _default_voice("azure", gender),
                         speed=speed)
     if provider == "mohir":
-        return MohirTts(voice=voice, speed=speed)
+        return MohirTts(voice=voice or _default_voice("mohir", gender), speed=speed)
     if provider == "macos":
-        return MacosSayTts(voice=voice if not voice.startswith("uz-") else "Samantha",
-                           speed=speed)
+        return MacosSayTts(
+            voice=voice if voice and not voice.startswith("uz-") else _default_voice("macos", gender),
+            speed=speed,
+        )
     raise ValueError(f"Noma'lum TTS provayderi: {provider}")
