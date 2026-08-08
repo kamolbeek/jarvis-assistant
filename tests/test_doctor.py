@@ -286,3 +286,11 @@ async def test_telegram_bad_token_is_named(monkeypatch: pytest.MonkeyPatch):
 
     assert result.ok is False
     assert "BotFather" in result.detail
+
+
+def test_hint_points_at_the_subscription_when_credits_run_out():
+    """Bo'sh balans — obuna bo'lsa, pul to'lash shart emas."""
+    advice = hint_for("Your credit balance is too low to access the Anthropic API")
+
+    assert "ANTHROPIC_API_KEY" in advice
+    assert "obuna" in advice

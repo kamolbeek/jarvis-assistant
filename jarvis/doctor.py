@@ -50,6 +50,14 @@ HINTS: list[tuple[tuple[str, ...], str]] = [
         "Kalit qabul qilinmadi — .env dagi qiymatni qaytadan tekshiring.",
     ),
     (
+        ("credit balance", "insufficient_quota", "billing"),
+        "Anthropic hisobingizda mablag' qolmagan.\n"
+        "Agar sizda Claude Pro yoki Max obunasi bo'lsa, pul to'lash shart emas:\n"
+        ".env dagi ANTHROPIC_API_KEY qatorini o'chirsangiz (yoki boshiga #\n"
+        "qo'ysangiz), Jarvis Claude Code orqali obunangizdan foydalanadi.\n"
+        "Buning uchun terminalda `claude` ishlayotgan bo'lishi kifoya.",
+    ),
+    (
         ("quota", "exceeded", "limit"),
         "Hisobdagi limit tugagan bo'lishi mumkin — provayder kabinetini tekshiring.",
     ),
@@ -428,8 +436,11 @@ async def check_brain(cfg: Config) -> Result:
                     if isinstance(block, TextBlock):
                         parts.append(block.text)
     except Exception as exc:
-        return Result(False, f"{type(exc).__name__}: {exc}\n"
-                             f"ANTHROPIC_API_KEY to'g'rimi va balansda mablag' bormi?")
+        detail = f"{type(exc).__name__}: {exc}"
+        advice = hint_for(detail)
+        return Result(False, f"{detail}\n{advice}" if advice
+                             else f"{detail}\nANTHROPIC_API_KEY to'g'rimi va "
+                                  f"balansda mablag' bormi?")
 
     reply = " ".join(parts).strip()
     if not reply:

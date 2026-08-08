@@ -39,6 +39,7 @@ from .brain.prompts import (
 )
 from .bus import EventBus, State
 from .config import Config, load_config
+from .doctor import hint_for
 from .health import Health, Status, System
 from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
@@ -674,6 +675,11 @@ class Jarvis:
         except Exception as exc:
             log.exception("Javob olishda xato")
             await self.bus.set_state(State.ERROR)
+            # Xatoning turi ("APIError") foydalanuvchiga hech nima demaydi.
+            # Tanish sabab bo'lsa, nima qilish kerakligini aytamiz.
+            advice = hint_for(f"{type(exc).__name__}: {exc}")
+            if advice:
+                await self.bus.log_line(advice, level="error")
             await self._speak(ERROR_REPLY.format(error=type(exc).__name__), remote=remote)
         finally:
             # Yarmida to'xtatilgan generator SDK seansini ochiq qoldirmasin.
