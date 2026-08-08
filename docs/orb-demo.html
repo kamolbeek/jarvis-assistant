@@ -1,0 +1,735 @@
+<title>Jarvis orb — vizual demo</title>
+<style>
+  /* Bu sahifa ataylab bitta — qorong'i — temada. Orb yorug'lik chiqaradigan
+     element: oq fonda u ma'nosini yo'qotadi. Shuning uchun fon va barcha
+     ranglar aniq belgilangan, tema almashtirilmaydi. */
+  :root {
+    --ground:   #050b12;
+    --panel:    #0b1620;
+    --edge:     rgba(53, 224, 255, 0.16);
+    --cyan:     #35e0ff;
+    --amber:    #ffb545;
+    --red:      #ff5a52;
+    --text:     #dff6ff;
+    --muted:    rgba(223, 246, 255, 0.44);
+    --faint:    rgba(223, 246, 255, 0.13);
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.5;
+    min-height: 100vh;
+    /* Ekran chetlariga tomon qorayish — asbob paneli hissi */
+    background-image:
+      radial-gradient(ellipse 90% 70% at 50% 38%, rgba(53,224,255,0.055), transparent 70%);
+  }
+
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 32px) 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  /* ---------- Sarlavha ---------- */
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    opacity: 0.75;
+  }
+
+  h1 {
+    font-size: clamp(26px, 4.4vw, 40px);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .lede { color: var(--muted); max-width: 62ch; font-size: 15px; }
+
+  /* ---------- Sahna ---------- */
+
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 268px;
+    gap: 28px;
+    align-items: start;
+  }
+
+  @media (max-width: 780px) {
+    .stage { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .orb-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 32px 24px 26px;
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  /* Juda nozik skanerlash chiziqlari — CRT emas, shunchaki tekstura */
+  .orb-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.016) 0 1px,
+      transparent 1px 3px
+    );
+  }
+
+  canvas { display: block; touch-action: none; }
+
+  .readout {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-height: 76px;
+    text-align: center;
+  }
+
+  .state-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .caption {
+    font-size: 15px;
+    max-width: 42ch;
+    min-height: 22px;
+    text-wrap: balance;
+  }
+  .caption .who {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-right: 8px;
+  }
+
+  /* ---------- Boshqaruv ---------- */
+
+  .rail { display: flex; flex-direction: column; gap: 10px; }
+
+  .rail h2 {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+    margin-bottom: 2px;
+  }
+
+  button {
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--faint);
+    border-radius: 11px;
+    padding: 10px 14px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+  button:hover { border-color: var(--edge); background: rgba(53, 224, 255, 0.05); }
+  button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  button[aria-pressed="true"] {
+    border-color: rgba(53, 224, 255, 0.5);
+    background: rgba(53, 224, 255, 0.09);
+  }
+
+  .swatch {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex: none;
+    background: currentColor;
+    box-shadow: 0 0 9px currentColor;
+  }
+
+  .primary {
+    justify-content: center;
+    font-weight: 600;
+    color: var(--cyan);
+    border-color: rgba(53, 224, 255, 0.42);
+    background: rgba(53, 224, 255, 0.1);
+    margin-top: 4px;
+  }
+  .primary:hover { background: rgba(53, 224, 255, 0.17); }
+  .primary[disabled] { opacity: 0.45; cursor: default; }
+
+  /* ---------- Tasdiq oynasi ---------- */
+
+  .confirm {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 2;
+    width: min(320px, calc(100% - 36px));
+    padding: 13px 15px;
+    background: rgba(6, 14, 20, 0.94);
+    border: 1px solid rgba(255, 181, 69, 0.45);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+    animation: rise 200ms ease-out;
+  }
+  .confirm[hidden] { display: none; }
+  @keyframes rise {
+    from { opacity: 0; transform: translate(-50%, 10px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
+
+  .confirm p { color: var(--amber); font-weight: 600; font-size: 13.5px; margin-bottom: 8px; }
+  .confirm code {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #bfe9f7;
+    margin-bottom: 10px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .confirm .row { display: flex; gap: 8px; }
+  .confirm button { flex: 1; justify-content: center; font-weight: 600; font-size: 13px; }
+  .confirm .yes { color: var(--cyan); border-color: rgba(53,224,255,0.45); }
+  .confirm .no  { color: var(--red);  border-color: rgba(255,90,82,0.45); }
+
+  /* ---------- Izohlar ---------- */
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1px;
+    background: var(--edge);
+    border: 1px solid var(--edge);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .note { background: var(--panel); padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+  .note dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .note dd { font-size: 13.5px; color: var(--muted); }
+
+  footer {
+    font-size: 13px;
+    color: var(--muted);
+    border-top: 1px solid var(--edge);
+    padding-top: 20px;
+    max-width: 66ch;
+  }
+  footer strong { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .confirm { animation: none; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">Jarvis · vizual demo</span>
+    <h1>Orb — Jarvis'ning ko'rinadigan yuzi</h1>
+    <p class="lede">
+      Bu MacBook ekranida doim ustida turadigan orbning aynan o'zi. Holatni
+      o'ng tomondan almashtiring yoki to'liq suhbatni boshidan oxirigacha
+      ko'ring — qarsakdan javobgacha.
+    </p>
+  </header>
+
+  <div class="stage">
+    <div class="orb-panel">
+      <canvas id="orb" width="340" height="340" aria-label="Jarvis orb animatsiyasi"></canvas>
+
+      <div class="readout">
+        <span class="state-name" id="state-name">kutmoqda</span>
+        <p class="caption" id="caption"></p>
+      </div>
+
+      <div class="confirm" id="confirm" hidden>
+        <p>Buyruq bajarilsinmi?</p>
+        <code>rm -rf ~/Downloads/eski-arxiv</code>
+        <div class="row">
+          <button class="yes" id="yes">Ha</button>
+          <button class="no" id="no">Yo'q</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <h2>Holatlar</h2>
+      <button data-state="idle"      aria-pressed="true"><span class="swatch" style="color:#1d6f86"></span>Kutmoqda</button>
+      <button data-state="listening"><span class="swatch" style="color:#35e0ff"></span>Tinglayapti</button>
+      <button data-state="thinking"> <span class="swatch" style="color:#4aa8ff"></span>O'ylayapti</button>
+      <button data-state="speaking"> <span class="swatch" style="color:#35e0ff"></span>Gapiryapti</button>
+      <button data-state="confirm">  <span class="swatch" style="color:#ffb545"></span>Tasdiq kutmoqda</button>
+      <button data-state="error">    <span class="swatch" style="color:#ff5a52"></span>Xato</button>
+
+      <button class="primary" id="play">Suhbatni ko'rsatish</button>
+    </div>
+  </div>
+
+  <dl class="notes">
+    <div class="note">
+      <dt><span class="swatch" style="color:#1d6f86"></span>Kutmoqda</dt>
+      <dd>Xira, sekin nafas oladi. Ekranda turadi, lekin e'tiborni tortmaydi.</dd>
+    </div>
+    <div class="note">
+      <dt><span class="swatch" style="color:#35e0ff"></span>Tinglayapti</dt>
+      <dd>To'lqin halqasi ovozingizga qarab harakatlanadi — eshitayotgani ko'rinadi.</dd>
+    </div>
+    <div class="note">
+      <dt><span class="swatch" style="color:#4aa8ff"></span>O'ylayapti</dt>
+      <dd>Yoylar tezlashadi, yadro atrofida nuqta aylanadi. Ish ketayotgani bilinadi.</dd>
+    </div>
+    <div class="note">
+      <dt><span class="swatch" style="color:#ffb545"></span>Tasdiq</dt>
+      <dd>Qahrabo rang. Xavfsizlik darvozasi ruxsat so'rayapti — javob bermaguningizcha kutadi.</dd>
+    </div>
+  </dl>
+
+  <footer>
+    <strong>Nega qorong'i va nega siyan?</strong> Orb — yorug'lik chiqaradigan
+    element, u qora fonda ma'noga ega. Ranglar holatni bir qarashda ajratish
+    uchun tanlangan: siyan — normal ish, qahrabo — sizdan javob kutilmoqda,
+    qizil — xato. Ekranga qaramasdan ham, ko'z qirida rang o'zgargani seziladi.
+  </footer>
+
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("orb");
+  const ctx = canvas.getContext("2d");
+  const stateName = document.getElementById("state-name");
+  const captionEl = document.getElementById("caption");
+  const confirmEl = document.getElementById("confirm");
+  const playBtn = document.getElementById("play");
+  const stateButtons = [...document.querySelectorAll("[data-state]")];
+
+  const LABELS = {
+    idle: "kutmoqda", wake: "uyg'ondi", listening: "tinglayapti",
+    thinking: "o'ylayapti", speaking: "gapiryapti",
+    confirm: "tasdiq kutmoqda", error: "xato",
+  };
+
+  // Har bir holatning rangi va harakat xarakteri.
+  const PALETTE = {
+    idle:      { hue: 192, glow: 0.26, spin: 0.12, core: 0.30 },
+    wake:      { hue: 190, glow: 1.00, spin: 1.70, core: 1.00 },
+    listening: { hue: 190, glow: 0.74, spin: 0.42, core: 0.62 },
+    thinking:  { hue: 210, glow: 0.64, spin: 1.40, core: 0.48 },
+    speaking:  { hue: 186, glow: 0.88, spin: 0.30, core: 0.78 },
+    confirm:   { hue: 38,  glow: 0.82, spin: 0.18, core: 0.68 },
+    error:     { hue: 2,   glow: 0.88, spin: 0.14, core: 0.72 },
+  };
+
+  // Radius ulushi, boshlanish burchagi, uzunlik, tezlik, qalinlik, shaffoflik.
+  // Qarama-qarshi yo'nalishdagi tezliklar HUD ko'rinishini beradi.
+  const ARCS = [
+    { r: 0.95, start: 0.00, sweep: 1.25, speed:  0.55, width: 1.5, alpha: 0.70 },
+    { r: 0.95, start: 3.30, sweep: 0.70, speed:  0.55, width: 1.5, alpha: 0.42 },
+    { r: 0.82, start: 1.60, sweep: 2.10, speed: -0.34, width: 2.4, alpha: 0.62 },
+    { r: 0.69, start: 4.20, sweep: 1.05, speed:  0.85, width: 1.3, alpha: 0.52 },
+    { r: 0.60, start: 2.10, sweep: 0.40, speed: -1.20, width: 1.0, alpha: 0.40 },
+  ];
+
+  // Burchak qavslar — chegaralarni belgilaydi, sekin aylanadi.
+  const BRACKETS = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+
+  const TICKS = 56;
+  const WAVE_BARS = 72;
+  const MOTES = 34;
+
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let state = "idle";
+  let level = 0, smooth = 0;
+  let hue = PALETTE.idle.hue, glow = PALETTE.idle.glow;
+  let flash = 0;
+  let W = 340, H = 340;
+
+  // Suzuvchi zarrachalar — orbga "tirik" hajm beradi.
+  const motes = Array.from({ length: MOTES }, (_, i) => ({
+    angle: (i / MOTES) * Math.PI * 2 + Math.random(),
+    radius: 0.34 + Math.random() * 0.62,
+    speed: (Math.random() - 0.5) * 0.16,
+    size: 0.7 + Math.random() * 1.5,
+    phase: Math.random() * Math.PI * 2,
+  }));
+
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const size = Math.min(340, Math.max(240, Math.floor(window.innerWidth * 0.62)));
+    canvas.style.width = size + "px";
+    canvas.style.height = size + "px";
+    W = H = size;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+  // Eng qisqa yo'l bilan — 190° dan 2° ga o'tishda orqaga aylanmasin.
+  const lerpHue = (a, b, t) => (a + ((((b - a + 540) % 360) - 180) * t) + 360) % 360;
+
+  function setState(next, { silent = false } = {}) {
+    if (next === "wake") flash = 1;
+    state = next;
+    stateName.textContent = LABELS[next] || next;
+    confirmEl.hidden = next !== "confirm";
+    if (!silent) {
+      stateButtons.forEach((b) =>
+        b.setAttribute("aria-pressed", String(b.dataset.state === next)));
+    }
+  }
+
+  function say(who, text) {
+    captionEl.innerHTML = "";
+    if (!text) return;
+    if (who) {
+      const tag = document.createElement("span");
+      tag.className = "who";
+      tag.textContent = who;
+      captionEl.appendChild(tag);
+    }
+    captionEl.appendChild(document.createTextNode(text));
+  }
+
+  // ---------------------------------------------------------------- chizish
+
+  function draw(time) {
+    const p = PALETTE[state] || PALETTE.idle;
+    const t = reduced ? 0 : time / 1000;
+
+    hue = lerpHue(hue, p.hue, 0.08);
+    glow = lerp(glow, p.glow, 0.08);
+    smooth = lerp(smooth, level, 0.2);
+    flash *= 0.9;
+
+    const cx = W / 2, cy = H / 2;
+    const base = Math.min(W, H) / 2 - 20;
+    const radius = base * (1 + Math.sin(t * 1.7) * 0.018);
+    const energy = Math.min(1, smooth * 1.4);
+    const bright = Math.min(1, glow + flash + energy * 0.35);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    // Qo'shiluvchi aralashtirish — neon effekti shundan chiqadi.
+    ctx.globalCompositeOperation = "lighter";
+
+    drawGlow(cx, cy, radius, bright);
+    drawMotes(cx, cy, radius, t, bright);
+    drawTicks(cx, cy, radius, t, bright);
+    drawBrackets(cx, cy, radius, t, bright);
+    drawArcs(cx, cy, radius, t, p.spin, bright);
+    drawWave(cx, cy, radius, t, energy, bright);
+    drawCore(cx, cy, radius, t, p.core, energy, bright);
+    drawSweep(cx, cy, radius, t, bright);
+
+    ctx.restore();
+    requestAnimationFrame(draw);
+  }
+
+  function drawGlow(cx, cy, r, bright) {
+    const g = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 1.55);
+    g.addColorStop(0,    `hsla(${hue},100%,62%,${0.20 * bright})`);
+    g.addColorStop(0.55, `hsla(${hue},100%,55%,${0.07 * bright})`);
+    g.addColorStop(1,    "hsla(0,0%,0%,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 1.55, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function drawMotes(cx, cy, r, t, bright) {
+    for (const m of motes) {
+      const a = m.angle + t * m.speed;
+      const drift = Math.sin(t * 0.8 + m.phase) * 0.03;
+      const rr = r * (m.radius + drift);
+      const twinkle = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.4 + m.phase));
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, m.size, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${hue},100%,80%,${0.30 * twinkle * bright})`;
+      ctx.fill();
+    }
+  }
+
+  function drawTicks(cx, cy, r, t, bright) {
+    const spin = t * 0.06;
+    for (let i = 0; i < TICKS; i++) {
+      const a = spin + (i / TICKS) * Math.PI * 2;
+      const major = i % 7 === 0;
+      const inner = r * (major ? 1.00 : 1.02);
+      const outer = r * (major ? 1.10 : 1.06);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+      ctx.strokeStyle = `hsla(${hue},100%,70%,${(major ? 0.48 : 0.17) * bright})`;
+      ctx.lineWidth = major ? 1.4 : 0.9;
+      ctx.stroke();
+    }
+  }
+
+  function drawBrackets(cx, cy, r, t, bright) {
+    const spin = -t * 0.13;
+    const rr = r * 1.20;
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = `hsla(${hue},100%,68%,${0.34 * bright})`;
+    for (const offset of BRACKETS) {
+      const a = spin + offset;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, a - 0.16, a + 0.16);
+      ctx.stroke();
+      // Qavsning ikki uchidagi kichik tik chiziqlar
+      for (const end of [a - 0.16, a + 0.16]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(end) * rr, cy + Math.sin(end) * rr);
+        ctx.lineTo(cx + Math.cos(end) * (rr - 7), cy + Math.sin(end) * (rr - 7));
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawArcs(cx, cy, r, t, spin, bright) {
+    ctx.lineCap = "round";
+    for (const arc of ARCS) {
+      const a = arc.start + t * arc.speed * spin * 2.2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * arc.r, a, a + arc.sweep);
+      ctx.strokeStyle = `hsla(${hue},100%,66%,${arc.alpha * bright})`;
+      ctx.lineWidth = arc.width;
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+    ctx.strokeStyle = `hsla(${hue},100%,60%,${0.20 * bright})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawWave(cx, cy, r, t, energy, bright) {
+    if (state !== "listening" && state !== "speaking") return;
+    const inner = r * 0.60;
+    for (let i = 0; i < WAVE_BARS; i++) {
+      const a = (i / WAVE_BARS) * Math.PI * 2;
+      // Ikki xil chastotali sinus — takrorlanmaydigan, jonli naqsh
+      const n = Math.sin(i * 0.7 + t * 5.5) * 0.5 + Math.sin(i * 1.9 - t * 3.1) * 0.5;
+      const outer = inner + Math.max(1.5, r * 0.17 * energy * (0.45 + 0.55 * Math.abs(n)));
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+      ctx.strokeStyle = `hsla(${hue},100%,72%,${(0.28 + energy * 0.5) * bright})`;
+      ctx.lineWidth = 1.7;
+      ctx.stroke();
+    }
+  }
+
+  function drawCore(cx, cy, r, t, core, energy, bright) {
+    const rr = r * 0.30 * (1 + Math.sin(t * 2.6) * 0.06 + energy * 0.16);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+    g.addColorStop(0,    `hsla(${hue},100%,93%,${0.95 * core * bright})`);
+    g.addColorStop(0.45, `hsla(${hue},100%,68%,${0.55 * core * bright})`);
+    g.addColorStop(1,    "hsla(0,0%,0%,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.fill();
+
+    if (state === "thinking") {
+      const a = t * 3.4;
+      const orbit = r * 0.43;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * orbit, cy + Math.sin(a) * orbit, 2.8, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${hue},100%,88%,${0.9 * bright})`;
+      ctx.fill();
+    }
+  }
+
+  function drawSweep(cx, cy, r, t, bright) {
+    const a = (t * 0.5) % (Math.PI * 2);
+    const g = ctx.createLinearGradient(cx, cy, cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    g.addColorStop(0, "hsla(0,0%,0%,0)");
+    g.addColorStop(1, `hsla(${hue},100%,78%,${0.15 * bright})`);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, a - 0.2, a + 0.2);
+    ctx.closePath();
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  // ---------------------------------------------------------------- demo oqimi
+
+  let running = false;
+  let timers = [];
+
+  const wait = (ms) => new Promise((resolve) => {
+    const id = setTimeout(resolve, ms);
+    timers.push(id);
+  });
+
+  function clearTimers() {
+    timers.forEach(clearTimeout);
+    timers = [];
+  }
+
+  // Ovoz darajasini taqlid qilish — to'lqin halqasi jonli ko'rinsin.
+  function simulateVoice(duration, intensity = 0.75) {
+    const start = performance.now();
+    (function step(now) {
+      const elapsed = (now || performance.now()) - start;
+      if (!running || elapsed > duration) { level = 0; return; }
+      const t = elapsed / 1000;
+      const envelope = 0.45 + 0.55 * Math.abs(Math.sin(t * 3.1) * Math.sin(t * 1.3 + 1));
+      level = intensity * envelope;
+      requestAnimationFrame(step);
+    })();
+  }
+
+  async function playScene() {
+    running = true;
+    playBtn.disabled = true;
+    playBtn.textContent = "Ko'rsatilmoqda…";
+
+    setState("idle", { silent: true });
+    say("", "Ikki marta qarsak chalindi 👏👏");
+    await wait(1100);
+
+    setState("wake", { silent: true });
+    say("", "");
+    await wait(420);
+
+    setState("speaking", { silent: true });
+    say("Jarvis", "Buyrug'ingizni kutyapman.");
+    simulateVoice(1500, 0.7);
+    await wait(1700);
+
+    setState("listening", { silent: true });
+    say("", "");
+    simulateVoice(3400, 0.85);
+    await wait(700);
+    say("Siz", "Ertaga soat o'nda Alisher bilan uchrashuv qo'y…");
+    await wait(1500);
+    say("Siz", "Ertaga soat o'nda Alisher bilan uchrashuv qo'y, va eski arxivni tozala.");
+    await wait(1400);
+
+    setState("thinking", { silent: true });
+    say("", "");
+    await wait(1800);
+
+    setState("confirm", { silent: true });
+    say("", "Xavfsizlik darvozasi ruxsat so'rayapti.");
+    await wait(2600);
+
+    setState("speaking", { silent: true });
+    say("Jarvis", "Uchrashuv yozildi, ertaga to'qqiz ellikda eslataman.");
+    simulateVoice(2600, 0.8);
+    await wait(2800);
+
+    setState("idle", { silent: true });
+    say("", "Kutish holatiga qaytdi.");
+    stateButtons.forEach((b) =>
+      b.setAttribute("aria-pressed", String(b.dataset.state === "idle")));
+
+    running = false;
+    playBtn.disabled = false;
+    playBtn.textContent = "Yana ko'rsatish";
+  }
+
+  // ---------------------------------------------------------------- boshqaruv
+
+  stateButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      running = false;
+      clearTimers();
+      playBtn.disabled = false;
+      playBtn.textContent = "Suhbatni ko'rsatish";
+
+      const next = button.dataset.state;
+      setState(next);
+
+      if (next === "listening" || next === "speaking") simulateVoice(1e9, 0.8);
+      else level = 0;
+
+      const hints = {
+        idle: "Xira pulsatsiya. Ekranda turadi, xalaqit bermaydi.",
+        listening: "To'lqin halqasi ovozingizga javob beradi.",
+        thinking: "Yoylar tezlashdi — ish ketyapti.",
+        speaking: "Pulsatsiya gapirilayotgan ovozga mos keladi.",
+        confirm: "Javob bermaguningizcha shu holatda kutadi.",
+        error: "Xato yuz berdi — sababi ovoz bilan aytiladi.",
+      };
+      say("", hints[next] || "");
+    });
+  });
+
+  playBtn.addEventListener("click", () => {
+    clearTimers();
+    playScene();
+  });
+
+  document.getElementById("yes").addEventListener("click", () => {
+    if (running) return;
+    setState("speaking");
+    say("Jarvis", "Bajarildi.");
+    simulateVoice(1400, 0.7);
+  });
+  document.getElementById("no").addEventListener("click", () => {
+    if (running) return;
+    setState("idle");
+    say("Jarvis", "Yaxshi, bekor qildim.");
+  });
+
+  window.addEventListener("resize", fit);
+
+  fit();
+  setState("idle");
+  say("", "«Suhbatni ko'rsatish» tugmasini bosing.");
+  requestAnimationFrame(draw);
+})();
+</script>

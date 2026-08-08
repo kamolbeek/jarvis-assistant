@@ -21,14 +21,29 @@ const PALETTE = {
 // Aylanuvchi yoylar: radius ulushi, boshlanish burchagi, uzunlik, tezlik, qalinlik.
 // Qarama-qarshi yo'nalishdagi tezliklar HUD ko'rinishini beradi.
 const ARCS = [
-  { r: 0.92, start: 0.00, sweep: 1.25, speed:  0.55, width: 1.6, alpha: 0.75 },
-  { r: 0.92, start: 3.30, sweep: 0.70, speed:  0.55, width: 1.6, alpha: 0.45 },
-  { r: 0.79, start: 1.60, sweep: 2.10, speed: -0.34, width: 2.4, alpha: 0.65 },
-  { r: 0.66, start: 4.20, sweep: 1.05, speed:  0.85, width: 1.3, alpha: 0.55 },
+  { r: 0.92, start: 0.00, sweep: 1.25, speed:  0.55, width: 1.6, alpha: 0.72 },
+  { r: 0.92, start: 3.30, sweep: 0.70, speed:  0.55, width: 1.6, alpha: 0.44 },
+  { r: 0.79, start: 1.60, sweep: 2.10, speed: -0.34, width: 2.4, alpha: 0.64 },
+  { r: 0.66, start: 4.20, sweep: 1.05, speed:  0.85, width: 1.3, alpha: 0.54 },
+  { r: 0.58, start: 2.10, sweep: 0.40, speed: -1.20, width: 1.0, alpha: 0.40 },
 ];
+
+// Tashqi burchak qavslar — chegarani belgilaydi, sekin teskari aylanadi.
+const BRACKETS = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
 
 const TICK_COUNT = 48;
 const WAVE_BARS = 64;
+const MOTE_COUNT = 28;
+
+// Suzuvchi zarrachalar — orbga hajm va "tiriklik" beradi.
+// Har biri o'z radiusi, tezligi va miltillash fazasi bilan.
+const MOTES = Array.from({ length: MOTE_COUNT }, (_, i) => ({
+  angle: (i / MOTE_COUNT) * Math.PI * 2 + Math.random(),
+  radius: 0.34 + Math.random() * 0.60,
+  speed: (Math.random() - 0.5) * 0.16,
+  size: 0.6 + Math.random() * 1.3,
+  phase: Math.random() * Math.PI * 2,
+}));
 
 let state = "idle";
 let level = 0;        // yadrodan kelgan xom daraja
@@ -91,7 +106,9 @@ function draw(time) {
   CTX.globalCompositeOperation = "lighter";
 
   drawGlow(cx, cy, radius, intensity);
+  drawMotes(cx, cy, radius, t, intensity);
   drawTicks(cx, cy, radius, t, intensity);
+  drawBrackets(cx, cy, radius, t, intensity);
   drawArcs(cx, cy, radius, t, p.spin, intensity);
   drawWave(cx, cy, radius, t, energy, intensity);
   drawCore(cx, cy, radius, t, p.core, energy, intensity);
@@ -110,6 +127,41 @@ function drawGlow(cx, cy, radius, intensity) {
   CTX.beginPath();
   CTX.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
   CTX.fill();
+}
+
+function drawMotes(cx, cy, radius, t, intensity) {
+  for (const mote of MOTES) {
+    const angle = mote.angle + t * mote.speed;
+    const drift = Math.sin(t * 0.8 + mote.phase) * 0.03;
+    const r = radius * (mote.radius + drift);
+    const twinkle = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.4 + mote.phase));
+    CTX.beginPath();
+    CTX.arc(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, mote.size, 0, Math.PI * 2);
+    CTX.fillStyle = `hsla(${hue}, 100%, 80%, ${0.28 * twinkle * intensity})`;
+    CTX.fill();
+  }
+}
+
+function drawBrackets(cx, cy, radius, t, intensity) {
+  const spin = -t * 0.13;
+  const r = radius * 1.14;
+  CTX.strokeStyle = `hsla(${hue}, 100%, 68%, ${0.32 * intensity})`;
+  CTX.lineWidth = 1.5;
+
+  for (const offset of BRACKETS) {
+    const angle = spin + offset;
+    CTX.beginPath();
+    CTX.arc(cx, cy, r, angle - 0.15, angle + 0.15);
+    CTX.stroke();
+
+    // Qavsning ikki uchidagi kichik ichkariga qaragan chiziqlar
+    for (const end of [angle - 0.15, angle + 0.15]) {
+      CTX.beginPath();
+      CTX.moveTo(cx + Math.cos(end) * r, cy + Math.sin(end) * r);
+      CTX.lineTo(cx + Math.cos(end) * (r - 6), cy + Math.sin(end) * (r - 6));
+      CTX.stroke();
+    }
+  }
 }
 
 function drawTicks(cx, cy, radius, t, intensity) {
