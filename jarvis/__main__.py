@@ -17,6 +17,7 @@ USAGE = """\
 Misollar:
   jarvis            Jarvis'ni ishga tushirish
   jarvis doctor     Har bir qismni alohida tekshirish (birinchi ishga tushirishdan oldin)
+  jarvis wake-test  Chaqiruv ballini o'lchash va chegarani sozlash
   jarvis -v         Batafsil jurnal bilan
 """
 
@@ -43,8 +44,9 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor"],
-        help="run — ishga tushirish (standart); doctor — diagnostika",
+        choices=["run", "doctor", "wake-test"],
+        help="run — ishga tushirish (standart); doctor — diagnostika; "
+             "wake-test — chaqiruv ballini o'lchash",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
@@ -55,6 +57,12 @@ def main() -> int:
         from .doctor import main as doctor_main
 
         return doctor_main()
+
+    if args.command == "wake-test":
+        logging.basicConfig(level=logging.ERROR)
+        from .waketune import main as wake_main
+
+        return wake_main()
 
     configure_logging(args.verbose)
 

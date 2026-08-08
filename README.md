@@ -323,10 +323,28 @@ activation:
 Yangi ibora qo'shish uchun ro'yxatga yozib qo'yish yetarli — kod tegmaydi.
 Ikkinchi bosqichni butunlay o'chirish: `phrases: []`.
 
-**Chegarani taxmin bilan emas, o'lchov bilan sozlang.** `python -m jarvis doctor`
-sizdan «Salom Jarvis» deb aytishni so'raydi va o'sha yozuvni modeldan
-o'tkazib, **aynan sizning ovozingizdagi ballni** ko'rsatadi. Shu bitta yozuv
-bilan uchta narsa tekshiriladi: mikrofon darajasi, model bali va matn tanildimi.
+**Chegarani taxmin bilan emas, o'lchov bilan sozlang.** Yuqoridagi raqamlar
+(0.5 / 0.18) — boshlang'ich nuqta, haqiqat emas. Model har bir ovoz, mikrofon
+va xonada boshqacha ball beradi:
+
+```bash
+python -m jarvis wake-test
+```
+
+Har bir iborani bir necha marta aytasiz, ekranda ball jonli ko'rinadi:
+yashil = darhol uyg'onadi, sariq = matn bilan tekshiriladi, xira = sezilmadi.
+Oxirida har bir ibora uchun eng yuqori ball va tavsiya qilingan chegara
+chiqadi.
+
+`python -m jarvis doctor` ham «Hey Jarvis» dagi ballni ko'rsatadi — u modelning
+o'zi biladigan ibora, shuning uchun past ball chiqsa, muammo iborada emas,
+mikrofonda yoki modelda ekani aniq bo'ladi.
+
+**Halol ogohlantirish.** Tayyor model chetdagi iboralarga juda past ball
+berishi mumkin — masalan bir sinovda «Salom Jarvis» **0.017** chiqdi, ya'ni
+shovqin darajasida. Bunday holatda chegarani pasaytirish yechim emas: u
+holda har qanday shitirlash STT chaqiruvini keltirib chiqaradi. To'g'ri
+yechim — o'sha ibora uchun model o'rgatish (pastda).
 
 ### To'liq lokal yechim: o'z modelingizni o'rgatish
 
@@ -479,6 +497,14 @@ ui/
     ├── hud.js      HUD chizuvchisi (siferblatlar, yadro, yozuv)
     ├── orb.js      yadro bilan aloqa va kadrlar sikli
     └── phone.html  telefon sahifasi (bitta faylda)
+```
+
+Buyruqlar:
+
+```bash
+python -m jarvis              # ishga tushirish
+python -m jarvis doctor       # har bir qismni alohida tekshirish
+python -m jarvis wake-test    # chaqiruv ballini o'lchash
 ```
 
 Testlar API kaliti va mikrofon talab qilmaydi:

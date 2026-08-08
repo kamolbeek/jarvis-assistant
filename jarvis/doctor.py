@@ -178,9 +178,11 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
     """
     from .audio.mic import MicStream, frame_level
 
-    # Aynan chaqiruv iborasini so'raymiz: shu bitta yozuv uchta tekshiruvga
-    # yetadi — mikrofon darajasi, uyg'otuvchi so'z bali va STT matni.
-    print(f"      {DIM}«Salom Jarvis» deb ayting… ({seconds:.0f} soniya){RESET}")
+    # Aynan modelning o'zi biladigan iborani so'raymiz: shu bitta yozuv uchta
+    # tekshiruvga yetadi — mikrofon darajasi, uyg'otuvchi so'z bali va STT
+    # matni. Boshqa iborani aytsak, past ball modelning nosozligimi yoki
+    # shunchaki ibora boshqaligimi — ajratib bo'lmaydi.
+    print(f"      {DIM}«Hey Jarvis» deb ayting… ({seconds:.0f} soniya){RESET}")
 
     mic = MicStream(
         sample_rate=cfg.sample_rate,
@@ -288,17 +290,21 @@ async def check_wake_word(cfg: Config) -> Result:
 
             # Modelni ishlatish ham bloklaydi — CPU'da bir necha soniya.
             await asyncio.to_thread(scan)
-            parts.append(f"Aytganingizdagi eng yuqori ball: {detector.peak:.2f}")
+            parts.append(f"«Hey Jarvis» dagi eng yuqori ball: {detector.peak:.3f}")
             if detector.peak < candidate:
+                # Chegarani bu balldan pastga tushirish yaramaydi — u shovqin
+                # darajasiga tushib ketadi. Sababni topish kerak.
                 parts.append(
-                    "Bu shubhali chegaradan ham past — model chaqiruvni "
-                    "sezmaydi.\nBalandroq va aniqroq aytib ko'ring; baribir "
-                    f"past bo'lsa, `candidate_threshold` ni {detector.peak * 0.6:.2f} "
-                    "ga tushiring."
+                    "Model iborani sezmadi. Ehtimol sabablari:\n"
+                    "  • ovoz juda baland/buzilgan — kirish balandligini pasaytiring\n"
+                    "  • ibora yozuvga to'liq tushmagan — signal chiqishi bilan ayting\n"
+                    "  • boshqa ibora aytilgan — model faqat «hey jarvis»ni biladi\n"
+                    "Aniqlash uchun: `python -m jarvis wake-test`"
                 )
             elif detector.peak < threshold:
-                parts.append("Shubhali darajada — ibora matn bilan tasdiqlanadi "
-                             "(STT chaqiruvi, ~0.5 s).")
+                parts.append("Chegaradan past, lekin sezildi — ibora matn bilan "
+                             "tasdiqlanadi (STT chaqiruvi, ~0.5 s).\n"
+                             "Chegarani sozlash: `python -m jarvis wake-test`")
     finally:
         detector.close()
 
