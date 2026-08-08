@@ -432,6 +432,56 @@ async def check_brain(cfg: Config) -> Result:
     return Result(True, f"Javob: «{reply[:120]}»")
 
 
+async def check_telegram() -> Result:
+    """Bot tokeni ishlaydimi va sizga yoza oladimi?
+
+    Bu yerda eng ko'p uchraydigan tuzoq: bot yaratildi, token to'g'ri, lekin
+    foydalanuvchi botga hech qachon yozmagan. Telegram qoidasi bo'yicha bot
+    birinchi bo'lib yoza olmaydi — avval siz unga /start yuborishingiz kerak.
+    Xato matni buni aytmaydi («chat not found»), shuning uchun o'zimiz aytamiz.
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
+    if not token and not chat_id:
+        return Result(True, "Sozlanmagan (ixtiyoriy) — «menga yoz» ishlamaydi, xolos")
+    if not token or not chat_id:
+        missing = "TELEGRAM_BOT_TOKEN" if not token else "TELEGRAM_CHAT_ID"
+        return Result(False, f".env da {missing} yetishmayapti — ikkalasi ham kerak")
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            me = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+            if me.status_code in (401, 404):
+                return Result(False,
+                              "Token qabul qilinmadi. BotFather'dagi tokenni\n"
+                              "to'liq nusxalang — u `raqam:harflar` ko'rinishida.")
+            me.raise_for_status()
+            bot_name = str(me.json().get("result", {}).get("username", "?"))
+
+            sent = await client.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id,
+                      "text": "Jarvis ulandi — bu sinov xabari."},
+            )
+            if sent.is_success:
+                return Result(True, f"Bot: @{bot_name} — sinov xabari yuborildi, "
+                                    f"telefoningizni qarang")
+
+            description = str(sent.json().get("description", sent.text[:200]))
+            if "chat not found" in description.lower():
+                return Result(False,
+                              f"Token to'g'ri (@{bot_name}), lekin bot sizga yoza "
+                              f"olmadi.\nTelegram qoidasi: bot birinchi bo'lib yoza "
+                              f"olmaydi.\nTelegramda @{bot_name} ni oching va "
+                              f"/start yuboring, keyin qaytadan tekshiring.")
+            return Result(False, f"Xabar ketmadi: {description}")
+    except httpx.HTTPError as exc:
+        return Result(False, f"Telegram'ga ulanib bo'lmadi: {exc}")
+
+
 def check_permissions() -> Result:
     """macOS ruxsatlari haqida eslatma (dasturiy tekshirib bo'lmaydi)."""
     if sys.platform != "darwin":
@@ -492,6 +542,9 @@ async def run_doctor() -> int:
 
     _header("Miya")
     report("Claude Agent SDK", await check_brain(cfg))
+
+    _header("Kanallar")
+    report("Telegram", await check_telegram())
 
     print(f"\n{'─' * 58}")
     if failures == 0:

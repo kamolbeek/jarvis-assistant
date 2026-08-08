@@ -17,6 +17,7 @@ from jarvis.config import Config
 from jarvis.doctor import (
     check_env,
     check_permissions,
+    check_telegram,
     check_wake_word,
     collect_logs,
     hint_for,
@@ -177,3 +178,111 @@ def test_collect_logs_captures_then_detaches():
     log.error("bu allaqachon tashqarida")
 
     assert collected.lines == ["STT xatosi 400: invalid_api_key"]
+
+
+# --- Telegram tekshiruvi -------------------------------------------------------
+#
+# Eng ko'p uchraydigan tuzoq: token to'g'ri, lekin foydalanuvchi botga hech
+# qachon /start yozmagan. Telegram xatosi («chat not found») buni aytmaydi —
+# diagnostika aytishi shart.
+
+
+class _FakeResponse:
+    def __init__(self, status_code=200, payload=None, ok=True):
+        self.status_code = status_code
+        self._payload = payload or {}
+        self.is_success = ok
+        self.text = str(payload)
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        pass
+
+
+def _fake_client(get_response, post_response):
+    class FakeClient:
+        def __init__(self, **kwargs): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *exc): return False
+        async def get(self, url): return get_response
+        async def post(self, url, json=None): return post_response
+
+    return FakeClient
+
+
+@pytest.mark.asyncio
+async def test_telegram_unconfigured_is_fine(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    result = await check_telegram()
+
+    assert result.ok is True
+    assert "ixtiyoriy" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_telegram_needs_both_values(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+
+    result = await check_telegram()
+
+    assert result.ok is False
+    assert "TELEGRAM_CHAT_ID" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_telegram_explains_the_start_requirement(monkeypatch: pytest.MonkeyPatch):
+    """«chat not found» — foydalanuvchiga /start deyish kerakligi aytilsin."""
+    import httpx
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    monkeypatch.setattr(httpx, "AsyncClient", _fake_client(
+        _FakeResponse(payload={"result": {"username": "jarvis_bot"}}),
+        _FakeResponse(status_code=400, ok=False,
+                      payload={"description": "Bad Request: chat not found"}),
+    ))
+
+    result = await check_telegram()
+
+    assert result.ok is False
+    assert "/start" in result.detail
+    assert "jarvis_bot" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_telegram_success_mentions_the_bot(monkeypatch: pytest.MonkeyPatch):
+    import httpx
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    monkeypatch.setattr(httpx, "AsyncClient", _fake_client(
+        _FakeResponse(payload={"result": {"username": "jarvis_bot"}}),
+        _FakeResponse(payload={"ok": True}),
+    ))
+
+    result = await check_telegram()
+
+    assert result.ok is True
+    assert "jarvis_bot" in result.detail
+
+
+@pytest.mark.asyncio
+async def test_telegram_bad_token_is_named(monkeypatch: pytest.MonkeyPatch):
+    import httpx
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "xato")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    monkeypatch.setattr(httpx, "AsyncClient", _fake_client(
+        _FakeResponse(status_code=401, ok=False),
+        _FakeResponse(),
+    ))
+
+    result = await check_telegram()
+
+    assert result.ok is False
+    assert "BotFather" in result.detail
