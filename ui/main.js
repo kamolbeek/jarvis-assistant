@@ -9,11 +9,48 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require("electron");
 const path = require("node:path");
 
-const WINDOW_WIDTH = 420;
-const WINDOW_HEIGHT = 596;
+// Orbning o'lchami. Kichik bo'lishi kerak — u ish stolining bir burchagida
+// turadi va ishga xalaqit bermasligi shart. Oyna orbdan kattaroq: pastida
+// izoh va tasdiq tugmalari uchun joy kerak, lekin o'sha qism shaffof va
+// bosishlarni o'tkazib yuboradi.
+const ORB_SIZE = Math.max(80, Math.min(320, Number(process.env.JARVIS_ORB_SIZE) || 150));
+const WINDOW_WIDTH = Math.max(300, ORB_SIZE + 40);
+const WINDOW_HEIGHT = ORB_SIZE + 170;
 const MARGIN = 24;
 
 let win = null;
+
+// Foydalanuvchi orbni sudrab ko'chirsa, joyi eslab qolinadi — har ishga
+// tushirishda uni qaytadan surishga majbur qilmaymiz.
+const ORB_STATE = () => path.join(app.getPath("userData"), "orb-position.json");
+
+function savedPosition() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(ORB_STATE(), "utf8"));
+    if (Number.isFinite(raw.x) && Number.isFinite(raw.y)) return raw;
+  } catch { /* birinchi ishga tushirish — saqlangan joy yo'q */ }
+  return null;
+}
+
+function savePosition() {
+  if (!win) return;
+  const [x, y] = win.getPosition();
+  try {
+    fs.writeFileSync(ORB_STATE(), JSON.stringify({ x, y }));
+  } catch { /* saqlanmasa ham ishlashda davom etamiz */ }
+}
+
+// Orb ekrandan butunlay chiqib ketmasligi kerak — aks holda uni qaytarib
+// bo'lmaydi. Har doim kamida bir qismi ko'rinib turadi.
+function clamp(x, y) {
+  const area = screen.getDisplayNearestPoint({ x, y }).workArea;
+  const keep = 60;
+  return {
+    x: Math.round(Math.min(Math.max(x, area.x - WINDOW_WIDTH + keep),
+                           area.x + area.width - keep)),
+    y: Math.round(Math.min(Math.max(y, area.y), area.y + area.height - keep)),
+  };
+}
 
 function positionFor(position, display) {
   const { x, y, width, height } = display.workArea;
@@ -40,7 +77,9 @@ function positionFor(position, display) {
 function createWindow() {
   const display = screen.getPrimaryDisplay();
   const position = process.env.JARVIS_ORB_POSITION || "bottom-right";
-  const { x, y } = positionFor(position, display);
+  // Saqlangan joy ustun: foydalanuvchi bir marta surib qo'ygan bo'lsa,
+  // keyingi safar o'sha yerda turishi kerak.
+  const { x, y } = savedPosition() || positionFor(position, display);
 
   win = new BrowserWindow({
     width: WINDOW_WIDTH,
@@ -355,6 +394,23 @@ ipcMain.on("desk-open-url", (_e, url) => {
   ]);
   if (ALLOWED_URLS.has(url)) shell.openExternal(url);
 });
+
+// --- Orbni sudrab ko'chirish ---
+//
+// Ramkasiz oynani `-webkit-app-region: drag` bilan sudrash mumkin edi, lekin
+// u bosishni butunlay yutib yuboradi — orbga bosib Jarvisni chaqirib
+// bo'lmay qolardi. Shuning uchun renderer o'zi hal qiladi: kichik siljish
+// bosish, kattarog'i sudrash. Bu yerga faqat ekran koordinatalaridagi farq
+// keladi, ya'ni oyna kursor ostidan siljisa ham hisob to'g'ri qoladi.
+
+ipcMain.on("orb-drag", (_event, delta) => {
+  if (!win) return;
+  const [x, y] = win.getPosition();
+  const next = clamp(x + Math.round(delta.dx || 0), y + Math.round(delta.dy || 0));
+  win.setPosition(next.x, next.y);
+});
+
+ipcMain.on("orb-drag-end", savePosition);
 
 // Renderer sichqoncha interaktiv element ustida ekanini aytadi.
 ipcMain.on("set-interactive", (_event, interactive) => {

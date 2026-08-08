@@ -127,7 +127,34 @@ Hammasi yashil bo'lgach:
 ./scripts/run.sh
 ```
 
-HUD ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
+Kichik orb ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
+
+### Orb: kichik, sudraladigan
+
+Orb ataylab kichik — 150 piksel, ish stolining bir burchagida turadi va
+ishga xalaqit bermaydi. Uni **sudrab istalgan joyga ko'chirish mumkin**:
+bosib ushlab suring. Qo'yib yuborgan joyingiz eslab qolinadi va keyingi
+ishga tushirishda o'sha yerda turadi.
+
+Bosish va sudrash bir-biriga xalaqit bermaydi: 4 pikseldan kam siljish —
+bu bosish (Jarvis chaqiriladi), ko'proq siljish — bu sudrash. Ko'chirilgan
+joyda ham hammasi ishlayveradi: gapirganingizda to'lqin harakatlanadi,
+siferblatlar aylanadi.
+
+Orbdan tashqaridagi shaffof joy bosishlarni **o'tkazib yuboradi** — orb
+ostidagi ilovaga bosa olasiz, u yo'lni to'smaydi.
+
+O'lchamni o'zgartirish:
+
+```bash
+JARVIS_ORB_SIZE=110 ./scripts/run.sh    # 80 dan 320 gacha
+```
+
+Boshlang'ich burchak (birinchi marta, hali surilmagan bo'lsa):
+
+```bash
+JARVIS_ORB_POSITION=bottom-left ./scripts/run.sh
+```
 
 > HUD'ni Jarvis'ni o'rnatmasdan ham ko'rish mumkin: `docs/orb-demo.html` ni
 > brauzerda oching — barcha holatlar, bo'g'inlarni «buzib» ko'rish va to'liq

@@ -30,10 +30,17 @@ let captionTimer = null;
 
 // ---------------------------------------------------------------- Kadrlar sikli
 
+function applySize() {
+  // O'lchamni main jarayoni beradi (JARVIS_ORB_SIZE). CSS uni `--orb`
+  // orqali oladi, canvas esa o'z CSS o'lchamidan — ya'ni bitta manba.
+  const size = Number(window.orb.size) || 150;
+  document.documentElement.style.setProperty("--orb", `${size}px`);
+}
+
 function setupCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  width = CANVAS.clientWidth || 380;
-  height = CANVAS.clientHeight || 380;
+  width = CANVAS.clientWidth || 150;
+  height = CANVAS.clientHeight || 150;
   CANVAS.width = Math.round(width * dpr);
   CANVAS.height = Math.round(height * dpr);
   CTX.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -219,7 +226,60 @@ function updateTooltip(event) {
 
 // ---------------------------------------------------------------- Foydalanuvchi harakatlari
 
-orbWrap.addEventListener("click", () => send({ type: "activate" }));
+// --- Sudrab ko'chirish ---
+//
+// Orb ham bosiladi (Jarvisni chaqirish), ham sudraladi. Ikkisini ajratish
+// uchun chegara: sichqoncha shu masofadan ko'p siljisa — bu sudrash, kamroq
+// siljisa — bosish. Aks holda har bir bosishda oyna bir-ikki piksel siljib
+// ketardi yoki sudrash chaqiruvni ishga tushirardi.
+const DRAG_THRESHOLD = 4;
+
+let dragging = false;
+let moved = 0;
+let lastScreen = null;
+
+orbWrap.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0) return;
+  dragging = true;
+  moved = 0;
+  lastScreen = { x: event.screenX, y: event.screenY };
+  // Kursor orbdan chiqib ketsa ham hodisalar shu elementga kelaveradi —
+  // oyna kursor ostidan siljiganda bu shart.
+  orbWrap.setPointerCapture(event.pointerId);
+});
+
+orbWrap.addEventListener("pointermove", (event) => {
+  if (!dragging || !lastScreen) return;
+  const dx = event.screenX - lastScreen.x;
+  const dy = event.screenY - lastScreen.y;
+  lastScreen = { x: event.screenX, y: event.screenY };
+  moved += Math.abs(dx) + Math.abs(dy);
+  if (moved < DRAG_THRESHOLD) return;
+
+  document.body.classList.add("dragging");
+  // Ekran koordinatalaridagi farq — oyna siljigani hisobga ta'sir qilmaydi.
+  window.orb.drag(dx, dy);
+});
+
+orbWrap.addEventListener("pointerup", (event) => {
+  if (!dragging) return;
+  dragging = false;
+  lastScreen = null;
+  orbWrap.releasePointerCapture(event.pointerId);
+  document.body.classList.remove("dragging");
+
+  if (moved < DRAG_THRESHOLD) {
+    send({ type: "activate" });
+  } else {
+    window.orb.dragEnd();
+  }
+});
+
+orbWrap.addEventListener("pointercancel", () => {
+  dragging = false;
+  lastScreen = null;
+  document.body.classList.remove("dragging");
+});
 
 document.getElementById("approve").addEventListener("click", () => answerConfirm(true));
 document.getElementById("deny").addEventListener("click", () => answerConfirm(false));
@@ -235,18 +295,21 @@ document.addEventListener("mousemove", (event) => {
   updateTooltip(event);
   const target = document.elementFromPoint(event.clientX, event.clientY);
   const interactive = Boolean(target && target.closest(".interactive"));
-  window.orb.setInteractive(interactive || Boolean(pendingConfirmId));
+  // Sudrash paytida kursor orbdan chiqib ketishi mumkin — o'sha payt oynani
+  // "o'tkazuvchan" qilib qo'ysak, sudrash yarmida uzilib qolardi.
+  window.orb.setInteractive(interactive || dragging || Boolean(pendingConfirmId));
 });
 
 document.addEventListener("mouseleave", () => {
   tooltip.classList.add("hidden");
-  if (!pendingConfirmId) window.orb.setInteractive(false);
+  if (!pendingConfirmId && !dragging) window.orb.setInteractive(false);
 });
 
 window.orb.onHotkey(() => send({ type: "activate" }));
 
 window.addEventListener("resize", setupCanvas);
 
+applySize();
 setupCanvas();
 connect();
 requestAnimationFrame(frame);

@@ -13,6 +13,13 @@ contextBridge.exposeInMainWorld("orb", {
   // Global tugma bosilganda chaqiriladi.
   onHotkey: (callback) => ipcRenderer.on("hotkey", () => callback()),
 
+  // Orbni sudrab ko'chirish: ekran koordinatalaridagi farq yuboriladi.
+  drag: (dx, dy) => ipcRenderer.send("orb-drag", { dx, dy }),
+  dragEnd: () => ipcRenderer.send("orb-drag-end"),
+
+  // Orb o'lchami — CSS shu qiymatdan foydalanadi.
+  size: Number(process.env.JARVIS_ORB_SIZE) || 150,
+
   quit: () => ipcRenderer.send("quit"),
 
   // Yadro manzili — main jarayoniga bog'liq bo'lmasligi uchun shu yerda.
