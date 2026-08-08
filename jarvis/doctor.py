@@ -11,9 +11,12 @@ sinaydi va aynan qaysi bo'g'in uzilganini aytadi.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import shutil
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import numpy as np
@@ -30,6 +33,62 @@ class Result:
     ok: bool
     detail: str = ""
     fatal: bool = False   # True bo'lsa, keyingi tekshiruvlar ma'nosiz
+
+
+# Tanish xato imzolari -> aniq maslahat. Xom xato matni foydalanuvchiga
+# hech narsa demaydi; sabab ma'lum bo'lsa, aynan nima qilishni aytamiz.
+HINTS: list[tuple[tuple[str, ...], str]] = [
+    (
+        ("API key ID used as API key", "invalid_api_key"),
+        "ElevenLabs'da kalitning O'ZI emas, uning ID raqami qo'yilgan.\n"
+        "Haqiqiy kalit `sk_` bilan boshlanadi va faqat yaratilgan paytda\n"
+        "bir marta ko'rsatiladi. elevenlabs.io > profil > API Keys >\n"
+        "yangi kalit yarating va o'sha paytdagi `sk_...` qiymatini nusxalang.",
+    ),
+    (
+        ("401",),
+        "Kalit qabul qilinmadi — .env dagi qiymatni qaytadan tekshiring.",
+    ),
+    (
+        ("quota", "exceeded", "limit"),
+        "Hisobdagi limit tugagan bo'lishi mumkin — provayder kabinetini tekshiring.",
+    ),
+]
+
+
+def hint_for(text: str) -> str:
+    """Xato matnidan tanish imzoni topib, aniq maslahat qaytaradi."""
+    low = text.lower()
+    for needles, advice in HINTS:
+        if any(n.lower() in low for n in needles):
+            return advice
+    return ""
+
+
+class _Collector(logging.Handler):
+    """Tekshiruv davomida jurnalga tushgan xatolarni ushlab qoladi.
+
+    Sabab ko'pincha jurnalga yoziladi-yu, natijaga tushmaydi — foydalanuvchi
+    esa aynan natijani o'qiydi.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lines.append(record.getMessage())
+
+
+@contextmanager
+def collect_logs(logger_name: str) -> Iterator[_Collector]:
+    handler = _Collector()
+    logger = logging.getLogger(logger_name)
+    logger.addHandler(handler)
+    try:
+        yield handler
+    finally:
+        logger.removeHandler(handler)
 
 
 def _say(mark: str, title: str, detail: str = "") -> None:
@@ -202,15 +261,27 @@ async def check_stt(cfg: Config) -> Result:
     from .voice.stt import build_stt, transcribe_guarded
 
     provider = build_stt(cfg.section("voice.stt"))
-    try:
-        text = await transcribe_guarded(provider, audio, cfg.sample_rate)
-    finally:
-        await provider.aclose()
+    # `transcribe_guarded` xatoni yutib, bo'sh satr qaytaradi — haqiqiy sabab
+    # faqat jurnalga tushadi. Foydalanuvchi natijani o'qiydi, jurnalni emas.
+    with collect_logs("jarvis.voice") as logs:
+        try:
+            text = await transcribe_guarded(provider, audio, cfg.sample_rate)
+        finally:
+            await provider.aclose()
 
-    if not text:
-        return Result(False, "Matn qaytmadi. Kalitni va provayder nomini tekshiring,\n"
-                             "yoki balandroq va aniqroq gapirib qaytadan urinib ko'ring.")
-    return Result(True, f"Eshitildi: «{text}»")
+    if text:
+        return Result(True, f"Eshitildi: «{text}»")
+
+    reason = "\n".join(logs.lines)
+    parts = ["Matn qaytmadi."]
+    if reason:
+        parts.append(reason[:300])
+        advice = hint_for(reason)
+        if advice:
+            parts.append(advice)
+    else:
+        parts.append("Balandroq va aniqroq gapirib qaytadan urinib ko'ring.")
+    return Result(False, "\n".join(parts))
 
 
 async def check_tts(cfg: Config) -> Result:
@@ -225,7 +296,9 @@ async def check_tts(cfg: Config) -> Result:
     try:
         await speaker.play(provider.stream(phrase), provider.sample_rate)
     except Exception as exc:
-        return Result(False, f"{type(exc).__name__}: {exc}")
+        detail = f"{type(exc).__name__}: {exc}"
+        advice = hint_for(detail)
+        return Result(False, f"{detail}\n{advice}" if advice else detail)
     finally:
         await provider.aclose()
 

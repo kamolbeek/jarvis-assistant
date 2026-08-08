@@ -6,13 +6,14 @@ u og'ir kutubxonalarsiz ham ishga tusha olishi kerak.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 
 import pytest
 
 from jarvis.config import Config
-from jarvis.doctor import check_env, check_permissions
+from jarvis.doctor import check_env, check_permissions, collect_logs, hint_for
 
 
 def _cfg(stt: str = "elevenlabs", tts: str = "elevenlabs") -> Config:
@@ -107,3 +108,30 @@ def test_doctor_runs_without_heavy_dependencies():
 
     assert "Jarvis diagnostikasi" in result.stdout, result.stderr[:500]
     assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_hint_recognises_elevenlabs_key_id_mistake():
+    """ElevenLabs ro'yxatdagi ID ni kalit deb qo'yish — juda ko'p uchraydigan xato."""
+    error = ('{"detail":{"type":"authentication_error","code":"invalid_api_key",'
+             '"message":"API key ID used as API key"}}')
+
+    advice = hint_for(error)
+
+    assert "sk_" in advice
+    assert "ID" in advice
+
+
+def test_hint_is_empty_for_unknown_errors():
+    """Tanimagan xatoga o'ylab topilgan maslahat bermaymiz."""
+    assert hint_for("ConnectionResetError: tarmoq uzildi") == ""
+
+
+def test_collect_logs_captures_then_detaches():
+    """Sabab jurnalga tushsa, natijaga chiqishi kerak — va keyin ushlab qolmasligi."""
+    log = logging.getLogger("jarvis.voice.test")
+
+    with collect_logs("jarvis.voice") as collected:
+        log.error("STT xatosi 400: invalid_api_key")
+    log.error("bu allaqachon tashqarida")
+
+    assert collected.lines == ["STT xatosi 400: invalid_api_key"]
