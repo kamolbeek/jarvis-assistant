@@ -301,16 +301,12 @@ async def check_wake_word(cfg: Config) -> Result:
     audio = getattr(check_microphone, "audio", None)
     try:
         if audio is not None:
-            step = cfg.frame_samples
-
-            def scan() -> None:
-                for start in range(0, max(0, audio.size - step + 1), step):
-                    detector.push(audio[start : start + step])
-
-            # Modelni ishlatish ham bloklaydi — CPU'da bir necha soniya.
-            await asyncio.to_thread(scan)
-            parts.append(f"«Hey Jarvis» dagi eng yuqori ball: {detector.peak:.3f}")
-            if detector.peak < candidate:
+            # Modelni ishlatish bloklaydi — CPU'da bir necha soniya.
+            # `scan` bir necha moslashuvda o'tkazadi: bitta o'tishning natijasi
+            # tasodifiy chiqadi, o'sha yozuv 0.06 ham, 0.38 ham bo'lishi mumkin.
+            peak = await asyncio.to_thread(detector.scan, audio, cfg.frame_samples)
+            parts.append(f"«Hey Jarvis» dagi eng yuqori ball: {peak:.3f}")
+            if peak < candidate:
                 # Chegarani bu balldan pastga tushirish yaramaydi — u shovqin
                 # darajasiga tushib ketadi. Sababni topish kerak.
                 parts.append(
@@ -320,7 +316,7 @@ async def check_wake_word(cfg: Config) -> Result:
                     "  • boshqa ibora aytilgan — model faqat «hey jarvis»ni biladi\n"
                     "Aniqlash uchun: `python -m jarvis wake-test`"
                 )
-            elif detector.peak < threshold:
+            elif peak < threshold:
                 parts.append("Chegaradan past, lekin sezildi — ibora matn bilan "
                              "tasdiqlanadi (STT chaqiruvi, ~0.5 s).\n"
                              "Chegarani sozlash: `python -m jarvis wake-test`")

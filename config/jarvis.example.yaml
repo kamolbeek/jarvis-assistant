@@ -26,7 +26,11 @@ activation:
     # «hey jarvis» bunga tushmaydi (u to'g'ridan-to'g'ri chegaradan o'tadi).
     # Butunlay o'chirish uchun: phrases: []
     phrases: ["hey jarvis", "hi jarvis", "salom jarvis"]
-    candidate_threshold: 0.18      # shubhali deb hisoblash chegarasi
+    # Shubhali deb hisoblash chegarasi. Buni juda pastga qo'yish yaramaydi:
+    # o'lchab ko'rilganda oq shovqinning o'zi 0.10–0.13 ball oladi, ya'ni
+    # 0.15 dan past chegara xonadagi shitirlashdan ham STT chaqiruvini
+    # keltirib chiqaradi. O'z chegarangizni bilish uchun: `jarvis wake-test`.
+    candidate_threshold: 0.30
     phrase_ratio: 0.7              # so'z o'xshashligi (STT «Jervis» deb yozadi)
     verify_cooldown_sec: 3.0       # shundan tez-tez tekshirmaydi (xarajat uchun)
     verify_window_ms: 2000         # shuncha oxirgi audio matnga aylantiriladi

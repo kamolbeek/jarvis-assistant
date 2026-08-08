@@ -132,6 +132,92 @@ async def measure(phrase: str, cfg, detector, threshold: float,
     return out
 
 
+async def synth(cfg, text: str) -> tuple:
+    """TTS bilan iborani sintez qiladi. Qaytadi: (audio, sample_rate)."""
+    import numpy as np
+
+    from .voice.tts import build_tts
+
+    provider = build_tts(cfg.section("voice.tts"))
+    try:
+        chunks = [chunk async for chunk in provider.stream(text) if chunk.size]
+    finally:
+        await provider.aclose()
+    if not chunks:
+        return np.zeros(0, dtype=np.int16), provider.sample_rate
+    return np.concatenate(chunks), provider.sample_rate
+
+
+async def check_pipeline(cfg, detector) -> float:
+    """Quvur sinovi: TTS aytgan «hey jarvis» ni to'g'ridan-to'g'ri modelga beramiz.
+
+    Bu yerda mikrofon, xona va talaffuz qatnashmaydi. Ball baland chiqsa,
+    kod va model joyida — muammoni tashqarida qidirish kerak. Past chiqsa,
+    muammo aynan shu yerda va mikrofonni sozlashning ma'nosi yo'q.
+    """
+    from .audio.mic import resample
+
+    audio, rate = await synth(cfg, "Hey Jarvis")
+    if audio.size == 0:
+        return -1.0
+    converted = resample(audio, rate, cfg.sample_rate)
+    return detector.scan(converted, cfg.frame_samples)
+
+
+async def check_room(cfg, detector) -> tuple[float, float]:
+    """Xona sinovi: TTS dinamikdan chalinadi, mikrofon eshitadi.
+
+    Quvur sinovi o'tib, bu o'tmasa — muammo mikrofon yo'lida yoki xonada.
+    Qaytadi: (ball, cho'qqi).
+    """
+    import numpy as np
+
+    from .audio.mic import MicStream, frame_peak
+    from .voice.tts import Speaker
+
+    audio, rate = await synth(cfg, "Hey Jarvis")
+    if audio.size == 0:
+        return -1.0, 0.0
+
+    mic = MicStream(
+        sample_rate=cfg.sample_rate,
+        frame_samples=cfg.frame_samples,
+        device=cfg.get("audio.input_device"),
+        gain=float(cfg.get("audio.input_gain", 1.0)),
+    )
+    speaker = Speaker(device=cfg.get("audio.output_device"))
+
+    async def one_chunk():
+        yield audio
+
+    frames: list = []
+    loudest = 0.0
+
+    await mic.start()
+
+    async def collect() -> None:
+        nonlocal loudest
+        async for frame in mic.frames():
+            frames.append(frame)
+            loudest = max(loudest, frame_peak(frame))
+
+    reader = asyncio.create_task(collect())
+    try:
+        await speaker.play(one_chunk(), rate)
+        # Oxirgi kadrlar navbatda qolmasin
+        await asyncio.sleep(0.3)
+    finally:
+        reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reader
+        await mic.stop()
+
+    if not frames:
+        return -1.0, 0.0
+    heard = np.concatenate(frames)
+    return detector.scan(heard, cfg.frame_samples), loudest
+
+
 async def run() -> int:
     cfg = load_config()
     section = cfg.section("activation.wake_word")
@@ -154,8 +240,34 @@ async def run() -> int:
               f"(activation.wake_word.enabled: false){RESET}")
         return 1
 
+    # Avval quvurni o'zini tekshiramiz. Bu tartib muhim: agar model tayyor
+    # yozuvni ham tanimasa, mikrofonni sozlash bilan vaqt yo'qotish behuda.
+    pipeline = room = -1.0
+    room_loud = 0.0
     results: dict[str, Measurement] = {}
     try:
+        print(f"\n{BOLD}1. Quvur sinovi{RESET} {DIM}— TTS aytadi, to'g'ridan-to'g'ri "
+              f"modelga beriladi (mikrofon qatnashmaydi){RESET}")
+        try:
+            pipeline = await check_pipeline(cfg, detector)
+        except Exception as exc:  # noqa: BLE001 — sinov o'tmasa ham davom etamiz
+            print(f"  {AMBER}O'tkazib yuborildi: {type(exc).__name__}: {exc}{RESET}")
+        else:
+            tint = colour(pipeline, threshold, candidate)
+            print(f"  ball {tint}{pipeline:.3f}{RESET} [{tint}{bar(pipeline)}{RESET}]")
+
+        print(f"\n{BOLD}2. Xona sinovi{RESET} {DIM}— TTS dinamikdan chalinadi, "
+              f"mikrofon eshitadi{RESET}")
+        try:
+            room, room_loud = await check_room(cfg, detector)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  {AMBER}O'tkazib yuborildi: {type(exc).__name__}: {exc}{RESET}")
+        else:
+            tint = colour(room, threshold, candidate)
+            print(f"  ball {tint}{room:.3f}{RESET} [{tint}{bar(room)}{RESET}] "
+                  f"cho'qqi {room_loud:.2f}")
+
+        print(f"\n{BOLD}3. Sizning ovozingiz{RESET}")
         for phrase in phrases:
             results[phrase] = await measure(phrase, cfg, detector, threshold, candidate)
     finally:
@@ -196,6 +308,42 @@ async def run() -> int:
         print(f"{AMBER}Signal juda past: {', '.join(quiet)}{RESET}")
         print(f"{DIM}Kirish balandligini ko'taring yoki mikrofonga yaqinroq "
               f"gapiring.{RESET}")
+        return 1
+
+    # Uch sinovni solishtirib, aybdorni ko'rsatamiz. Har bir shart alohida
+    # xulosa beradi — "nimadir ishlamayapti" degan gap foyda keltirmaydi.
+    best_voice = max((m.peak for m in results.values()), default=0.0)
+
+    if 0 <= pipeline < candidate:
+        print(f"{RED}{BOLD}Model tayyor yozuvni ham tanimadi{RESET}")
+        print(f"{DIM}Mikrofon, xona va talaffuz bu sinovda qatnashmagan — demak\n"
+              f"muammo modelda yoki uni ishlatishimizda. Mikrofonni sozlash\n"
+              f"foyda bermaydi. Modelni qaytadan yuklab ko'ring:\n"
+              f"  rm -rf .venv/lib/python3*/site-packages/openwakeword/resources/models\n"
+              f"so'ng shu buyruqni qaytadan ishga tushiring.{RESET}")
+        return 1
+
+    if pipeline >= candidate and 0 <= room < candidate:
+        print(f"{AMBER}{BOLD}Quvur ishlaydi, lekin mikrofon orqali tanilmadi{RESET}")
+        print(f"{DIM}TTS ovozi to'g'ridan-to'g'ri berilganda {pipeline:.3f}, xuddi\n"
+              f"o'sha ovoz dinamik va mikrofon orqali kelganda {room:.3f}.\n"
+              f"Demak muammo mikrofon yo'lida: dinamik juda past bo'lishi,\n"
+              f"mikrofon boshqa qurilma bo'lishi yoki xona shovqini sabab.\n"
+              f"Cho'qqi {room_loud:.2f} — 0.2 dan past bo'lsa, ovoz shunchaki\n"
+              f"yetib bormagan.{RESET}")
+        return 1
+
+    if pipeline >= candidate and room >= candidate and best_voice < candidate:
+        print(f"{AMBER}{BOLD}Model ishlaydi, lekin sizning talaffuzingizni "
+              f"tanimaydi{RESET}")
+        print(f"{DIM}TTS ovozini mikrofon orqali ham tanidi ({room:.3f}), sizning\n"
+              f"ovozingizda esa eng yuqori ball {best_voice:.3f}. Bu model faqat\n"
+              f"inglizcha sintetik ovozlarda o'rgatilgan — boshqa talaffuzda\n"
+              f"ball keskin tushadi. Chegarani pasaytirish yechim emas.\n"
+              f"\n"
+              f"Ishlaydigan yo'l — o'z ovozingizda model yasash yoki\n"
+              f"uyg'otuvchi so'zni butunlay boshqa usulga o'tkazish.\n"
+              f"README: «To'liq lokal yechim».{RESET}")
         return 1
 
     # Model umuman sezmagan iboralar uchun chegarani pasaytirish ma'nosiz —

@@ -46,6 +46,11 @@ class WakeWordDetector(ABC):
     bo'yicha emas — kadrlar navbatda to'planib qolganda ham xulq bir xil bo'lsin.
     """
 
+    # Shubhali chaqiruvdan keyin butun sovish davrini kutish yaramaydi:
+    # u tasdiqlanmasligi mumkin, biz esa shu vaqt ichida kar bo'lib turardik.
+    # Bir iborani ikki marta hisoblamaslik uchun qisqa muddat yetadi.
+    CANDIDATE_COOLDOWN = 0.6
+
     def __init__(self, chunk_samples: int, cooldown_sec: float = 2.0,
                  sample_rate: int = 16000, candidate_threshold: float = 1.0) -> None:
         self._chunk_samples = chunk_samples
@@ -54,7 +59,7 @@ class WakeWordDetector(ABC):
         self._candidate_threshold = candidate_threshold
         self._buffer = np.zeros(0, dtype=np.int16)
         self._clock = 0.0
-        self._last_fire = -1e9
+        self._deaf_until = 0.0
         self._peak = 0.0
 
     @property
@@ -69,7 +74,7 @@ class WakeWordDetector(ABC):
         now = self._clock
         self._clock += frame.size / self._sample_rate
 
-        if now - self._last_fire < self._cooldown_sec:
+        if now < self._deaf_until:
             # Sovish davrida buferni to'ldirmaymiz — eskirgan audio bilan ishga tushmasin.
             self._buffer = np.zeros(0, dtype=np.int16)
             return None
@@ -83,12 +88,15 @@ class WakeWordDetector(ABC):
             self._peak = max(self._peak, score)
             if score >= self._candidate_threshold:
                 hit = WakeHit(score=score, confident=score >= self.threshold)
-                self._buffer = np.zeros(0, dtype=np.int16)
                 break
 
         if hit is not None:
-            self._last_fire = now
+            # Tartib muhim: `reset()` sovish davrini ham tozalaydi, shuning
+            # uchun yangi muddat undan KEYIN qo'yiladi.
             self.reset()
+            self._deaf_until = now + (
+                self._cooldown_sec if hit.confident else self.CANDIDATE_COOLDOWN
+            )
         return hit
 
     @property
@@ -101,7 +109,49 @@ class WakeWordDetector(ABC):
         """Aynan `chunk_samples` uzunlikdagi kadrning ballini qaytaradi (0..1)."""
 
     def reset(self) -> None:
-        """Ichki holatni tozalaydi (masalan, Jarvis gapirib bo'lgandan keyin)."""
+        """Butun holatni tozalaydi: bufer, sovish davri va model xotirasi.
+
+        O'lchash asboblari buni har bir o'lchov oldidan chaqiradi va toza
+        varaqdan boshlashi kerak — sovish davri qolib ketsa, keyingi
+        o'lchovning boshidagi audio jimgina tashlanib ketardi.
+        """
+        self._buffer = np.zeros(0, dtype=np.int16)
+        self._deaf_until = 0.0
+        self._reset_model()
+
+    def _reset_model(self) -> None:
+        """Backend o'z ichki xotirasini tozalaydi."""
+
+    def scan(self, audio: np.ndarray, frame_samples: int) -> float:
+        """Tayyor yozuvni tekshiradi va eng yuqori ballni qaytaradi.
+
+        Jonli oqimda model har 80 ms da qayta baholaydi, ya'ni iborani
+        turli moslashuvlarda ko'radi. Bitta yozuvni bir marta o'tkazsak,
+        moslashuv tasodifiy bo'lib qoladi — o'sha yozuv 0.06 ham, 0.38 ham
+        chiqishi mumkin. Shuning uchun bir necha siljish bilan o'tkazamiz
+        va eng yaxshisini olamiz: bu jonli xulqqa mos keladi.
+
+        Oldiga jimlik qo'shiladi — modelning ichki oynasi to'lishi kerak.
+        """
+        if audio.size == 0:
+            return 0.0
+
+        lead = np.zeros(self._sample_rate, dtype=np.int16)
+        tail = np.zeros(self._sample_rate // 2, dtype=np.int16)
+        body = np.concatenate([lead, audio.astype(np.int16), tail])
+
+        best = 0.0
+        offsets = range(0, self._chunk_samples, max(1, frame_samples))
+        for offset in offsets:
+            self.reset()
+            self.clear_peak()
+            stream = body[offset:]
+            for start in range(0, stream.size - frame_samples + 1, frame_samples):
+                self.push(stream[start : start + frame_samples])
+            best = max(best, self._peak)
+
+        self._peak = best
+        return best
 
     def close(self) -> None:
         """Resurslarni bo'shatadi."""
@@ -146,7 +196,7 @@ class OpenWakeWordDetector(WakeWordDetector):
             score = max(scores.values(), default=0.0)
         return float(score)
 
-    def reset(self) -> None:
+    def _reset_model(self) -> None:
         reset_fn = getattr(self._model, "reset", None)
         if callable(reset_fn):
             reset_fn()

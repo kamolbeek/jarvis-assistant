@@ -168,6 +168,20 @@ FULL_SCALE = 32767
 CLIP_EDGE = 32000
 
 
+def resample(audio: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
+    """Chiziqli interpolatsiya bilan namuna chastotasini o'zgartiradi.
+
+    Sifati studiya darajasida emas, lekin diagnostika uchun yetarli: TTS
+    24 kHz beradi, uyg'otuvchi so'z modeli esa 16 kHz kutadi.
+    """
+    if src_rate == dst_rate or audio.size == 0:
+        return audio.astype(np.int16)
+    count = int(round(audio.size * dst_rate / src_rate))
+    positions = np.linspace(0, audio.size - 1, count)
+    values = np.interp(positions, np.arange(audio.size), audio.astype(np.float32))
+    return values.astype(np.int16)
+
+
 def frame_peak(frame: np.ndarray) -> float:
     """Eng baland namunaning to'liq shkaladagi ulushi (0..1).
 

@@ -314,11 +314,17 @@ bor — Jarvis undan tez-tez tekshirmaydi.
 activation:
   wake_word:
     threshold: 0.5              # bu balldan o'tsa — darhol
-    candidate_threshold: 0.18   # bundan o'tsa — matn bilan tekshiriladi
+    candidate_threshold: 0.30   # bundan o'tsa — matn bilan tekshiriladi
     phrases: ["hey jarvis", "hi jarvis", "salom jarvis"]
     phrase_ratio: 0.7           # so'z o'xshashligi
     verify_cooldown_sec: 3.0
 ```
+
+`candidate_threshold` ni juda pastga qo'yish yaramaydi. O'lchab ko'rilganda
+**oq shovqinning o'zi 0.10–0.13 ball oladi** — ya'ni 0.15 dan past chegara
+xonadagi shitirlashdan ham STT chaqiruvini keltirib chiqaradi. Ball shovqin
+darajasidan yuqori bo'lishi shart, aks holda "chaqiruv" tushunchasi ma'nosini
+yo'qotadi.
 
 Yangi ibora qo'shish uchun ro'yxatga yozib qo'yish yetarli — kod tegmaydi.
 Ikkinchi bosqichni butunlay o'chirish: `phrases: []`.
