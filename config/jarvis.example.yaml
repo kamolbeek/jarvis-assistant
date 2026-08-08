@@ -136,6 +136,15 @@ safety:
   # "allow" — avtomatik ruxsat
   # "deny"  — umuman ta'qiqlangan
   default: "ask"
+
+  # Ovozli tasdiq: Jarvis savolni ovozda beradi va «ha» / «mayli, bajar» /
+  # «yo'q» deb aytilgan javobni qabul qiladi. Tugmalar ham ishlashda davom
+  # etadi — qaysi biri oldin javob bersa, o'sha hal qiladi. Noaniq javobda
+  # hech qachon "ruxsat" deb taxmin qilinmaydi.
+  voice_confirm:
+    enabled: true
+    listen_sec: 8                  # har urinishda shuncha soniya tinglaydi
+    attempts: 2                    # noaniq javobda necha marta qayta so'raydi
   rules:
     Read: "allow"
     Glob: "allow"

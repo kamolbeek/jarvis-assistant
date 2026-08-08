@@ -470,6 +470,27 @@ yoki ma'lumotlar bazasida noto'g'ri `UPDATE` bajarsa, uni kim to'xtatadi?
 
 Shuning uchun har bir asbob chaqiruvi xavfsizlik darvozasidan o'tadi:
 
+### Tasdiq — ovoz bilan
+
+Tasdiq so'ralganda Jarvis savolni **ovozda beradi** va javobni ovozdan
+o'qiydi: «ha», «mayli, bajar», «ruxsat beraman» — rozilik; «yo'q»,
+«to'xta», «kerak emas» — rad. Tugma bosish shart emas — kompyuter
+qo'lingizda bo'lmasa ham jarayon kutib qolmaydi. Tugmalar ishlashda davom
+etadi: qaysi biri oldin javob bersa, o'sha hal qiladi.
+
+Qoida xavfsizlik tomonga og'gan: «ruxsat bermayman» ichida «ruxsat» so'zi
+bor, lekin bu RAD deb o'qiladi — rad so'zi topilgan har qanday javob rad.
+Noaniq javob hech qachon roziliqqa aylanmaydi: Jarvis «Ha yoki yo'q deb
+ayting» deb qayta so'raydi, javob bo'lmasa muddat tugashi rad hisoblanadi.
+
+```yaml
+safety:
+  voice_confirm:
+    enabled: true
+    listen_sec: 8      # har urinishda shuncha soniya tinglaydi
+    attempts: 2        # noaniq javobda necha marta qayta so'raydi
+```
+
 ```yaml
 safety:
   default: "ask"

@@ -42,6 +42,7 @@ from .health import Health, Status, System
 from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
 from .ui.server import UiServer, base64_to_pcm
+from .voice.consent import consent_prompt, parse_consent
 from .voice.stt import build_stt, transcribe_guarded
 from .voice.tts import Speaker, build_tts
 
@@ -148,6 +149,13 @@ class Jarvis:
             frame_ms=int(config.get("audio.frame_ms", 20)),
         )
 
+        # Ovozli tasdiq: tugma bosish shart emas, «ha» / «yo'q» deyish yetadi.
+        vc = config.section("safety.voice_confirm")
+        self._vc_enabled = bool(vc.get("enabled", True))
+        self._vc_listen = float(vc.get("listen_sec", 8))
+        self._vc_attempts = int(vc.get("attempts", 2))
+        self._confirm_task: asyncio.Task[None] | None = None
+
         self._activate = asyncio.Event()
         self._shutdown = asyncio.Event()
         self._greeted = False
@@ -163,6 +171,10 @@ class Jarvis:
         self.ui.on("stop", self._on_stop)
         self.ui.on("text", self._on_text_input)
         self.ui.on("audio", self._on_phone_audio)
+
+        # Tasdiq so'rovlarini ovoz bilan ham hal qilish uchun shinani tinglaymiz.
+        if self._vc_enabled:
+            self.bus.subscribe(self._on_bus_message)
 
         await self.ui.start()
         await self.brain.start()
@@ -236,6 +248,8 @@ class Jarvis:
     async def stop(self) -> None:
         self._shutdown.set()
         self.speaker.stop()
+        if self._confirm_task is not None and not self._confirm_task.done():
+            self._confirm_task.cancel()
         if self._heartbeat is not None:
             self._heartbeat.cancel()
         await self.scheduler.stop()
@@ -352,6 +366,65 @@ class Jarvis:
                     self._wake.reset()
                 if self._clap is not None:
                     self._clap.reset()
+
+    # --- Ovozli tasdiq ---
+
+    async def _on_bus_message(self, message: dict[str, Any]) -> None:
+        """Shinadagi tasdiq so'rovlarini ovozli oqimga uzatadi."""
+        kind = message.get("type")
+        if kind == "confirm":
+            # Darvoza javobni kutib turadi, ya'ni bir paytda faqat bitta
+            # tasdiq bo'ladi. Har ehtimolga eski vazifani to'xtatamiz.
+            if self._confirm_task is not None and not self._confirm_task.done():
+                self._confirm_task.cancel()
+            self._confirm_task = asyncio.create_task(self._voice_confirm(message))
+        elif kind == "confirm_closed" and self._confirm_task is not None:
+            # Tugma bosildi yoki vaqt tugadi — tinglashning ma'nosi qolmadi.
+            if not self._confirm_task.done():
+                self._confirm_task.cancel()
+
+    async def _voice_confirm(self, message: dict[str, Any]) -> None:
+        """Tasdiq savolini ovozda beradi va javobni ovozdan o'qiydi.
+
+        Foydalanuvchi kompyuter oldida bo'lmasligi mumkin — tugma bosishni
+        talab qilsak, jarayon shu yerda qotib qolardi. Tugmalar ishlashda
+        davom etadi: qaysi biri oldin javob bersa, o'sha hal qiladi.
+        """
+        confirm_id = str(message.get("id", ""))
+        action = str(message.get("action", ""))
+        detail = str(message.get("detail", ""))
+
+        try:
+            await self._speak(consent_prompt(action, detail))
+
+            for _attempt in range(self._vc_attempts):
+                if self._shutdown.is_set() or not self.bus.is_pending(confirm_id):
+                    return
+
+                # Savolning aks sadosi javob sifatida o'qilmasin.
+                self.mic.drain()
+                text = await self._capture_utterance(patience_sec=self._vc_listen)
+
+                if not self.bus.is_pending(confirm_id):
+                    return
+
+                verdict = parse_consent(text)
+                if verdict is None:
+                    # Noaniq javobda hech qachon "ruxsat" deb taxmin qilmaymiz.
+                    if text:
+                        await self._speak("Ha yoki yo'q deb ayting.")
+                    continue
+
+                self.bus.resolve_confirm(confirm_id, verdict)
+                await self._speak("Xo'p." if verdict else "Bekor qildim.")
+                return
+
+            # Javob ololmadik — qaror tugmaga yoki vaqt tugashiga qoladi
+            # (vaqt tugasa, darvoza RAD deb hisoblaydi).
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Ovozli tasdiqda xato")
 
     async def _wake_confirmed(self, hit: WakeHit) -> bool:
         """Chaqiruv haqiqiy ekanini aniqlaydi.

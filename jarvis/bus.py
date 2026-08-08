@@ -114,6 +114,11 @@ class EventBus:
             if self.state is State.CONFIRM:
                 await self.set_state(previous)
 
+    def is_pending(self, confirm_id: str) -> bool:
+        """Tasdiq hali javob kutyaptimi? Ovozli tasdiq sikli shu bilan to'xtaydi."""
+        pending = self._pending.get(confirm_id)
+        return pending is not None and not pending.future.done()
+
     def resolve_confirm(self, confirm_id: str, approved: bool) -> bool:
         """UI javob berganda chaqiriladi. Topilsa True qaytaradi."""
         pending = self._pending.get(confirm_id)

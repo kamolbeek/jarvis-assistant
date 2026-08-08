@@ -529,8 +529,33 @@ figureImg.addEventListener("click", (e) => {
 
 let bundled = false; // o'rnatilgan wallpaper rejimi
 
+// Rasm yuklanmasa, sahna "yozuvlargina qolgan" holatga tushmasligi kerak —
+// har bir bosqichda keyingisiga o'tamiz: saqlangan rasm -> o'rnatilgan
+// wallpaper -> vektor chizma (u rasmsiz ham to'liq HUD chizadi).
+function loadBundled() {
+  figureImg.src = "assets/markaz.jpg";
+  figureImg.onload = () => {
+    figureOn = true;
+    bundled = true;
+    figureCal = DESK.BUNDLED.cal;
+    figureImg.classList.add("on");
+    document.body.classList.add("wallpaper");
+  };
+  figureImg.onerror = () => {
+    console.error("O'rnatilgan wallpaper yuklanmadi — vektor sahnaga o'tildi");
+    figureOn = false;
+    bundled = false;
+    figureImg.classList.remove("on");
+    document.body.classList.remove("wallpaper");
+  };
+}
+
 async function loadFigure() {
-  const saved = await desk.getFigure();
+  let saved = null;
+  try {
+    saved = await desk.getFigure();
+  } catch { /* ko'prik javob bermadi — o'rnatilgan rasm bilan davom etamiz */ }
+
   if (saved) {
     // Foydalanuvchi o'z rasmini qo'ygan — o'sha ustun
     figureImg.src = "file://" + saved + "?v=" + Math.random();
@@ -540,18 +565,16 @@ async function loadFigure() {
       figureImg.classList.add("on");
       if (!figureCal) startCalibration();
     };
+    // Saqlangan fayl o'chirilgan/buzilgan bo'lishi mumkin — wallpaperga qaytamiz.
+    figureImg.onerror = () => {
+      console.warn("Saqlangan rasm yuklanmadi, o'rnatilgan wallpaperga o'tildi:", saved);
+      loadBundled();
+    };
     return;
   }
   // Standart: o'rnatilgan SHIELD OS wallpaperi — kalibrlash shart emas,
   // nuqtalar oldindan o'lchangan, statik elementlar bosiladigan qilingan.
-  figureImg.src = "assets/markaz.jpg";
-  figureImg.onload = () => {
-    figureOn = true;
-    bundled = true;
-    figureCal = DESK.BUNDLED.cal;
-    figureImg.classList.add("on");
-    document.body.classList.add("wallpaper");
-  };
+  loadBundled();
 }
 
 // Rasmdagi statik elementlar ustidagi bosiladigan maydonlar
