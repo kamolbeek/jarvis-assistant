@@ -39,3 +39,31 @@ def test_suspicious_score_is_amber():
 def test_unheard_score_is_dim():
     assert colour(0.017, THRESHOLD, CANDIDATE) == DIM
     assert colour(0.0, THRESHOLD, CANDIDATE) == DIM
+
+
+# --- Buzilishni aniqlash -------------------------------------------------------
+#
+# Amalda ko'rilgan holat: uch o'lchovda ham cho'qqi 1.00 edi, lekin kesilgan
+# kadrlar ulushi chegaradan past bo'lgani uchun asbob faqat bittasida
+# ogohlantirdi. Cho'qqining o'zi devorga tegib turgani yetarli dalil.
+
+
+def test_rail_peak_counts_as_distortion_on_its_own():
+    from jarvis.waketune import Measurement
+
+    assert Measurement(peak=0.1, loudest=1.00, clipped=0.0).distorted is True
+    assert Measurement(peak=0.1, loudest=0.98, clipped=0.0).distorted is True
+
+
+def test_clean_loud_signal_is_not_distortion():
+    """Baland, lekin devorga tegmagan signal — bu normal."""
+    from jarvis.waketune import Measurement
+
+    assert Measurement(peak=0.9, loudest=0.75, clipped=0.0).distorted is False
+
+
+def test_a_few_clipped_frames_are_enough():
+    from jarvis.waketune import Measurement
+
+    assert Measurement(peak=0.3, loudest=0.6, clipped=0.004).distorted is True
+    assert Measurement(peak=0.3, loudest=0.6, clipped=0.001).distorted is False

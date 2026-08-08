@@ -56,10 +56,15 @@ class Measurement:
     confident: int = 0         # chegaradan o'tgan chaqiruvlar
     candidates: int = 0        # faqat shubhali chegaradan o'tganlar
 
+    # Shkalaning devoriga tegish. Bitta namuna 1.00 ga yetgani ham yetarli
+    # dalil: to'lqinning uchi kesilgan, ya'ni ma'lumot yo'qolgan. Kadrlar
+    # ulushini kutib o'tirish kerak emas — o'lchov shundoq ham ishonchsiz.
+    RAIL = 0.98
+
     @property
     def distorted(self) -> bool:
         """Signal buzilganmi? Shunda ball haqida gapirish ma'nosiz."""
-        return self.clipped > 0.005
+        return self.clipped > 0.002 or self.loudest >= self.RAIL
 
 
 async def measure(phrase: str, cfg, detector, threshold: float,
@@ -109,7 +114,8 @@ async def measure(phrase: str, cfg, detector, threshold: float,
                     out.candidates += 1
 
             tint = colour(detector.peak, threshold, candidate)
-            warn = f" {RED}KESILYAPTI{RESET}" if clipped_frames else ""
+            hot = clipped_frames or out.loudest >= Measurement.RAIL
+            warn = f" {RED}KESILYAPTI{RESET}" if hot else ""
             print(f"\r  ball {tint}{detector.peak:.3f}{RESET} "
                   f"[{tint}{bar(detector.peak)}{RESET}] "
                   f"cho'qqi {out.loudest:.2f}{warn}   ", end="", flush=True)
@@ -290,17 +296,27 @@ async def run() -> int:
     # avval mikrofonni tuzatish kerak, keyin qaytadan o'lchash.
     distorted = [p for p, m in results.items() if m.distorted]
     if distorted:
-        worst = max(m.clipped for m in results.values())
-        print(f"{RED}{BOLD}Ovoz kesilib buzilgan "
-              f"(kadrlarning {worst * 100:.0f}%){RESET}")
-        print(f"{DIM}Kesilganda to'lqinning uchi yo'qoladi va model o'zi\n"
-              f"o'rgangan shaklni tanimaydi — shuning uchun bir xil ibora\n"
-              f"har safar boshqa ball oladi. Yuqoridagi raqamlar ishonchsiz.\n"
+        loudest = max(m.loudest for m in results.values())
+        print(f"{RED}{BOLD}Sizning ovozingiz kesilib kelyapti "
+              f"(cho'qqi {loudest:.2f}){RESET}")
+        # Xona sinovi bilan solishtirish eng kuchli dalil: bir xil mikrofon,
+        # bir xil model — farq faqat ovoz qanchalik baland yetib kelganida.
+        if room >= candidate and room_loud:
+            print(f"{DIM}Solishtiring: TTS ovozi mikrofonga cho'qqi {room_loud:.2f}\n"
+                  f"bo'lib yetdi va {room:.3f} ball oldi. Sizning ovozingiz\n"
+                  f"{loudest:.2f} — shkalaning devorida. Ya'ni model ham,\n"
+                  f"mikrofon yo'li ham joyida; ovoz juda baland kelyapti.{RESET}")
+        print(f"{DIM}\n"
+              f"Kesilganda to'lqinning uchi yo'qoladi va model o'zi o'rgangan\n"
+              f"shaklni tanimaydi — shuning uchun bir xil ibora har safar\n"
+              f"boshqa ball oladi. Yuqoridagi ballar ishonchsiz.\n"
               f"\n"
-              f"Tuzatish: Tizim sozlamalari > Ovoz > Kirish — «Kirish\n"
-              f"balandligi» surgichini o'rtaga tushiring. Keyin shu buyruqni\n"
-              f"qaytadan ishga tushiring: cho'qqi 0.5–0.8 orasida bo'lsa yaxshi,\n"
-              f"1.00 bo'lsa — hali baland.{RESET}")
+              f"Ikki yo'l bor, birini tanlang:\n"
+              f"  • mikrofondan uzoqroq turib, odatdagi ohangda gapiring\n"
+              f"  • Tizim sozlamalari > Ovoz > Kirish: «Kirish balandligi»ni\n"
+              f"    yana pasaytiring\n"
+              f"\n"
+              f"Maqsad — SIZNING ovozingiz cho'qqisi 0.5–0.7 bo'lishi.{RESET}")
         return 1
 
     quiet = [p for p, m in results.items() if m.loudest < 0.08]
