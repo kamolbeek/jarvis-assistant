@@ -18,6 +18,7 @@ Misollar:
   jarvis            Jarvis'ni ishga tushirish
   jarvis doctor     Har bir qismni alohida tekshirish (birinchi ishga tushirishdan oldin)
   jarvis wake-test  Chaqiruv ballini o'lchash va chegarani sozlash
+  jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
   jarvis -v         Batafsil jurnal bilan
 """
 
@@ -44,12 +45,18 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test"],
+        choices=["run", "doctor", "wake-test", "wake-set"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
-             "wake-test — chaqiruv ballini o'lchash",
+             "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish",
     )
+    parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
+
+    if args.command == "wake-set":
+        from .waketune import apply_thresholds
+
+        return apply_thresholds(args.values)
 
     if args.command == "doctor":
         # Diagnostika o'z natijasini o'zi chiroyli chiqaradi — jurnal xalaqit bermasin.

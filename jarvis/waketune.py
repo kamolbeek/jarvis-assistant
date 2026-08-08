@@ -207,6 +207,55 @@ def recommend(noise: float, peaks: dict[str, float]) -> dict:
             "working": sorted(working), "hopeless": hopeless}
 
 
+def apply_thresholds(values: list[str]) -> int:
+    """`jarvis wake-set <chegara> [<shubhali>]` — sozlamaga yozadi.
+
+    Qo'lda tahrirlash o'rniga shu buyruq: YAML bo'sh joyga sezgir va bitta
+    ortiqcha probel butun faylni yaroqsiz qiladi.
+    """
+    from pathlib import Path
+
+    from .config import CONFIG_PATH
+    from .configpatch import patch_file
+
+    if not values or len(values) > 2:
+        print(f"{RED}Ishlatilishi: python -m jarvis wake-set 0.33 0.25{RESET}",
+              file=sys.stderr)
+        return 2
+
+    try:
+        threshold = float(values[0])
+        candidate = float(values[1]) if len(values) > 1 else round(threshold * 0.75, 2)
+    except ValueError:
+        print(f"{RED}Chegara son bo'lishi kerak, masalan 0.33{RESET}", file=sys.stderr)
+        return 2
+
+    if not 0 < threshold <= 1 or not 0 < candidate <= threshold:
+        print(f"{RED}Chegara 0 va 1 orasida, shubhali chegara esa undan "
+              f"past bo'lishi kerak{RESET}", file=sys.stderr)
+        return 2
+
+    path = Path(CONFIG_PATH)
+    if not path.exists():
+        print(f"{RED}{path} topilmadi. Avval:\n"
+              f"  cp config/jarvis.example.yaml config/jarvis.yaml{RESET}",
+              file=sys.stderr)
+        return 1
+
+    try:
+        patch_file(path, "wake_word",
+                   {"threshold": threshold, "candidate_threshold": candidate})
+    except Exception as exc:  # noqa: BLE001 — sabab foydalanuvchiga kerak
+        print(f"{RED}{type(exc).__name__}: {exc}{RESET}", file=sys.stderr)
+        return 1
+
+    print(f"{GREEN}Yozildi: {path}{RESET}")
+    print(f"{DIM}  threshold: {threshold}\n"
+          f"  candidate_threshold: {candidate}\n"
+          f"Eski nusxa: {path}.bak{RESET}")
+    return 0
+
+
 async def synth(cfg, text: str) -> tuple:
     """TTS bilan iborani sintez qiladi. Qaytadi: (audio, sample_rate)."""
     import numpy as np
@@ -456,13 +505,11 @@ async def run() -> int:
 
     print(f"\n{GREEN}{BOLD}Ishlaydigan chaqiruvlar: "
           f"{', '.join(advice['working'])}{RESET}")
-    print(f"{DIM}config/jarvis.yaml ga shuni qo'ying:{RESET}")
-    print(f"""
-{CYAN}activation:
-  wake_word:
-    threshold: {advice['threshold']}
-    candidate_threshold: {advice['candidate']}{RESET}
-""")
+    # Faylni qo'lda tahrirlashni taklif qilmaymiz: YAML bo'sh joyga sezgir
+    # va bitta ortiqcha probel Jarvisni butunlay ishga tushmaydigan qiladi.
+    print(f"{DIM}Sozlamaga yozish uchun shu buyruqni bajaring:{RESET}")
+    print(f"\n  {CYAN}python -m jarvis wake-set "
+          f"{advice['threshold']} {advice['candidate']}{RESET}\n")
 
     if advice["hopeless"]:
         print(f"{AMBER}Bu iboralar shovqindan ham past chiqdi: "

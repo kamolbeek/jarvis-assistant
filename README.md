@@ -508,10 +508,16 @@ ui/
 Buyruqlar:
 
 ```bash
-python -m jarvis              # ishga tushirish
-python -m jarvis doctor       # har bir qismni alohida tekshirish
-python -m jarvis wake-test    # chaqiruv ballini o'lchash
+python -m jarvis                     # ishga tushirish
+python -m jarvis doctor              # har bir qismni alohida tekshirish
+python -m jarvis wake-test           # chaqiruv ballini o'lchash
+python -m jarvis wake-set 0.33 0.25  # chegarani sozlamaga yozish
 ```
+
+`wake-set` sozlama faylini o'zi tahrirlaydi va izohlarni saqlaydi. Qo'lda
+tahrirlashdan ko'ra shu ishonchli: YAML bo'sh joyga sezgir va bitta ortiqcha
+probel Jarvisni butunlay ishga tushmaydigan qiladi. Eski nusxa `.bak` bo'lib
+qoladi.
 
 Testlar API kaliti va mikrofon talab qilmaydi:
 
