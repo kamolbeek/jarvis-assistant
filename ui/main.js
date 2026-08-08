@@ -83,8 +83,18 @@ function createWindow() {
 
 // ---------------------------------------------------------------- Ish stoli HUD
 //
-// Butun ekranni egallaydigan, oynalar ORQASIDA (ish stoli darajasida)
-// turadigan Rainmeter uslubidagi sahna. JARVIS_DESKTOP=0 bilan o'chiriladi.
+// Butun ekranni egallaydigan Rainmeter uslubidagi sahna. Ikki rejim bor:
+//
+//   JARVIS_DESKTOP=1 (standart) — asosiy oyna. Yashirin turadi va chaqirilganda
+//       (qarsak, «hey jarvis», ⌘⇧J) oynalar USTIDA ochiladi. Esc yashiradi.
+//   JARVIS_DESKTOP=ambient      — jonli fon. Doim ko'rinadi, oynalar ORQASIDA.
+//   JARVIS_DESKTOP=0            — butunlay o'chirilgan.
+//
+// Ochilganda sahna darhol "to'liq ishlamaydi": uyqu holatida turadi va
+// foydalanuvchi gapirganda yonadi. Bu mantiq renderer tomonda.
+
+const DESK_MODE = process.env.JARVIS_DESKTOP || "1";
+const DESK_AMBIENT = DESK_MODE === "ambient";
 
 let deskWin = null;
 
@@ -93,28 +103,59 @@ function createDesktopWindow() {
 
   deskWin = new BrowserWindow({
     x, y, width, height,
-    // "desktop" turi oynani ish stoli fonining darajasiga qo'yadi —
-    // oddiy oynalar uning ustida ochiladi, xuddi jonli fon kabi.
-    type: "desktop",
+    // "desktop" turi oynani ish stoli fonining darajasiga qo'yadi — oddiy
+    // oynalar uning ustida ochiladi. Asosiy oyna rejimida bu kerak emas:
+    // u chaqirilganda hammasining ustiga chiqishi kerak.
+    ...(DESK_AMBIENT ? { type: "desktop" } : {}),
+    show: false,
     frame: false,
     resizable: false,
     movable: false,
     skipTaskbar: true,
-    focusable: false,
+    // Asosiy oyna rejimida Esc ishlashi uchun fokus kerak.
+    focusable: !DESK_AMBIENT,
     hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, "preload-desktop.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Yashirin oynada ham WebSocket tinglashi kerak: chaqirilganini bilib,
+      // o'zini ko'rsatishni so'raydi.
+      backgroundThrottling: false,
     },
   });
 
   deskWin.loadFile(path.join(__dirname, "renderer", "desktop.html"));
   deskWin.on("closed", () => { deskWin = null; });
 
+  if (DESK_AMBIENT) {
+    deskWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    deskWin.showInactive();
+  } else {
+    deskWin.setAlwaysOnTop(true, "screen-saver");
+    deskWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+
   startStats();
   startWeather();
 }
+
+function showDesktop() {
+  if (!deskWin || DESK_AMBIENT) return;
+  if (!deskWin.isVisible()) {
+    deskWin.show();
+    deskWin.focus();
+    // Renderer yoqilish animatsiyasini noldan boshlaydi.
+    deskWin.webContents.send("desk-visible");
+  }
+}
+
+function hideDesktop() {
+  if (deskWin && !DESK_AMBIENT && deskWin.isVisible()) deskWin.hide();
+}
+
+ipcMain.on("desk-show", showDesktop);
+ipcMain.on("desk-hide", hideDesktop);
 
 // --- Tizim ko'rsatkichlari: CPU (o'lchovlar farqidan), RAM, disk, ish vaqti ---
 
@@ -292,14 +333,16 @@ app.whenReady().then(() => {
   createWindow();
 
   // Ish stoli HUD — standart yoqilgan; JARVIS_DESKTOP=0 bilan o'chiriladi.
-  if (process.env.JARVIS_DESKTOP !== "0") {
+  if (DESK_MODE !== "0") {
     createDesktopWindow();
   }
 
-  // Global tugma: uyg'otuvchi so'zsiz chaqirish.
+  // Global tugma: uyg'otuvchi so'zsiz chaqirish. Asosiy oynani ham ochadi —
+  // qarsak bilan bir xil natija bo'lishi kerak.
   const combo = process.env.JARVIS_HOTKEY || "CommandOrControl+Shift+J";
   const registered = globalShortcut.register(combo, () => {
     win?.webContents.send("hotkey");
+    showDesktop();
   });
   if (!registered) {
     console.warn(`Global tugmani (${combo}) ro'yxatdan o'tkazib bo'lmadi`);

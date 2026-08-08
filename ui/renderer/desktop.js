@@ -362,21 +362,27 @@ const DESK = (() => {
   }
 
   /**
-   * Bir kadr. f = { width, height, t, state, level, flash, stats:{cpu,ram,disk} }
+   * Bir kadr. f = { width, height, t, state, level, flash, boot, stats:{cpu,ram,disk} }
+   *
+   * `boot` — sahna qanchalik "yoniq" (0..1). Oyna ochilganda past bo'ladi:
+   * hammasi ko'rinadi, lekin ko'zlar o'chgan va yorug'lik pasaygan — Jarvis
+   * hali uyquda. Foydalanuvchi gapirganda 1 ga ko'tariladi.
    */
   function draw(ctx, f) {
     const { width: W, height: H, t } = f;
     const L = layout(W, H);
     ctx.clearRect(0, 0, W, H);
 
+    const boot = f.boot === undefined ? 1 : Math.max(0, Math.min(1, f.boot));
     const mood = P.STATE_MOOD[f.state] || P.STATE_MOOD.idle;
     const active = f.state === "listening" || f.state === "speaking";
-    const energy = Math.min(1, mood.glow + f.flash * 0.5);
+    const energy = Math.min(1, mood.glow + f.flash * 0.5) * (0.28 + 0.72 * boot);
 
-    // Ko'zlar: kutishda xira, uyg'onganda chaqnaydi, o'ylashda sekin pulsatsiya
+    // Ko'zlar: kutishda xira, uyg'onganda chaqnaydi, o'ylashda sekin pulsatsiya.
+    // Uyqu holatida butunlay o'chadi — bu eng ko'zga tashlanadigan belgi.
     let eyes = 0.25 + mood.glow * 0.5 + f.flash * 0.6;
     if (f.state === "thinking") eyes = 0.45 + Math.abs(Math.sin(t * 2.2)) * 0.3;
-    eyes = Math.min(1, eyes);
+    eyes = Math.min(1, eyes) * boot * boot;
 
     // Rasm rejimida to'r chizilmaydi — foydalanuvchi rasmi o'zi to'liq fon
     if (!f.figure) drawGrid(ctx, W, H);
@@ -420,16 +426,72 @@ const DESK = (() => {
                  0.55 + mood.mark * 0.45, f.emblemHover);
     }
 
-    return { eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6) };
+    const surge = Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6) * boot;
+    drawVeil(ctx, W, H, boot, t);
+    return { eyes, surge };
+  }
+
+  // Uyqu pardasi. Canvas fon rasmining ustida turadi, shuning uchun bitta
+  // to'rtburchak butun sahnani birdan xiralashtiradi — CSS filtri bilan har
+  // kadrda qayta bo'yashdan ancha arzon.
+  function drawVeil(ctx, W, H, boot, t) {
+    if (boot > 0.995) return;
+    const dark = (1 - boot) * 0.7;
+    ctx.save();
+    ctx.fillStyle = `rgba(2, 7, 11, ${dark.toFixed(3)})`;
+    ctx.fillRect(0, 0, W, H);
+
+    // Yoqilish chizig'i: boot ko'tarilayotganda ekran bo'ylab pastga yuguradi.
+    // Faqat o'tish davrida ko'rinadi — uyquda ham, to'liq yoniqda ham yo'q.
+    const wake = 1 - Math.abs(boot * 2 - 1);
+    if (wake > 0.05) {
+      const y = H * (0.5 - Math.cos(t * 1.6) * 0.5);
+      const g = ctx.createLinearGradient(0, y - 60, 0, y + 60);
+      g.addColorStop(0, P.toCss(P.RGB.cyan, 0));
+      g.addColorStop(0.5, P.toCss(P.RGB.cyan, 0.10 * wake));
+      g.addColorStop(1, P.toCss(P.RGB.cyan, 0));
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y - 60, W, 120);
+    }
+    ctx.restore();
   }
 
   // ------------------------------------------------------------- rasm effektlari
 
   // Foydalanuvchi rasmi ustidagi jonli qatlam: ko'zlar nuri va reaktor.
   // Nuqtalar kalibrlashda belgilanadi (rasmga nisbatan 0..1 koordinatalar).
-  function drawFigureFx(ctx, rect, cal, t, eyes, surge) {
+  function drawFigureFx(ctx, rect, cal, t, eyes, surge, boot) {
     if (!cal) return;
     const px = (p) => [rect.x + p[0] * rect.w, rect.y + p[1] * rect.h];
+
+    // Uyquda ko'zlar va reaktor O'CHGAN bo'lishi kerak. Muammo shundaki,
+    // ular fon rasmining o'zida yoniq holda chizilgan — ustiga qorayituvchi
+    // niqob qo'yamiz, keyin nurni qaytadan chizamiz. Natijada yonish
+    // haqiqatan yonishga o'xshaydi, shunchaki yorqinlik oshishiga emas.
+    const lit = boot === undefined ? 1 : Math.max(0, Math.min(1, boot));
+    if (lit < 0.99) {
+      // Ko'zlar butunlay o'chadi; reaktor esa faqat pasayadi — uni ham
+      // to'liq bo'yasak, chizmadagi halqalar yo'qolib, dog' bo'lib qoladi.
+      ctx.save();
+      for (const [key, scale, strength] of
+           [["eyeL", 1.6, 0.92], ["eyeR", 1.6, 0.92], ["core", 2.4, 0.6]]) {
+        if (!cal[key]) continue;
+        const mask = (1 - lit) * strength;
+        const [x, y] = px(cal[key]);
+        const r = rect.w * 0.030 * scale;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(3, 8, 12, ${mask.toFixed(3)})`);
+        g.addColorStop(0.6, `rgba(3, 8, 12, ${(mask * 0.75).toFixed(3)})`);
+        g.addColorStop(1, "rgba(3, 8, 12, 0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     ctx.save();
     // Qo'shiluvchi aralashtirish — qora rasm ustida faqat nur ko'rinadi
     ctx.globalCompositeOperation = "lighter";

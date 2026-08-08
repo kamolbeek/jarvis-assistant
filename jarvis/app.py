@@ -23,8 +23,9 @@ import numpy as np
 from .audio.bargein import build_barge_in
 from .audio.clap import ClapDetector
 from .audio.mic import MicStream, frame_level
+from .audio.phrases import build_matcher
 from .audio.vad import Endpointer, build_speech_detector
-from .audio.wake import build_wake_detector
+from .audio.wake import WakeHit, build_wake_detector
 from .brain.agenda import Agenda
 from .brain.agent import Brain
 from .brain.memory import Memory
@@ -113,9 +114,17 @@ class Jarvis:
             device=config.get("audio.input_device"),
             preroll_ms=int(config.get("audio.endpointing.preroll_ms", 300)),
             gain=float(config.get("audio.input_gain", 1.0)),
+            recent_ms=int(config.get("activation.wake_word.verify_window_ms", 2000)) + 500,
         )
 
-        self._wake = build_wake_detector(config.section("activation.wake_word"))
+        wake_cfg = config.section("activation.wake_word")
+        self._wake = build_wake_detector(wake_cfg)
+        # Ikkinchi bosqich: tayyor model bilmagan iboralarni matn bilan tanish.
+        self._phrases = build_matcher(wake_cfg)
+        self._verify_cooldown = float(wake_cfg.get("verify_cooldown_sec", 3.0))
+        self._verify_window_ms = int(wake_cfg.get("verify_window_ms", 2000))
+        self._last_verify = -1e9
+
         clap_cfg = config.section("activation.clap")
         self._clap = (
             ClapDetector(
@@ -327,9 +336,10 @@ class Jarvis:
             if self._activate.is_set():
                 self._activate.clear()
                 source = "bosish"
-            elif self._wake is not None and self._wake.push(frame):
-                source = "so'z"
-                await self.health.ping(System.WAKE)
+            elif self._wake is not None and (hit := self._wake.push(frame)) is not None:
+                if await self._wake_confirmed(hit):
+                    source = "so'z"
+                    await self.health.ping(System.WAKE)
             elif self._clap is not None and self._clap.push(frame):
                 source = "qarsak"
 
@@ -342,6 +352,41 @@ class Jarvis:
                     self._wake.reset()
                 if self._clap is not None:
                     self._clap.reset()
+
+    async def _wake_confirmed(self, hit: WakeHit) -> bool:
+        """Chaqiruv haqiqiy ekanini aniqlaydi.
+
+        Ishonchli ball — darhol `True`. Shubhali ball esa matn bilan
+        tekshiriladi: oxirgi ikki soniyani STT'ga beramiz va «jarvis» ismi
+        eshitildimi, shuni qaraymiz. Shu yo'l bilan tayyor model bilmagan
+        «salom jarvis» va «hi jarvis» ham ishlaydi, chegarani pasaytirib
+        televizor ovozidan uyg'onib ketmasdan.
+        """
+        if hit.confident:
+            log.info("Chaqiruv: ishonchli (ball %.2f)", hit.score)
+            return True
+        if self._phrases is None:
+            return False
+
+        now = asyncio.get_running_loop().time()
+        if now - self._last_verify < self._verify_cooldown:
+            log.debug("Shubhali chaqiruv (%.2f) — tekshirish sovish davrida", hit.score)
+            return False
+        self._last_verify = now
+
+        audio = self.mic.recent(ms=self._verify_window_ms)
+        if audio.size == 0:
+            return False
+
+        async with self.health.busy(System.STT):
+            text = await transcribe_guarded(self.stt, audio, self.config.sample_rate)
+
+        if self._phrases.matches(text):
+            log.info("Chaqiruv tasdiqlandi: «%s» (ball %.2f)", text, hit.score)
+            return True
+
+        log.info("Shubhali chaqiruv rad etildi: «%s» (ball %.2f)", text, hit.score)
+        return False
 
     async def _deliver_proactive(self) -> None:
         """Navbatdagi eslatmalarni aytadi."""

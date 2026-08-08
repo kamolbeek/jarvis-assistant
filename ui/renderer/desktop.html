@@ -30,6 +30,11 @@
   #figure { position: absolute; inset: 0; width: 100%; height: 100%; display: none; object-fit: contain; pointer-events: none; }
   #figure.on { display: block; }
   #fx-canvas { pointer-events: none; }
+  /* Uyqu holati: canvas pardasi fon rasmini xiralashtiradi, DOM panellari esa
+     o'z ustida turadi — ularni alohida so'ndiramiz. Sinf kadr sikli tomonidan
+     faqat chegara kesib o'tilganda almashtiriladi, har kadrda emas. */
+  body.dormant .blk, body.dormant #live-pill { opacity: 0.4; }
+  .blk, #live-pill { transition: opacity 500ms ease; }
   body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
   body.wallpaper #rail-left, body.wallpaper #sys-block, body.wallpaper #dates,
   body.wallpaper #links, body.wallpaper #weather, body.wallpaper #disk,
@@ -220,6 +225,17 @@
 // Ish stoli boshqaruvchisi: yadro (WebSocket) + Electron (IPC) ma'lumotlarini
 // DESK sahnasiga uzatadi.
 
+// Electron ko'prigi. Oddiy brauzerda ochilsa (chizmani tekshirish uchun)
+// ko'prik bo'lmaydi — o'sha holatda sahna baribir chizilishi kerak, shuning
+// uchun bo'sh o'rindoshlar qo'yamiz.
+const desk = window.desk || {
+  onStats: () => {}, onWeather: () => {}, onVisible: () => {},
+  openApp: () => {}, openFolder: () => {}, openUrl: () => {},
+  show: () => {}, hide: () => {},
+  getFigure: async () => null, saveFigure: async () => null, clearFigure: async () => null,
+  coreUrl: "ws://127.0.0.1:8765",
+};
+
 const canvas = document.getElementById("hud-canvas");
 const ctx = canvas.getContext("2d");
 const dialPanel = document.getElementById("dial-panel");
@@ -234,6 +250,24 @@ let level = 0, smoothLevel = 0, flash = 0;
 let emblemHover = false;
 let systems = [];
 let captionTimer = null;
+
+// --- Uyqu va yoqilish ---
+//
+// Oyna ochilganda sahna ko'rinadi, lekin Jarvis hali uyquda: ko'zlar o'chgan,
+// yorug'lik pasaygan. Uyg'otuvchi so'zning o'zi yetarli emas — foydalanuvchi
+// GAPIRGANDA yonadi. Shu sababli `listening` holati "band" hisoblanmaydi:
+// unda Jarvis hali kutib turadi, xonada esa jimlik bo'lishi mumkin.
+const DORMANT = 0.2;          // uyqudagi yorug'lik
+const SPEAK_LEVEL = 0.08;     // shu darajadan baland ovoz — gapirish
+const AWAKE_SEC = 8;          // gapirgandan keyin shuncha vaqt yoniq turadi
+const BUSY = new Set(["thinking", "speaking", "confirm"]);
+
+let boot = 0;
+let awakeUntil = 0;
+
+function engage(t) {
+  awakeUntil = t + AWAKE_SEC;
+}
 
 const stats = { cpu: 0, ram: 0, disk: 0 };
 
@@ -253,7 +287,22 @@ function frame(now) {
   smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
   flash *= 0.93; if (flash < 0.01) flash = 0;
 
-  DESK.draw(ctx, { width: W, height: H, t, state, level: smoothLevel, flash, stats, emblemHover });
+  // Yonish tez (~0.5 s), so'nish sekin — chaqnab o'chib turmasligi uchun.
+  const target = BUSY.has(state) || t < awakeUntil ? 1 : DORMANT;
+  boot += (target - boot) * (target > boot ? 0.08 : 0.015);
+  document.body.classList.toggle("dormant", boot < 0.6);
+
+  const rect = figureOn ? figureRect() : null;
+  const out = DESK.draw(ctx, {
+    width: W, height: H, t, state, level: smoothLevel, flash, stats, boot,
+    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
+  });
+
+  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
+  if (figureOn && figureCal && rect) {
+    DESK.drawFigureFx(fxCtx, rect, figureCal, t, out.eyes, out.surge, boot);
+    if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, out.eyes);
+  }
 
   if (dialPanel.classList.contains("on")) {
     const size = dialCanvas.clientWidth || 314;
@@ -275,21 +324,29 @@ function caption(who, text) {
 let socket = null;
 
 function connect() {
-  socket = new WebSocket(window.desk.coreUrl);
+  socket = new WebSocket(desk.coreUrl);
 
   socket.addEventListener("open", () => offline.classList.remove("on"));
 
   socket.addEventListener("message", (event) => {
     let data;
     try { data = JSON.parse(event.data); } catch { return; }
+    const t = performance.now() / 1000;
     switch (data.type) {
       case "state":
         if (data.state === "wake" && state !== "wake") flash = 1;
         state = data.state;
+        // Chaqirilgani — oynani ochish uchun yetarli sabab (qarsak, «hey
+        // jarvis», tugma — hammasi shu yo'ldan o'tadi). Lekin sahna hali
+        // uyquda qoladi: gapirilmaguncha yonmaydi.
+        if (state !== "idle") desk.show();
         break;
-      case "level": level = data.value; break;
+      case "level":
+        level = data.value;
+        if (state === "listening" && level > SPEAK_LEVEL) engage(t);
+        break;
       case "health": systems = data.systems || []; break;
-      case "transcript": caption("Siz", data.text); break;
+      case "transcript": caption("Siz", data.text); engage(t); break;
       case "say": caption("Jarvis", data.text); break;
     }
   });
@@ -337,7 +394,7 @@ setInterval(tickClock, 5000); tickClock();
   }
 })();
 
-window.desk.onStats((s) => {
+desk.onStats((s) => {
   stats.cpu = s.cpu; stats.ram = s.ram; stats.disk = s.disk;
   const h = Math.floor(s.uptimeSec / 3600), m = Math.floor((s.uptimeSec % 3600) / 60);
   document.getElementById("uptime").textContent = `${h}s ${m}d`;
@@ -365,7 +422,7 @@ function weatherText(code) {
   return text;
 }
 
-window.desk.onWeather((w) => {
+desk.onWeather((w) => {
   if (!w) return;
   document.getElementById("w-today").textContent = `${w.today.max}° / ${w.today.min}°`;
   document.getElementById("w-today-d").textContent = weatherText(w.today.code);
@@ -376,11 +433,11 @@ window.desk.onWeather((w) => {
 // --- Ochish buyruqlari ---
 
 document.querySelectorAll(".chip[data-app]").forEach((c) =>
-  c.addEventListener("click", () => window.desk.openApp(c.dataset.app)));
+  c.addEventListener("click", () => desk.openApp(c.dataset.app)));
 document.querySelectorAll(".chip[data-folder]").forEach((c) =>
-  c.addEventListener("click", () => window.desk.openFolder(c.dataset.folder)));
+  c.addEventListener("click", () => desk.openFolder(c.dataset.folder)));
 document.querySelectorAll(".link").forEach((l) =>
-  l.addEventListener("click", () => window.desk.openUrl(l.dataset.url)));
+  l.addEventListener("click", () => desk.openUrl(l.dataset.url)));
 
 // --- Markaziy rasm: tashlash, kalibrlash, jonli effektlar ---
 //
@@ -441,7 +498,7 @@ figureImg.addEventListener("click", (e) => {
 let bundled = false; // o'rnatilgan wallpaper rejimi
 
 async function loadFigure() {
-  const saved = await window.desk.getFigure();
+  const saved = await desk.getFigure();
   if (saved) {
     // Foydalanuvchi o'z rasmini qo'ygan — o'sha ustun
     figureImg.src = "file://" + saved + "?v=" + Math.random();
@@ -497,9 +554,9 @@ document.addEventListener("click", (e) => {
   if (!h) return;
   if (h.emblem) { dialPanel.classList.toggle("on"); return; }
   if (h.activate) { send({ type: "activate" }); return; }
-  if (h.url) { window.desk.openUrl(h.url); return; }
-  if (h.app) { window.desk.openApp(h.app); return; }
-  if (h.folder) { window.desk.openFolder(h.folder); return; }
+  if (h.url) { desk.openUrl(h.url); return; }
+  if (h.app) { desk.openApp(h.app); return; }
+  if (h.folder) { desk.openFolder(h.folder); return; }
 });
 
 function send(message) {
@@ -522,7 +579,7 @@ window.addEventListener("drop", async (e) => {
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
   if (!file || !file.type.startsWith("image/")) return;
   const buffer = await file.arrayBuffer();
-  const saved = await window.desk.saveFigure(new Uint8Array(buffer));
+  const saved = await desk.saveFigure(new Uint8Array(buffer));
   if (!saved) return;
   localStorage.removeItem("figure-cal");
   figureCal = null;
@@ -536,31 +593,19 @@ window.addEventListener("drop", async (e) => {
   };
 });
 
-// Kadr siklini rasm rejimiga moslaymiz
-const baseFrame = frame;
-frame = function patchedFrame(now) {
-  const t = now / 1000;
-  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
-  flash *= 0.93; if (flash < 0.01) flash = 0;
+// --- Oynani yopish va qaytadan ochish ---
 
-  const rect = figureOn ? figureRect() : null;
-  const out = DESK.draw(ctx, {
-    width: W, height: H, t, state, level: smoothLevel, flash, stats,
-    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
-  });
+// Esc — oynani yashiradi. Qarsak, «hey jarvis» yoki ⌘⇧J bilan qaytadi.
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") desk.hide();
+});
 
-  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
-  if (figureOn && figureCal && rect) {
-    DESK.drawFigureFx(fxCtx, rect, figureCal, t, out.eyes, out.surge);
-    if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, out.eyes);
-  }
-
-  if (dialPanel.classList.contains("on")) {
-    const size = dialCanvas.clientWidth || 314;
-    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
-  }
-  requestAnimationFrame(frame);
-};
+// Oyna har ochilganda noldan yonadi: bu "yoqilish" harakatini ko'rsatadi
+// va uyqu holatini aniq qiladi.
+desk.onVisible(() => {
+  boot = 0;
+  awakeUntil = 0;
+});
 
 window.addEventListener("resize", () => { resize(); placeFigure(); });
 resize();

@@ -31,6 +31,7 @@ class MicStream:
         preroll_ms: int = 300,
         queue_max: int = 100,
         gain: float = 1.0,
+        recent_ms: int = 2500,
     ) -> None:
         self.sample_rate = sample_rate
         self.frame_samples = frame_samples
@@ -42,8 +43,13 @@ class MicStream:
         self._dropped = 0
 
         frame_ms = frame_samples * 1000 // sample_rate
-        preroll_frames = max(1, preroll_ms // max(1, frame_ms))
+        self._frame_ms = max(1, frame_ms)
+        preroll_frames = max(1, preroll_ms // self._frame_ms)
         self._preroll: deque[np.ndarray] = deque(maxlen=preroll_frames)
+        # Chaqiruvni matn bilan tekshirish uchun uzunroq oyna. Preroll'dan
+        # alohida, chunki u tozalanadi va juda qisqa — «salom jarvis» unga
+        # sig'maydi.
+        self._recent: deque[np.ndarray] = deque(maxlen=max(1, recent_ms // self._frame_ms))
 
     # --- Hayot sikli ---
 
@@ -78,6 +84,7 @@ class MicStream:
 
     def _push(self, frame: np.ndarray) -> None:
         self._preroll.append(frame)
+        self._recent.append(frame)
         try:
             self._queue.put_nowait(frame)
         except asyncio.QueueFull:
@@ -119,6 +126,20 @@ class MicStream:
         chunk = np.concatenate(list(self._preroll))
         self._preroll.clear()
         return chunk
+
+    def recent(self, ms: int | None = None) -> np.ndarray:
+        """Oxirgi soniyalarni qaytaradi. Buferni **tozalamaydi**.
+
+        Chaqiruvni tekshirish uchun: aytilgan iborani qaytadan o'qish kerak,
+        lekin u keyingi ishlarga ham kerak bo'lib qolishi mumkin.
+        """
+        if not self._recent:
+            return np.zeros(0, dtype=np.int16)
+        frames = list(self._recent)
+        if ms is not None:
+            want = max(1, ms // self._frame_ms)
+            frames = frames[-want:]
+        return np.concatenate(frames)
 
     def drain(self) -> None:
         """Navbatdagi eski kadrlarni tashlaydi — Jarvis gapirib bo'lgach kerak bo'ladi."""

@@ -9,13 +9,27 @@ identity:
   language: "uz"
 
 activation:
-  # Uyg'otuvchi so'z ("hey jarvis"). openWakeWord'da tayyor model bor.
+  # Uyg'otuvchi so'z. Tayyor model faqat «hey jarvis»ni biladi.
   wake_word:
     enabled: true
     backend: "openwakeword"        # openwakeword | porcupine
     model: "hey_jarvis"
-    threshold: 0.5                 # 0..1 — pastroq = sezgirroq (lekin ko'p yolg'on ishga tushish)
+    threshold: 0.5                 # 0..1 — bu balldan o'tsa, darhol uyg'onadi
     cooldown_sec: 2.0
+
+    # Uch xil chaqiruv. «salom jarvis» va «hi jarvis» tayyor modelga faqat
+    # qismincha o'xshaydi, ya'ni ball chegaradan past chiqadi. Shuning uchun
+    # `candidate_threshold` dan o'tgan shubhali ovoz tashlanmaydi — matnga
+    # aylantirilib, quyidagi iboralar bilan solishtiriladi.
+    #
+    # Diqqat: tekshirish STT chaqiruvi, ya'ni pul va ~0.5 s kechikish.
+    # «hey jarvis» bunga tushmaydi (u to'g'ridan-to'g'ri chegaradan o'tadi).
+    # Butunlay o'chirish uchun: phrases: []
+    phrases: ["hey jarvis", "hi jarvis", "salom jarvis"]
+    candidate_threshold: 0.18      # shubhali deb hisoblash chegarasi
+    phrase_ratio: 0.7              # so'z o'xshashligi (STT «Jervis» deb yozadi)
+    verify_cooldown_sec: 3.0       # shundan tez-tez tekshirmaydi (xarajat uchun)
+    verify_window_ms: 2000         # shuncha oxirgi audio matnga aylantiriladi
 
   # Ikki marta qarsak — "tars-tars".
   clap:

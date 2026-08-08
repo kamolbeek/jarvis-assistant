@@ -37,8 +37,11 @@ flowchart TD
 
 ## Nima qila oladi
 
-- **Ovoz bilan uyg'onadi** — «Hey Jarvis», ikki marta qarsak, yoki `⌘⇧J`.
-  Qarsak bilan chaqirsangiz «Buyrug'ingizni kutyapman» deydi.
+- **Uch xil chaqiruv** — «Salom Jarvis», «Hi Jarvis», «Hey Jarvis». Yoki ikki
+  marta qarsak, yoki `⌘⇧J`. Qarsak bilan chaqirsangiz «Buyrug'ingizni
+  kutyapman» deydi.
+- **Asosiy oyna chaqirilganda ochiladi** — qarsak yoki `⌘⇧J` bosilsa, to'liq
+  ekranli HUD chiqadi. Lekin uyquda: ko'zlar o'chgan. **Gapirganingizda yonadi.**
 - **Suhbatni davom ettiradi** — javobdan keyin tinglab turadi, har safar
   «Hey Jarvis» deyish shart emas.
 - **Gapini bo'lish mumkin** — Jarvis gapirayotganda gapirsangiz, darhol jim
@@ -130,10 +133,33 @@ HUD ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
 > brauzerda oching — barcha holatlar, bo'g'inlarni «buzib» ko'rish va to'liq
 > suhbat oqimi bor.
 
-### Ish stoli rejimi
+### Asosiy oyna: chaqirilganda ochiladi, gapirilganda yonadi
 
-Jarvis endi butun ish stolini egallaydi — Rainmeter uslubidagi to'liq HUD,
-oynalar ORQASIDA (ish stoli darajasida) turadi:
+Ikki marta qarsak chalasiz yoki `⌘⇧J` bosasiz — to'liq ekranli HUD hammasining
+ustida ochiladi. Lekin darhol ishga tushmaydi: **uyquda** turadi — ko'zlar
+o'chgan, yorug'lik pasaygan, ovoz datchigi jim. Bu ataylab shunday: chaqirilgani
+hali gapirilgani emas.
+
+Gapirganingizda yonadi — ko'zlar chaqnaydi, reaktor kuchayadi, panellar
+yorishadi. Jim qolsangiz, sekin qaytadan uyquga ketadi.
+
+Ko'zlar bilan bitta nozik joy bor: ular fon rasmining **o'zida** yoniq holda
+chizilgan. Shuning uchun uyquda ularning ustiga qorayituvchi niqob qo'yiladi va
+nur qaytadan chiziladi — natijada yonish haqiqatan yonishga o'xshaydi,
+shunchaki yorqinlik oshishiga emas.
+
+`Esc` — oynani yashiradi. Qarsak yoki `⌘⇧J` bilan qaytadi.
+
+**Jonli fon rejimi.** Oyna emas, doimiy fon sifatida kerak bo'lsa (oynalar
+ORQASIDA turadigan Rainmeter uslubi):
+
+```bash
+JARVIS_DESKTOP=ambient ./scripts/run.sh
+```
+
+Butunlay o'chirish: `JARVIS_DESKTOP=0`. Kichik burchak-vidjet har doim qoladi.
+
+Sahnada nima bor:
 
 - **Markazda zirh chizmasi** — «Hey Jarvis» deganingizda ko'zlari yonadi,
   reaktori kuchayadi, orqasidagi halqalar tezlashadi.
@@ -159,8 +185,6 @@ holda keladi va butun ekranni egallaydi. Uning ustida hammasi jonli:
 
 **Boshqa rasm qo'yish.** Istalgan rasmni HUD ustiga sudrab tashlang — saqlanadi
 va uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor).
-
-O'chirish: `JARVIS_DESKTOP=0 ./scripts/run.sh`. Kichik burchak-vidjet har doim qoladi.
 
 ### HUD nimani ko'rsatadi
 
@@ -259,11 +283,55 @@ telefonni qo'lga olmasdan ishlaydi.
 **3. Telegram ovozli xabar.** Kompyuter o'chiq bo'lsa ham ishlaydigan yagona
 yo'l — Jarvis keyin o'qiydi va bajaradi.
 
-## O'zbekcha uyg'otuvchi so'z: «Salom Jarvis»
+## Uch xil chaqiruv: «Salom Jarvis», «Hi Jarvis», «Hey Jarvis»
 
-Hozir standart model — inglizcha talaffuzdagi **«hey jarvis»** (openWakeWord'da
-tayyor keladi). «Salom Jarvis» yoki o'zbekcha talaffuzdagi «hey Jarvis» uchun
-o'z modelingizni o'rgatish kerak. Bu bir martalik ish va bepul:
+Uchtasi ham ishlaydi, lekin ular bir xil yo'ldan bormaydi — va buni bilib
+qo'yish kerak, chunki xarajat va tezlik farq qiladi.
+
+Tayyor model (openWakeWord) faqat **«hey jarvis»** ga o'rgatilgan. Uni aytsangiz,
+ball chegaradan (0.5) o'tadi va Jarvis darhol uyg'onadi — tarmoq kerak emas,
+kechikish yo'q, hech qanday to'lov yo'q.
+
+«Salom Jarvis» va «Hi Jarvis» esa o'sha modelga faqat qismincha o'xshaydi:
+«jarvis» qismi tanilib, ball ko'tariladi, lekin chegaraga yetmaydi. Chegaraning
+o'zini pasaytirish yaramaydi — u holda televizor ovozi ham uyg'otib yuboradi.
+Shuning uchun **ikkinchi bosqich** bor:
+
+1. ball `candidate_threshold` (0.18) dan o'tadi → bu "shubhali chaqiruv";
+2. oxirgi 2 soniya matnga aylantiriladi (STT);
+3. matnda «jarvis»ga o'xshash so'z va salomlashuv bo'lsa → uyg'onadi.
+
+Taqqoslash qat'iy emas, chunki STT hech qachon aynan yozmaydi — sizning
+mikrofoningizda «hey jarvis» **«Hai, Jervis»** deb chiqqan. Har bir so'z
+o'xshashlik darajasi bilan solishtiriladi (`phrase_ratio`).
+
+**Halol narxi:** ikkinchi bosqich — STT chaqiruvi. Ya'ni «salom jarvis» deb
+chaqirish ~0.5 soniya sekinroq va pul turadi (juda kichik, lekin bepul emas).
+«hey jarvis» bunga tushmaydi. Xarajatni cheklash uchun `verify_cooldown_sec`
+bor — Jarvis undan tez-tez tekshirmaydi.
+
+```yaml
+activation:
+  wake_word:
+    threshold: 0.5              # bu balldan o'tsa — darhol
+    candidate_threshold: 0.18   # bundan o'tsa — matn bilan tekshiriladi
+    phrases: ["hey jarvis", "hi jarvis", "salom jarvis"]
+    phrase_ratio: 0.7           # so'z o'xshashligi
+    verify_cooldown_sec: 3.0
+```
+
+Yangi ibora qo'shish uchun ro'yxatga yozib qo'yish yetarli — kod tegmaydi.
+Ikkinchi bosqichni butunlay o'chirish: `phrases: []`.
+
+**Chegarani taxmin bilan emas, o'lchov bilan sozlang.** `python -m jarvis doctor`
+sizdan «Salom Jarvis» deb aytishni so'raydi va o'sha yozuvni modeldan
+o'tkazib, **aynan sizning ovozingizdagi ballni** ko'rsatadi. Shu bitta yozuv
+bilan uchta narsa tekshiriladi: mikrofon darajasi, model bali va matn tanildimi.
+
+### To'liq lokal yechim: o'z modelingizni o'rgatish
+
+Ikkinchi bosqichning STT chaqiruvi ham kerak bo'lmasin desangiz, «salom jarvis»
+uchun o'z modelingizni o'rgatasiz. Bu bir martalik ish va bepul:
 
 1. openWakeWord'ning tayyor daftarida (`automatic_model_training.ipynb`,
    Google Colab'da bepul ishlaydi) iborani kiriting: `salom jarvis`.
@@ -437,7 +505,9 @@ Ovoz bilan aytishingiz mumkin:
 
 - [x] Uzluksiz suhbat rejimi — har safar «Hey Jarvis» demasdan davom ettirish
 - [x] Jarvis gapirayotganda uni bo'lish (barge-in)
-- [ ] Tayyor o'zbekcha uyg'otuvchi so'z modeli («Salom Jarvis») repoda
+- [x] «Salom Jarvis» va «Hi Jarvis» bilan chaqirish (matn bilan tasdiqlash orqali)
+- [ ] Tayyor o'zbekcha uyg'otuvchi so'z **modeli** repoda — tasdiqlash uchun
+      STT chaqiruvi ham kerak bo'lmasin
 - [ ] Brauzer boshqaruvi (Playwright)
 - [ ] Kalendar integratsiyasi (Google Calendar / Apple Calendar)
 - [ ] Supabase orqali xotirani qurilmalar o'rtasida sinxronlash

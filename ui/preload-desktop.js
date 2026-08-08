@@ -15,6 +15,12 @@ contextBridge.exposeInMainWorld("desk", {
   openFolder: (key) => ipcRenderer.send("desk-open-folder", String(key)),
   openUrl: (url) => ipcRenderer.send("desk-open-url", String(url)),
 
+  // Oynani ko'rsatish/yashirish. Chaqirilganda renderer o'zi so'raydi —
+  // yadro faqat holatni biladi, oyna boshqaruvi main jarayonida.
+  show: () => ipcRenderer.send("desk-show"),
+  hide: () => ipcRenderer.send("desk-hide"),
+  onVisible: (callback) => ipcRenderer.on("desk-visible", () => callback()),
+
   // Markaziy rasm: olish / saqlash / o'chirish.
   getFigure: () => ipcRenderer.invoke("figure-get"),
   saveFigure: (buffer) => ipcRenderer.invoke("figure-save", buffer),

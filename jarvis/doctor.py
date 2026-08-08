@@ -178,7 +178,9 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
     """
     from .audio.mic import MicStream, frame_level
 
-    print(f"      {DIM}Gapiring… ({seconds:.0f} soniya){RESET}")
+    # Aynan chaqiruv iborasini so'raymiz: shu bitta yozuv uchta tekshiruvga
+    # yetadi — mikrofon darajasi, uyg'otuvchi so'z bali va STT matni.
+    print(f"      {DIM}«Salom Jarvis» deb ayting… ({seconds:.0f} soniya){RESET}")
 
     mic = MicStream(
         sample_rate=cfg.sample_rate,
@@ -231,7 +233,7 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
 
 
 def check_wake_word(cfg: Config) -> Result:
-    """Uyg'otuvchi so'z modeli yuklanadimi?"""
+    """Model yuklanadimi va sizning ovozingizda qanday ball beradi?"""
     section = cfg.section("activation.wake_word")
     if not section.get("enabled", True):
         return Result(True, "O'chirilgan (qarsak va tugma ishlaydi)")
@@ -242,14 +244,45 @@ def check_wake_word(cfg: Config) -> Result:
         detector = build_wake_detector(section)
         if detector is None:
             return Result(True, "O'chirilgan")
-        detector.close()
     except Exception as exc:
         return Result(False, f"{type(exc).__name__}: {exc}\n"
                              f"Birinchi ishga tushirishda model yuklab olinadi — "
                              f"internet kerak.")
 
-    return Result(True, f"Model: {section.get('model', 'hey_jarvis')} "
-                        f"(chegara {section.get('threshold', 0.5)})")
+    threshold = float(section.get("threshold", 0.5))
+    candidate = float(section.get("candidate_threshold", threshold))
+    parts = [f"Model: {section.get('model', 'hey_jarvis')} "
+             f"(chegara {threshold:.2f}, shubhali {candidate:.2f})"]
+
+    # Mikrofon sinovidagi yozuvni modeldan o'tkazamiz — chegarani taxmin
+    # bilan emas, o'z ovozingizdagi haqiqiy ball bilan sozlash mumkin bo'lsin.
+    audio = getattr(check_microphone, "audio", None)
+    try:
+        if audio is not None:
+            step = cfg.frame_samples
+            for start in range(0, max(0, audio.size - step + 1), step):
+                detector.push(audio[start : start + step])
+            parts.append(f"Aytganingizdagi eng yuqori ball: {detector.peak:.2f}")
+            if detector.peak < candidate:
+                parts.append(
+                    "Bu shubhali chegaradan ham past — model chaqiruvni "
+                    "sezmaydi.\nBalandroq va aniqroq aytib ko'ring; baribir "
+                    f"past bo'lsa, `candidate_threshold` ni {detector.peak * 0.6:.2f} "
+                    "ga tushiring."
+                )
+            elif detector.peak < threshold:
+                parts.append("Shubhali darajada — ibora matn bilan tasdiqlanadi "
+                             "(STT chaqiruvi, ~0.5 s).")
+    finally:
+        detector.close()
+
+    phrases = section.get("phrases")
+    if phrases is None or list(phrases):
+        parts.append("Chaqiruvlar: " + ", ".join(
+            str(p) for p in (phrases or ["hey jarvis", "hi jarvis", "salom jarvis"])
+        ))
+
+    return Result(True, "\n".join(parts))
 
 
 async def check_stt(cfg: Config) -> Result:
@@ -270,7 +303,19 @@ async def check_stt(cfg: Config) -> Result:
             await provider.aclose()
 
     if text:
-        return Result(True, f"Eshitildi: «{text}»")
+        parts = [f"Eshitildi: «{text}»"]
+        # Shubhali chaqiruvni aynan shu matn tasdiqlaydi — ishlaydimi, ko'rsatamiz.
+        from .audio.phrases import build_matcher
+
+        matcher = build_matcher(cfg.section("activation.wake_word"))
+        if matcher is not None:
+            ok = matcher.matches(text)
+            verdict = "ha" if ok else "yo'q"
+            parts.append(f"Chaqiruv sifatida tanildi: {verdict}")
+            if not ok:
+                parts.append("Agar «salom jarvis» deb aytgan bo'lsangiz, matnda ism\n"
+                             "aniq eshitilmagan. `phrase_ratio` ni 0.6 ga tushiring.")
+        return Result(True, "\n".join(parts))
 
     reason = "\n".join(logs.lines)
     parts = ["Matn qaytmadi."]
