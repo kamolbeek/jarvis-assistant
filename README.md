@@ -75,13 +75,28 @@ macOS ruxsatlarini bering — **Tizim sozlamalari → Maxfiylik va xavfsizlik**:
 | Kirish imkoni (Accessibility) | global tugma, ilovalarni boshqarish |
 | Avtomatlashtirish (Automation) | Messages, System Events |
 
-Ishga tushiring:
+**Ishga tushirishdan oldin — diagnostika.** Birinchi marta hamma narsa birdan
+ishlashi kamdan-kam bo'ladi, shuning uchun har bir bo'g'inni alohida tekshiring:
+
+```bash
+source .venv/bin/activate
+python -m jarvis doctor
+```
+
+Ketma-ket tekshiradi: kalitlar → audio qurilmalar → mikrofon (3 soniya gapirasiz,
+darajani ko'rsatadi) → uyg'otuvchi so'z modeli → o'sha yozuvni matnga aylantirish →
+ovoz chiqarish → Claude. Nima ishlamasa, aynan o'sha qatorda sababi yoziladi.
+
+Hammasi yashil bo'lgach:
 
 ```bash
 ./scripts/run.sh
 ```
 
 Orb ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
+
+> Orbni Jarvis'ni o'rnatmasdan ham ko'rish mumkin: `docs/orb-demo.html` ni
+> brauzerda oching — barcha holatlar va to'liq suhbat oqimi bor.
 
 ## Telefonda ishlatish
 
