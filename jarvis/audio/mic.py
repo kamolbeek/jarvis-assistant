@@ -151,8 +151,42 @@ class MicStream:
 
 
 def frame_level(frame: np.ndarray) -> float:
-    """Kadrning normallashtirilgan RMS darajasi (0..1) — animatsiya uchun."""
+    """Kadrning normallashtirilgan RMS darajasi (0..1) — animatsiya uchun.
+
+    Diqqat: bu 8000 RMS da 1.00 ga yetib to'xtaydi, ya'ni "juda baland" va
+    "buzilib ketgan" ni ajratmaydi. Signal sifatini tekshirish uchun
+    `frame_peak` va `clip_fraction` kerak.
+    """
     if frame.size == 0:
         return 0.0
     rms = float(np.sqrt(np.mean(np.square(frame.astype(np.float32)))))
     return min(1.0, rms / 8000.0)
+
+
+# int16 ning chegarasi. Shunga tegib turgan namuna — kesilgan namuna.
+FULL_SCALE = 32767
+CLIP_EDGE = 32000
+
+
+def frame_peak(frame: np.ndarray) -> float:
+    """Eng baland namunaning to'liq shkaladagi ulushi (0..1).
+
+    RMS'dan farqi: bu chinakam cho'qqini ko'rsatadi. Nutqning cho'qqisi
+    RMS'dan 3–4 baravar baland bo'ladi, shuning uchun RMS "normal" ko'rinib
+    turganda ham cho'qqi shkaladan chiqib ketishi mumkin.
+    """
+    if frame.size == 0:
+        return 0.0
+    return float(np.max(np.abs(frame.astype(np.int32)))) / FULL_SCALE
+
+
+def clip_fraction(frame: np.ndarray) -> float:
+    """Kesilgan namunalar ulushi (0..1).
+
+    Kesilish uyg'otuvchi so'z modelini ishdan chiqaradi: to'lqinning uchi
+    yo'qolib, o'rniga to'g'ri chiziq qoladi va model o'zi o'rgangan shaklni
+    tanimaydi. Natijada bir xil ibora har safar boshqa ball oladi.
+    """
+    if frame.size == 0:
+        return 0.0
+    return float(np.count_nonzero(np.abs(frame.astype(np.int32)) >= CLIP_EDGE)) / frame.size

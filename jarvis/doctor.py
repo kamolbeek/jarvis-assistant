@@ -176,7 +176,7 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
     Faqat oqim ochilganini emas, **signal borligini** tekshiradi: macOS'da
     ruxsat berilmagan bo'lsa, oqim ochiladi-yu, faqat jimlik keladi.
     """
-    from .audio.mic import MicStream, frame_level
+    from .audio.mic import MicStream, clip_fraction, frame_level, frame_peak
 
     # Aynan modelning o'zi biladigan iborani so'raymiz: shu bitta yozuv uchta
     # tekshiruvga yetadi — mikrofon darajasi, uyg'otuvchi so'z bali va STT
@@ -193,6 +193,8 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
 
     frames: list[np.ndarray] = []
     peak = 0.0
+    loudest = 0.0
+    clipped = 0
     try:
         await mic.start()
         needed = int(seconds * cfg.sample_rate / cfg.frame_samples)
@@ -200,6 +202,9 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
             frames.append(frame)
             level = frame_level(frame)
             peak = max(peak, level)
+            loudest = max(loudest, frame_peak(frame))
+            if clip_fraction(frame) > 0.02:
+                clipped += 1
 
             bars = int(level * 40)
             print(f"\r      [{'█' * bars}{' ' * (40 - bars)}] {level:.2f}", end="", flush=True)
@@ -231,7 +236,21 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
                             f"   `audio.input_gain` ni 2.0–3.0 ga ko'taring.")
 
     check_microphone.audio = np.concatenate(frames)  # type: ignore[attr-defined]
-    return Result(True, f"Eng yuqori daraja: {peak:.2f}")
+
+    # Kesilish uyg'otuvchi so'z modelini ishdan chiqaradi va buni RMS
+    # darajasidan bilib bo'lmaydi — u 8000 da 1.00 ga yetib to'xtaydi.
+    if frames and clipped / len(frames) > 0.005:
+        return Result(
+            True,
+            f"Signal kesilib buzilyapti (kadrlarning "
+            f"{clipped / len(frames) * 100:.0f}%, cho'qqi {loudest:.2f}).\n"
+            f"To'lqinning uchi yo'qolganda uyg'otuvchi so'z modeli iborani\n"
+            f"tanimaydi — bir xil ibora har safar boshqa ball oladi.\n"
+            f"Tizim sozlamalari > Ovoz > Kirish: «Kirish balandligi»ni\n"
+            f"o'rtaga tushiring (cho'qqi 0.5–0.8 bo'lsa yaxshi).",
+        )
+
+    return Result(True, f"Eng yuqori daraja: {peak:.2f} (cho'qqi {loudest:.2f})")
 
 
 WAKE_TIMEOUT_SEC = 240.0

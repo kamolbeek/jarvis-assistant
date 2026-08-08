@@ -412,3 +412,53 @@ async def test_gate_detects_shell_redirect_outside_workspace():
 )
 def test_clean_for_speech(raw: str, expected: str):
     assert clean_for_speech(raw) == expected
+
+
+# --- Signal sifati: kesilishni aniqlash ---------------------------------------
+#
+# Bu o'lchovlar kerak bo'lgani real muammodan chiqdi: kirish balandligi
+# oxirigacha ko'tarilganda uyg'otuvchi so'z modeli bir xil iboraga har safar
+# boshqa ball berdi. Sababi kesilish edi, lekin RMS darajasi buni ko'rsatmadi —
+# u 8000 da 1.00 ga yetib to'xtaydi.
+
+
+def test_frame_level_saturates_and_hides_loudness():
+    """RMS darajasi «baland» va «juda baland» ni ajratmaydi — shuni tasdiqlaymiz."""
+    from jarvis.audio.mic import frame_level
+
+    loud = np.full(320, 9000, dtype=np.int16)
+    louder = np.full(320, 32000, dtype=np.int16)
+
+    assert frame_level(loud) == 1.0
+    assert frame_level(louder) == 1.0
+
+
+def test_frame_peak_shows_the_real_headroom():
+    from jarvis.audio.mic import frame_peak
+
+    quiet = np.full(320, 3276, dtype=np.int16)
+    full = np.full(320, 32767, dtype=np.int16)
+
+    assert frame_peak(quiet) == pytest.approx(0.1, abs=0.01)
+    assert frame_peak(full) == pytest.approx(1.0, abs=0.001)
+    assert frame_peak(np.zeros(0, dtype=np.int16)) == 0.0
+
+
+def test_clip_fraction_counts_flattened_samples():
+    from jarvis.audio.mic import clip_fraction
+
+    clean = np.full(100, 10000, dtype=np.int16)
+    half = np.concatenate([np.full(50, 32767, dtype=np.int16),
+                           np.full(50, 1000, dtype=np.int16)])
+
+    assert clip_fraction(clean) == 0.0
+    assert clip_fraction(half) == pytest.approx(0.5)
+
+
+def test_clip_fraction_catches_both_polarities():
+    """Kesilish pastdan ham bo'ladi — manfiy tomonini o'tkazib yubormaslik kerak."""
+    from jarvis.audio.mic import clip_fraction
+
+    negative = np.full(64, -32768, dtype=np.int16)
+
+    assert clip_fraction(negative) == 1.0
