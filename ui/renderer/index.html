@@ -7,11 +7,14 @@
   </head>
   <body>
     <div id="stage">
-      <!-- Orb: bosilsa Jarvis uyg'onadi -->
+      <!-- HUD: bosilsa Jarvis uyg'onadi -->
       <div id="orb-wrap" class="interactive" title="Jarvis'ni chaqirish">
-        <canvas id="orb" width="240" height="240"></canvas>
+        <canvas id="orb" width="404" height="404"></canvas>
         <div id="status-dot"></div>
       </div>
+
+      <!-- Siferblat ustiga sichqoncha kelganda nima buzilganini ko'rsatadi -->
+      <div id="dial-tip" class="hidden"></div>
 
       <!-- Nima eshitilgani / Jarvis nima deyayotgani -->
       <div id="caption" class="panel hidden">
@@ -36,6 +39,8 @@
       </div>
     </div>
 
+    <script src="palette.js"></script>
+    <script src="hud.js"></script>
     <script src="orb.js"></script>
   </body>
 </html>

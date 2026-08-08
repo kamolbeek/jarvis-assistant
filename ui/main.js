@@ -9,8 +9,8 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require("electron");
 const path = require("node:path");
 
-const WINDOW_WIDTH = 360;
-const WINDOW_HEIGHT = 460;
+const WINDOW_WIDTH = 420;
+const WINDOW_HEIGHT = 596;
 const MARGIN = 24;
 
 let win = null;

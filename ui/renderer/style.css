@@ -1,13 +1,13 @@
 /* Orb interfeysi. Fon butunlay shaffof — faqat orb va panellar ko'rinadi. */
 
 :root {
-  --cyan: #35e0ff;
-  --cyan-dim: rgba(53, 224, 255, 0.5);
-  --amber: #ffb545;
-  --red: #ff5a52;
-  --ink: rgba(6, 14, 20, 0.86);
-  --edge: rgba(53, 224, 255, 0.28);
-  --text: #dff6ff;
+  --cyan: #22e3ff;
+  --cyan-dim: rgba(34, 227, 255, 0.55);
+  --amber: #ffb23e;
+  --red: #ff443a;
+  --ink: rgba(4, 11, 16, 0.88);
+  --edge: rgba(34, 227, 255, 0.3);
+  --text: #ecfdff;
 }
 
 * {
@@ -34,7 +34,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   height: 100%;
   padding: 8px;
 }
@@ -43,8 +43,8 @@ body {
 
 #orb-wrap {
   position: relative;
-  width: 240px;
-  height: 240px;
+  width: 404px;
+  height: 404px;
   flex-shrink: 0;
   cursor: pointer;
   /* Bosilganda mayin javob */
@@ -56,16 +56,16 @@ body {
 }
 
 #orb {
-  width: 240px;
-  height: 240px;
+  width: 404px;
+  height: 404px;
   display: block;
 }
 
 /* Kichik holat nuqtasi — ulanish bor-yo'qligini bildiradi */
 #status-dot {
   position: absolute;
-  right: 26px;
-  bottom: 30px;
+  right: 40px;
+  bottom: 46px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -84,7 +84,7 @@ body {
 
 .panel {
   width: 100%;
-  max-width: 336px;
+  max-width: 392px;
   padding: 12px 14px;
   border-radius: 14px;
   background: var(--ink);
@@ -214,4 +214,32 @@ body {
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.4);
+}
+
+/* --- Siferblat izohi --- */
+/* Qizil doiraning sababini bilish uchun jurnal ochish shart bo'lmasin. */
+
+#dial-tip {
+  max-width: 392px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  background: var(--ink);
+  border: 1px solid var(--edge);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#dial-tip.bad {
+  border-color: rgba(255, 68, 58, 0.5);
+  color: #ffdad7;
+}
+
+#dial-tip.hidden {
+  display: none;
 }

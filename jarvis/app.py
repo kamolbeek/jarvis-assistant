@@ -35,6 +35,7 @@ from .brain.prompts import (
 )
 from .bus import EventBus, State
 from .config import Config, load_config
+from .health import Health, Status, System
 from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
 from .ui.server import UiServer, base64_to_pcm
@@ -65,6 +66,8 @@ class Jarvis:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.bus = EventBus()
+        # Bo'g'inlar tirikligi — HUD siferblatlari shu reyestrdan oziqlanadi.
+        self.health = Health(self.bus.emit)
         self.memory = Memory(config.memory_path)
         self.agenda = Agenda(config.memory_path)
         self.gate = SafetyGate(config=config, bus=self.bus)
@@ -127,6 +130,7 @@ class Jarvis:
         self._activate = asyncio.Event()
         self._shutdown = asyncio.Event()
         self._greeted = False
+        self._heartbeat: asyncio.Task[None] | None = None
 
     # --- Hayot sikli ---
 
@@ -142,6 +146,8 @@ class Jarvis:
         await self.brain.start()
         await self.scheduler.start()
         await self.mic.start()
+        await self._mark_ready()
+        self._heartbeat = asyncio.create_task(self.health.heartbeat())
         await self.bus.set_state(State.IDLE)
 
         stats = self.memory.stats()
@@ -156,6 +162,27 @@ class Jarvis:
             log.info("Telefonda oching: %s", self._lan_phone_url())
 
         await self.bus.log_line("Jarvis tayyor. «Hey Jarvis» deb chaqiring.")
+
+    async def _mark_ready(self) -> None:
+        """Ishga tushgach har bir bo'g'inning boshlang'ich holatini belgilaydi.
+
+        «Tayyor» degani — qism qurildi va ishlashga shay. Haqiqatan ishlashini
+        birinchi chaqiruv ko'rsatadi: xato chiqsa, siferblat qizarib qoladi.
+        """
+        for system in (System.MIC, System.STT, System.BRAIN, System.TTS,
+                       System.MEMORY, System.AGENDA, System.TOOLS, System.NET):
+            await self.health.mark(system, Status.READY, quiet=True)
+
+        if self._wake is None:
+            await self.health.mark(
+                System.WAKE, Status.UNKNOWN, "o'chirilgan — qarsak va tugma ishlaydi",
+                quiet=True,
+            )
+        else:
+            await self.health.mark(System.WAKE, Status.READY, quiet=True)
+
+        # Hammasi belgilangach — bitta to'liq manzara yuboramiz.
+        await self.bus.emit(self.health.snapshot())
 
     def _lan_phone_url(self) -> str:
         """Telefonda ochish uchun tarmoqdagi haqiqiy manzil.
@@ -187,6 +214,8 @@ class Jarvis:
     async def stop(self) -> None:
         self._shutdown.set()
         self.speaker.stop()
+        if self._heartbeat is not None:
+            self._heartbeat.cancel()
         await self.scheduler.stop()
         await self.mic.stop()
         await self.brain.stop()
@@ -234,7 +263,8 @@ class Jarvis:
         log.info("Telefondan audio: %.1f s", pcm.size / rate)
         await self.bus.set_state(State.THINKING)
 
-        text = await transcribe_guarded(self.stt, pcm, rate)
+        async with self.health.busy(System.STT):
+            text = await transcribe_guarded(self.stt, pcm, rate)
         if not text:
             await self._speak(random.choice(NOT_UNDERSTOOD), remote=client)
             await self.bus.set_state(State.IDLE)
@@ -269,6 +299,10 @@ class Jarvis:
             frame_count += 1
             if frame_count % 3 == 0 and self.bus.state is State.IDLE:
                 await self.bus.level(frame_level(frame))
+            # Kadr kelayotgan bo'lsa mikrofon tirik. Jimlikni ham "ishlayapti"
+            # deb ko'rsatmaslik uchun faqat ovoz bo'lganda chaqnaydi.
+            if frame_count % 10 == 0 and frame_level(frame) > 0.04:
+                await self.health.ping(System.MIC)
 
             # Rejalashtiruvchidan kelgan eslatmalar — faqat bo'sh vaqtda,
             # foydalanuvchining gapini bo'lmasdan.
@@ -282,6 +316,7 @@ class Jarvis:
                 source = "bosish"
             elif self._wake is not None and self._wake.push(frame):
                 source = "so'z"
+                await self.health.ping(System.WAKE)
             elif self._clap is not None and self._clap.push(frame):
                 source = "qarsak"
 
@@ -374,7 +409,8 @@ class Jarvis:
 
         await self.bus.set_state(State.THINKING)
         audio = endpointer.result()
-        text = await transcribe_guarded(self.stt, audio, self.config.sample_rate)
+        async with self.health.busy(System.STT):
+            text = await transcribe_guarded(self.stt, audio, self.config.sample_rate)
 
         if text:
             log.info("Eshitildi: %s", text)
@@ -391,11 +427,13 @@ class Jarvis:
         spoke_anything = False
 
         try:
-            async for sentence in self.brain.ask(text):
-                if self._shutdown.is_set():
-                    return
-                spoke_anything = True
-                await self._speak(sentence, remote=remote)
+            # Miya siferblati javob oqib kelayotgan butun davr davomida yonadi.
+            async with self.health.busy(System.BRAIN):
+                async for sentence in self.brain.ask(text):
+                    if self._shutdown.is_set():
+                        return
+                    spoke_anything = True
+                    await self._speak(sentence, remote=remote)
         except Exception as exc:
             log.exception("Javob olishda xato")
             await self.bus.set_state(State.ERROR)
@@ -434,7 +472,8 @@ class Jarvis:
             asyncio.ensure_future(self.bus.level(value))
 
         try:
-            await self.speaker.play(self.tts.stream(text), self.tts.sample_rate, on_level)
+            async with self.health.busy(System.TTS):
+                await self.speaker.play(self.tts.stream(text), self.tts.sample_rate, on_level)
         except Exception:
             log.exception("Ovozga chiqarib bo'lmadi")
             await self.bus.log_line(f"[ovozsiz] {text}", level="warn")
@@ -442,7 +481,8 @@ class Jarvis:
     async def _speak_remote(self, text: str, client: str) -> None:
         """Javobni sintez qilib, mijozga PCM sifatida yuboradi."""
         try:
-            chunks = [chunk async for chunk in self.tts.stream(text) if chunk.size]
+            async with self.health.busy(System.TTS):
+                chunks = [chunk async for chunk in self.tts.stream(text) if chunk.size]
         except Exception:
             log.exception("Telefon uchun ovoz sintez qilinmadi")
             # Ovoz bo'lmasa ham matnni yuboramiz — foydalanuvchi o'qiy oladi.

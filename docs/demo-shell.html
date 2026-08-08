@@ -1,0 +1,385 @@
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jarvis HUD</title>
+
+<style>
+  :root {
+    --cyan: #22e3ff;
+    --white: #ecfdff;
+    --amber: #ffb23e;
+    --red: #ff443a;
+    --slate: #607e8c;
+    --ink: rgba(6, 14, 20, 0.72);
+    --edge: rgba(34, 227, 255, 0.22);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #03080c;
+    /* Qora fon butunlay tekis bo'lsa o'lik ko'rinadi — markazdan mayin nur */
+    background-image:
+      radial-gradient(ellipse at 42% 45%, rgba(34, 227, 255, 0.07), transparent 62%),
+      radial-gradient(ellipse at 80% 85%, rgba(34, 227, 255, 0.04), transparent 55%);
+    color: var(--white);
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 26px 20px 40px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 22px;
+  }
+
+  h1 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  header p {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(236, 253, 255, 0.5);
+  }
+
+  .layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 26px;
+    align-items: flex-start;
+    justify-content: center;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  /* --- HUD --- */
+
+  .hud-col { flex: 0 0 auto; }
+
+  #hud {
+    width: 460px;
+    height: 460px;
+    max-width: 86vw;
+    max-height: 86vw;
+    display: block;
+    cursor: pointer;
+  }
+
+  #caption {
+    min-height: 62px;
+    margin-top: 6px;
+    width: 460px;
+    max-width: 86vw;
+    padding: 11px 14px;
+    border-radius: 12px;
+    background: var(--ink);
+    border: 1px solid var(--edge);
+    backdrop-filter: blur(12px);
+    font-size: 13px;
+    line-height: 1.45;
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+
+  #caption.on { opacity: 1; }
+
+  #caption b {
+    display: block;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 4px;
+  }
+
+  /* --- Boshqaruv --- */
+
+  .panel {
+    flex: 1 1 270px;
+    min-width: 255px;
+    max-width: 330px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--ink);
+    border: 1px solid var(--edge);
+    backdrop-filter: blur(12px);
+  }
+
+  .panel h2 {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(236, 253, 255, 0.42);
+    margin-bottom: 10px;
+  }
+
+  .panel h2:not(:first-child) { margin-top: 20px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  button {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(34, 227, 255, 0.26);
+    background: rgba(34, 227, 255, 0.07);
+    color: var(--white);
+    cursor: pointer;
+    transition: background 130ms ease, border-color 130ms ease;
+  }
+
+  button:hover { background: rgba(34, 227, 255, 0.16); }
+
+  button.on {
+    background: rgba(34, 227, 255, 0.24);
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  button.wide { grid-column: 1 / -1; }
+
+  button.play {
+    background: rgba(34, 227, 255, 0.16);
+    border-color: rgba(34, 227, 255, 0.5);
+    padding: 10px;
+  }
+
+  /* Bo'g'in tugmalari — bosilsa o'sha qism "buziladi" */
+  .sys {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    padding: 7px 9px;
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+  }
+
+  .sys .led {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 7px currentColor;
+    color: var(--cyan);
+    flex-shrink: 0;
+    transition: background 180ms ease, color 180ms ease;
+  }
+
+  .sys[data-status="down"] { border-color: rgba(255, 68, 58, 0.5); }
+  .sys[data-status="down"] .led { background: var(--red); color: var(--red); }
+  .sys[data-status="warn"] { border-color: rgba(255, 178, 62, 0.5); }
+  .sys[data-status="warn"] .led { background: var(--amber); color: var(--amber); }
+  .sys[data-status="unknown"] .led { background: var(--slate); color: var(--slate); box-shadow: none; }
+
+  .note {
+    margin-top: 14px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: rgba(236, 253, 255, 0.42);
+  }
+
+  .note code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: var(--cyan);
+  }
+
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; align-items: center; }
+    .panel { max-width: 460px; width: 86vw; }
+  }
+</style>
+
+<header>
+  <h1>Jarvis</h1>
+  <p>
+    Har bir siferblat — bitta bo'g'in. Aylanayotgani ishlayotganini,<br />
+    qizarib to'xtagani buzilganini bildiradi.
+  </p>
+</header>
+
+<div class="layout">
+  <div class="hud-col">
+    <canvas id="hud" width="920" height="920"></canvas>
+    <div id="caption"><b></b><span></span></div>
+  </div>
+
+  <div class="panel">
+    <h2>Suhbat</h2>
+    <div class="grid">
+      <button class="wide play" id="play">Qarsakdan javobgacha — to'liq oqim</button>
+    </div>
+
+    <h2>Holatlar</h2>
+    <div class="grid" id="states"></div>
+
+    <h2>Bo'g'inlar — bosib buzing</h2>
+    <div class="grid" id="systems"></div>
+
+    <p class="note">
+      Siferblatni bosib «buzsangiz», u qizarib aylanishdan to'xtaydi va HUD
+      chekkasi qizg'ish tus oladi. Haqiqiy Jarvis'da buni
+      <code>jarvis doctor</code> ham ko'rsatadi.
+    </p>
+  </div>
+</div>
+
+<script>
+/* --- Palitra va HUD chizuvchisi: ui/renderer/ dan aynan ko'chirilgan --- */
+/*INJECT*/
+
+/* --- Demo boshqaruvi --- */
+
+const canvas = document.getElementById("hud");
+const ctx = canvas.getContext("2d");
+const captionBox = document.getElementById("caption");
+const captionRole = captionBox.querySelector("b");
+const captionText = captionBox.querySelector("span");
+
+const LABELS = {
+  mic: "MIKROFON", wake: "UYG'OTISH", stt: "NUTQ", brain: "MIYA", tts: "OVOZ",
+  memory: "XOTIRA", agenda: "REJA", tools: "ASBOB", net: "TARMOQ",
+};
+
+const STATES = [
+  ["idle", "Kutmoqda"], ["wake", "Uyg'ondi"], ["listening", "Tinglayapti"],
+  ["thinking", "O'ylayapti"], ["speaking", "Gapiryapti"],
+  ["confirm", "Tasdiq"], ["error", "Xato"],
+];
+
+let state = "idle";
+let level = 0, smoothLevel = 0, flash = 0;
+let systems = Object.entries(LABELS).map(([id, label]) => ({
+  id, label, status: "ready", detail: "", heat: 0,
+}));
+
+// Har bir bo'g'inning "issiqligi" — haqiqiy Jarvis'da yadrodan keladi.
+// Demoda uni shu yerda so'ndiramiz.
+const heatUntil = {};
+
+function setState(next) {
+  if (next === "wake" && state !== "wake") flash = 1;
+  state = next;
+  document.querySelectorAll("#states button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.state === next);
+  });
+}
+
+function heat(id, seconds = 1.2) {
+  heatUntil[id] = performance.now() / 1000 + seconds;
+}
+
+function caption(role, text) {
+  captionRole.textContent = role;
+  captionText.textContent = text;
+  captionBox.classList.add("on");
+}
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const size = canvas.clientWidth;
+  canvas.width = canvas.height = Math.round(size * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return size;
+}
+
+let cssSize = 460;
+
+function frame(now) {
+  const t = now / 1000;
+
+  // Tinglash va gapirishda ovoz darajasi jonlanadi
+  const target =
+    state === "listening" ? 0.35 + Math.abs(Math.sin(t * 2.6)) * 0.5 :
+    state === "speaking" ? 0.28 + Math.abs(Math.sin(t * 4.2)) * 0.42 : 0.05;
+  level = target;
+  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.35 : 0.08);
+
+  flash *= 0.92;
+  if (flash < 0.01) flash = 0;
+
+  for (const sys of systems) {
+    const until = heatUntil[sys.id] || 0;
+    sys.heat = sys.status === "down" ? 0 : Math.max(0, Math.min(1, (until - t) / 1.2));
+  }
+
+  HUD.draw(ctx, {
+    width: cssSize, height: cssSize, t, state,
+    level: smoothLevel, flash, systems,
+  });
+  requestAnimationFrame(frame);
+}
+
+// --- Tugmalar ---
+
+const statesBox = document.getElementById("states");
+for (const [id, label] of STATES) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.dataset.state = id;
+  b.onclick = () => setState(id);
+  statesBox.append(b);
+}
+
+const systemsBox = document.getElementById("systems");
+const CYCLE = { ready: "warn", warn: "down", down: "ready" };
+for (const sys of systems) {
+  const b = document.createElement("button");
+  b.className = "sys";
+  b.dataset.status = sys.status;
+  b.innerHTML = `<span class="led"></span>${sys.label}`;
+  b.onclick = () => {
+    sys.status = CYCLE[sys.status] || "ready";
+    sys.detail = sys.status === "down" ? "sinov uchun o'chirildi" : "";
+    b.dataset.status = sys.status;
+    if (sys.status !== "down") heat(sys.id);
+  };
+  systemsBox.append(b);
+}
+
+// Siferblat ustiga bosilganda ham o'sha bo'g'in chaqnasin
+canvas.onclick = () => { setState("wake"); setTimeout(() => setState("idle"), 1400); };
+
+// --- Suhbat oqimi ---
+
+const SCRIPT = [
+  [0,     () => { setState("idle"); captionBox.classList.remove("on"); }],
+  [700,   () => { heat("mic"); heat("wake"); setState("wake"); caption("Qarsak", "· ·"); }],
+  [1500,  () => { setState("listening"); caption("Jarvis", "Buyrug'ingizni kutyapman."); }],
+  [3200,  () => { heat("mic", 2); caption("Siz", "iLevel loyihasi qaysi bosqichda?"); }],
+  [5000,  () => { heat("stt", 1.4); setState("thinking"); }],
+  [5600,  () => { heat("brain", 3); heat("memory", 1.6); heat("agenda", 1.6); }],
+  [7400,  () => { heat("tts", 3); setState("speaking");
+                  caption("Jarvis", "iLevel test bosqichida. Keyingi qadam — deploy, muddati juma."); }],
+  [11000, () => { setState("listening"); caption("Siz", "Deploy skriptini ishga tushir."); }],
+  [13000, () => { heat("stt", 1.2); heat("brain", 2); setState("thinking"); }],
+  [14600, () => { heat("tools", 3); setState("confirm");
+                  caption("Tasdiq", "Buyruq bajarilsinmi?  ./deploy.sh --prod"); }],
+  [18000, () => { heat("tts", 2.5); setState("speaking"); caption("Jarvis", "Bajarildi. Xatolik yo'q."); }],
+  [21000, () => { setState("idle"); captionBox.classList.remove("on"); }],
+];
+
+let timers = [];
+document.getElementById("play").onclick = () => {
+  timers.forEach(clearTimeout);
+  timers = SCRIPT.map(([at, fn]) => setTimeout(fn, at));
+};
+
+window.addEventListener("resize", () => { cssSize = resize(); });
+cssSize = resize();
+requestAnimationFrame(frame);
+</script>

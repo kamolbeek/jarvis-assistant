@@ -2,7 +2,7 @@
 
 Ovoz bilan boshqariladigan shaxsiy AI yordamchi — **o'zbek tilida**, macOS uchun.
 
-«Hey Jarvis» deysiz yoki ikki marta qarsak chalasiz — ekranda dumaloq orb yonadi,
+«Hey Jarvis» deysiz yoki ikki marta qarsak chalasiz — ekranda HUD yonadi,
 Jarvis sizni tinglaydi va kompyuterda ish bajaradi. Telegram bot emas, chat oynasi
 emas — Siri kabi, lekin butunlay sizniki va kompyuteringizni haqiqatan boshqaradi.
 
@@ -25,14 +25,14 @@ flowchart TD
     S["⏰ Rejalashtiruvchi"] --> M
     S -.->|"vaqti kelganda<br/>o'zi gapiradi"| B
 
-    C <--> H["🔵 Orb<br/>doim ekran ustida"]
+    C <--> H["◎ HUD<br/>doim ekran ustida"]
     D <--> H
 
-    style C fill:#1a3a5c,stroke:#35e0ff,color:#dff6ff
+    style C fill:#1a3a5c,stroke:#22e3ff,color:#ecfdff
     style D fill:#5c3a1a,stroke:#ffb545,color:#fff0d9
-    style H fill:#1a3a5c,stroke:#35e0ff,color:#dff6ff
-    style S fill:#1a3a5c,stroke:#35e0ff,color:#dff6ff
-    style M fill:#14202c,stroke:#35e0ff,color:#dff6ff
+    style H fill:#1a3a5c,stroke:#22e3ff,color:#ecfdff
+    style S fill:#1a3a5c,stroke:#22e3ff,color:#ecfdff
+    style M fill:#14202c,stroke:#22e3ff,color:#ecfdff
 ```
 
 ## Nima qila oladi
@@ -50,7 +50,7 @@ flowchart TD
 - **Sizning nomingizdan yozadi** — «Alisherga yoz, kechikaman de» desangiz,
   Telegram yoki SMS orqali yuboradi.
 - **Telefonda ham ishlaydi** — telefon brauzeridan bosib-gapirish sahifasi.
-- **Har bir xavfli amal uchun so'raydi** — orb'da ✅/❌ chiqadi, hammasi jurnalga yoziladi.
+- **Har bir xavfli amal uchun so'raydi** — HUD'da ✅/❌ chiqadi, hammasi jurnalga yoziladi.
 
 ## Tez boshlash
 
@@ -93,10 +93,32 @@ Hammasi yashil bo'lgach:
 ./scripts/run.sh
 ```
 
-Orb ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
+HUD ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
 
-> Orbni Jarvis'ni o'rnatmasdan ham ko'rish mumkin: `docs/orb-demo.html` ni
-> brauzerda oching — barcha holatlar va to'liq suhbat oqimi bor.
+> HUD'ni Jarvis'ni o'rnatmasdan ham ko'rish mumkin: `docs/orb-demo.html` ni
+> brauzerda oching — barcha holatlar, bo'g'inlarni «buzib» ko'rish va to'liq
+> suhbat oqimi bor.
+
+### HUD nimani ko'rsatadi
+
+Markazda JARVIS yozuvi — asosiy ikonka. «Hey Jarvis» deganingizda u yorqin
+oq bo'lib chaqnaydi, yadro halqalari kengayadi.
+
+Atrofida to'qqizta siferblat, har biri bitta bo'g'inga bog'langan: mikrofon,
+uyg'otish, nutq, miya, ovoz, xotira, reja, asbob, tarmoq. Ular shunchaki
+bezak emas:
+
+| Ko'rinishi | Ma'nosi |
+|---|---|
+| Siyon, sekin aylanadi | tayyor, kutmoqda |
+| Oq, tez aylanadi | ayni damda ish bajaryapti |
+| Sariq | ishlaydi, lekin e'tibor talab qiladi |
+| Qizil, X belgisi, to'xtagan | buzilgan |
+
+Bitta bo'g'in buzilsa, HUD chekkasi ham qizg'ish tus oladi. Siferblat ustiga
+sichqonchani olib borsangiz, sabab yoziladi — jurnal titkilash shart emas.
+
+Butun ranglar tizimi bitta joyda: `ui/renderer/palette.js`.
 
 ## Telefonda ishlatish
 
@@ -228,7 +250,7 @@ Uch qatlam:
 1. **Taqiqlangan naqshlar** — tasdiq ham so'ralmaydi, shunchaki bajarilmaydi.
 2. **Papka chegarasi** — ruxsat etilgan papkalardan tashqariga yozish bloklanadi
    (shell `>` yo'naltirishlari ham tekshiriladi).
-3. **Tasdiq** — qolgan xavfli amallar orb'da ✅/❌ bo'lib chiqadi.
+3. **Tasdiq** — qolgan xavfli amallar HUD'da ✅/❌ bo'lib chiqadi.
 
 Hammasi `~/.jarvis/audit.log` ga yoziladi. **Boshidan to'liq erkinlik bermang** —
 ishonch ortgan sari qoidalarni yumshating.
@@ -277,12 +299,16 @@ jarvis/
 ├── ui/             orb va telefon uchun HTTP + WebSocket server
 ├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
 ├── bus.py          hodisa shinasi
+├── health.py       bo'g'inlar tirikligi — HUD siferblatlari shundan
+├── doctor.py       diagnostika (`jarvis doctor`)
 └── __main__.py     asosiy sikl
 
 ui/
-├── main.js         Electron orb oynasi
+├── main.js         Electron oynasi
 └── renderer/
-    ├── orb.js      kompyuterdagi orb
+    ├── palette.js  ranglar — yagona manba
+    ├── hud.js      HUD chizuvchisi (siferblatlar, yadro, yozuv)
+    ├── orb.js      yadro bilan aloqa va kadrlar sikli
     └── phone.html  telefon sahifasi (bitta faylda)
 ```
 
