@@ -12,6 +12,20 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
+# Ikkita nusxa bitta mikrofon va bitta portni talashadi — ikkinchisi
+# tushunarsiz xato bilan yiqiladi. Sababini oldindan aytamiz.
+if pgrep -f "python -m jarvis" >/dev/null 2>&1; then
+  echo "Jarvis allaqachon ishlayapti."
+  echo
+  echo "Avtomatik rejim yoqilgan bo'lsa, qo'lda ishga tushirish kerak emas —"
+  echo "«Hey Jarvis» deb chaqiravering. Holatni ko'rish:"
+  echo "  ./scripts/autostart.sh status"
+  echo
+  echo "Avtomatik rejimni to'xtatib, qo'lda ishlatmoqchi bo'lsangiz:"
+  echo "  ./scripts/autostart.sh off"
+  exit 1
+fi
+
 ORB_PID=""
 
 # Yadro to'xtaganda orb ham yopilsin — osilib qolgan oyna qolmasin.

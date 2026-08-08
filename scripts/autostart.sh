@@ -25,7 +25,18 @@ fi
 status() {
   if [ -f "$PLIST" ] && launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
     echo "Yoqilgan — Jarvis login paytida o'zi ishga tushadi."
-    echo "Jurnal: $LOG_DIR/jarvis.log"
+
+    # Ro'yxatda turishi hali ishlayotganini bildirmaydi: yiqilib, qayta
+    # ko'tarilib turgan bo'lishi mumkin. Haqiqiy holatni jarayon ko'rsatadi.
+    if pgrep -f "python -m jarvis" >/dev/null 2>&1; then
+      echo "Yadro ishlayapti — «Hey Jarvis» deb chaqirsangiz bo'ladi."
+    else
+      echo "DIQQAT: yadro hozir ishlamayapti — yiqilgan bo'lishi mumkin."
+    fi
+
+    echo
+    echo "Jurnalning oxiri ($LOG_DIR/jarvis.log):"
+    tail -n 15 "$LOG_DIR/jarvis.log" 2>/dev/null | sed 's/^/  /' || echo "  (jurnal bo'sh)"
   elif [ -f "$PLIST" ]; then
     echo "Plist bor, lekin yuklanmagan. Qaytadan yoqish: ./scripts/autostart.sh"
   else
@@ -84,10 +95,13 @@ install() {
   <key>ThrottleInterval</key>
   <integer>15</integer>
 
+  <!-- Ikkalasi bitta faylga: Python jurnali stderr'ga yozadi, shuning uchun
+       ularni ajratsak, "jurnalga qara" degan maslahat bo'sh faylga olib
+       borardi — sabab esa ikkinchi faylda qolib ketardi. -->
   <key>StandardOutPath</key>
   <string>$LOG_DIR/jarvis.log</string>
   <key>StandardErrorPath</key>
-  <string>$LOG_DIR/jarvis.err.log</string>
+  <string>$LOG_DIR/jarvis.log</string>
 </dict>
 </plist>
 PLIST_EOF
