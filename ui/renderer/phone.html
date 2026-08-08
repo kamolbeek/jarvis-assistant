@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#050b12" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Jarvis</title>
+<style>
+  :root {
+    --cyan: #35e0ff;
+    --amber: #ffb545;
+    --red: #ff5a52;
+    --bg: #050b12;
+    --text: #dff6ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, -apple-system, system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  }
+
+  header { text-align: center; }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase;
+       color: var(--cyan); opacity: 0.85; }
+  #status { margin-top: 6px; font-size: 12px; opacity: 0.5; }
+
+  #orb { display: block; touch-action: manipulation; cursor: pointer; }
+
+  #hint { font-size: 13px; opacity: 0.55; text-align: center; min-height: 18px; }
+
+  #log {
+    width: 100%;
+    max-width: 480px;
+    flex: 1;
+    margin: 12px 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .msg {
+    padding: 10px 13px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.45;
+    max-width: 88%;
+    animation: rise 160ms ease-out;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .me   { align-self: flex-end; background: rgba(53,224,255,0.14);
+          border: 1px solid rgba(53,224,255,0.3); }
+  .jarvis { align-self: flex-start; background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1); }
+  .err  { align-self: center; background: rgba(255,90,82,0.14);
+          border: 1px solid rgba(255,90,82,0.4); color: #ffd9d6; font-size: 13px; }
+
+  #compose { display: flex; gap: 8px; width: 100%; max-width: 480px; }
+  #text {
+    flex: 1; padding: 11px 14px; font: inherit; font-size: 15px;
+    color: var(--text); background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+  }
+  #text::placeholder { color: rgba(223,246,255,0.35); }
+  #send {
+    padding: 0 18px; font: inherit; font-weight: 600; color: var(--cyan);
+    background: rgba(53,224,255,0.14); border: 1px solid rgba(53,224,255,0.4);
+    border-radius: 12px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Jarvis</h1>
+  <div id="status">ulanmoqda…</div>
+</header>
+
+<div id="log"></div>
+
+<canvas id="orb" width="220" height="220"></canvas>
+<div id="hint">Gapirish uchun bosing</div>
+
+<div id="compose">
+  <input id="text" type="text" placeholder="yoki yozib yuboring…" autocomplete="off" />
+  <button id="send">→</button>
+</div>
+
+<script>
+// ============================================================ Sozlamalar
+
+const TARGET_RATE = 16000;      // yadro shu chastotani kutadi
+const SILENCE_MS = 1200;        // shuncha jimlikdan keyin yozib olish tugaydi
+const MAX_RECORD_MS = 30000;
+const SILENCE_RMS = 0.012;      // shundan past = jimlik
+
+// Token sahifa manzilidan olinadi va WebSocket'ga ham o'tkaziladi.
+const TOKEN = new URLSearchParams(location.search).get("t") || "";
+const WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") +
+               location.host + (TOKEN ? "?t=" + encodeURIComponent(TOKEN) : "");
+
+// ============================================================ Orb chizish
+
+const canvas = document.getElementById("orb");
+const ctx2d = canvas.getContext("2d");
+
+const PALETTE = {
+  idle:      { hue: 190, glow: 0.30, spin: 0.12, core: 0.32 },
+  wake:      { hue: 190, glow: 1.00, spin: 1.60, core: 1.00 },
+  listening: { hue: 190, glow: 0.72, spin: 0.42, core: 0.62 },
+  thinking:  { hue: 205, glow: 0.62, spin: 1.35, core: 0.48 },
+  speaking:  { hue: 186, glow: 0.85, spin: 0.30, core: 0.75 },
+  confirm:   { hue: 38,  glow: 0.80, spin: 0.20, core: 0.68 },
+  error:     { hue: 2,   glow: 0.85, spin: 0.16, core: 0.70 },
+};
+const ARCS = [
+  { r: 0.92, start: 0.0, sweep: 1.25, speed:  0.55, width: 1.6, alpha: 0.75 },
+  { r: 0.79, start: 1.6, sweep: 2.10, speed: -0.34, width: 2.4, alpha: 0.65 },
+  { r: 0.66, start: 4.2, sweep: 1.05, speed:  0.85, width: 1.3, alpha: 0.55 },
+];
+
+let state = "idle", level = 0, smooth = 0, hue = 190, glow = 0.3;
+let W = 220, H = 220;
+
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.min(220, Math.round(window.innerWidth * 0.55));
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+  W = H = size;
+  canvas.width = Math.round(size * dpr);
+  canvas.height = Math.round(size * dpr);
+  ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerpHue = (a, b, t) => (a + ((((b - a + 540) % 360) - 180) * t) + 360) % 360;
+
+function draw(time) {
+  const p = PALETTE[state] || PALETTE.idle;
+  const t = time / 1000;
+  hue = lerpHue(hue, p.hue, 0.08);
+  glow = lerp(glow, p.glow, 0.08);
+  smooth = lerp(smooth, level, 0.22);
+
+  const cx = W / 2, cy = H / 2;
+  const radius = (Math.min(W, H) / 2 - 12) * (1 + Math.sin(t * 1.7) * 0.02);
+  const energy = Math.min(1, smooth * 1.4);
+  const bright = Math.min(1, glow + energy * 0.35);
+
+  ctx2d.clearRect(0, 0, W, H);
+  ctx2d.save();
+  ctx2d.globalCompositeOperation = "lighter";
+
+  // Yorug'lik
+  let g = ctx2d.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * 1.5);
+  g.addColorStop(0, `hsla(${hue},100%,62%,${0.22 * bright})`);
+  g.addColorStop(1, "hsla(0,0%,0%,0)");
+  ctx2d.fillStyle = g;
+  ctx2d.beginPath(); ctx2d.arc(cx, cy, radius * 1.5, 0, 7); ctx2d.fill();
+
+  // Aylanuvchi yoylar
+  ctx2d.lineCap = "round";
+  for (const arc of ARCS) {
+    const a = arc.start + t * arc.speed * p.spin * 2.2;
+    ctx2d.beginPath();
+    ctx2d.arc(cx, cy, radius * arc.r, a, a + arc.sweep);
+    ctx2d.strokeStyle = `hsla(${hue},100%,66%,${arc.alpha * bright})`;
+    ctx2d.lineWidth = arc.width;
+    ctx2d.stroke();
+  }
+  ctx2d.lineCap = "butt";
+
+  // Ovozga javob beradigan to'lqin
+  if (state === "listening" || state === "speaking") {
+    const inner = radius * 0.6;
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const n = Math.sin(i * 0.7 + t * 5.5) * 0.5 + Math.sin(i * 1.9 - t * 3.1) * 0.5;
+      const outer = inner + Math.max(1.5, radius * 0.16 * energy * (0.45 + 0.55 * Math.abs(n)));
+      ctx2d.beginPath();
+      ctx2d.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      ctx2d.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+      ctx2d.strokeStyle = `hsla(${hue},100%,72%,${(0.3 + energy * 0.5) * bright})`;
+      ctx2d.lineWidth = 1.8;
+      ctx2d.stroke();
+    }
+  }
+
+  // Yadro
+  const r = radius * 0.3 * (1 + Math.sin(t * 2.6) * 0.06 + energy * 0.16);
+  g = ctx2d.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, `hsla(${hue},100%,92%,${0.95 * p.core * bright})`);
+  g.addColorStop(1, "hsla(0,0%,0%,0)");
+  ctx2d.fillStyle = g;
+  ctx2d.beginPath(); ctx2d.arc(cx, cy, r, 0, 7); ctx2d.fill();
+
+  ctx2d.restore();
+  requestAnimationFrame(draw);
+}
+
+// ============================================================ Interfeys
+
+const statusEl = document.getElementById("status");
+const hintEl = document.getElementById("hint");
+const logEl = document.getElementById("log");
+const textEl = document.getElementById("text");
+
+function addMessage(kind, text) {
+  const node = document.createElement("div");
+  node.className = "msg " + kind;
+  node.textContent = text;
+  logEl.appendChild(node);
+  logEl.scrollTop = logEl.scrollHeight;
+  // Ro'yxat cheksiz o'smasin
+  while (logEl.children.length > 40) logEl.removeChild(logEl.firstChild);
+}
+
+// ============================================================ Aloqa
+
+let socket = null;
+let connected = false;
+
+function connect() {
+  socket = new WebSocket(WS_URL);
+
+  socket.onopen = () => {
+    connected = true;
+    statusEl.textContent = "ulandi";
+    hintEl.textContent = "Gapirish uchun bosing";
+  };
+
+  socket.onclose = (event) => {
+    connected = false;
+    state = "idle";
+    statusEl.textContent = event.code === 4401 ? "token noto'g'ri" : "aloqa uzildi";
+    if (event.code !== 4401) setTimeout(connect, 2000);
+  };
+
+  socket.onerror = () => socket.close();
+
+  socket.onmessage = (event) => {
+    let data;
+    try { data = JSON.parse(event.data); } catch { return; }
+
+    switch (data.type) {
+      case "hello":
+      case "state":
+        if (data.state) state = data.state;
+        break;
+      case "level":
+        // Kompyuterdagi daraja telefondagi animatsiyani chalkashtirmasin
+        if (!recording) level = data.value;
+        break;
+      case "you_said":
+        addMessage("me", data.text);
+        break;
+      case "reply_text":
+        addMessage("jarvis", data.text);
+        break;
+      case "reply_audio":
+        playPcm(data.pcm, data.sample_rate);
+        break;
+      case "done":
+        hintEl.textContent = "Gapirish uchun bosing";
+        break;
+      case "error":
+        addMessage("err", data.text);
+        break;
+    }
+  };
+}
+
+function send(message) {
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+}
+
+// ============================================================ Ovoz yozish
+
+let audioCtx = null;
+let recording = false;
+let recorded = [];      // Float32 bo'laklar (qurilma chastotasida)
+let mediaStream = null;
+let workletNode = null;
+let sourceNode = null;
+let silenceSince = 0;
+let startedAt = 0;
+
+// AudioWorklet kodi — alohida fayl bo'lmasligi uchun blob orqali yuklanadi.
+const WORKLET = `
+class Rec extends AudioWorkletProcessor {
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) this.port.postMessage(new Float32Array(ch));
+    return true;
+  }
+}
+registerProcessor('rec', Rec);
+`;
+
+async function ensureAudio() {
+  if (audioCtx) {
+    // iOS: sahifa fonga ketsa kontekst to'xtaydi
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+    return;
+  }
+  // iOS Safari so'ralgan chastotani e'tiborsiz qoldirishi mumkin —
+  // shuning uchun keyinroq o'zimiz qayta namunalaymiz.
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+  await audioCtx.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+}
+
+async function startRecording() {
+  if (recording || !connected) return;
+  try {
+    await ensureAudio();
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (err) {
+    addMessage("err", "Mikrofonga ruxsat berilmadi");
+    return;
+  }
+
+  recorded = [];
+  recording = true;
+  state = "listening";
+  startedAt = performance.now();
+  silenceSince = 0;
+  hintEl.textContent = "Tinglayapman… (to'xtatish uchun bosing)";
+
+  sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+  workletNode = new AudioWorkletNode(audioCtx, "rec");
+  workletNode.port.onmessage = (event) => {
+    if (!recording) return;
+    const chunk = event.data;
+    recorded.push(chunk);
+
+    // Daraja va jimlik
+    let sum = 0;
+    for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
+    const rms = Math.sqrt(sum / chunk.length);
+    level = Math.min(1, rms * 8);
+
+    const now = performance.now();
+    if (rms < SILENCE_RMS) {
+      if (!silenceSince) silenceSince = now;
+      else if (now - silenceSince > SILENCE_MS && now - startedAt > 900) stopRecording();
+    } else {
+      silenceSince = 0;
+    }
+    if (now - startedAt > MAX_RECORD_MS) stopRecording();
+  };
+
+  sourceNode.connect(workletNode);
+  // Worklet chiqishga ulanmasa, ba'zi brauzerlarda ishlamaydi.
+  workletNode.connect(audioCtx.destination);
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  level = 0;
+  state = "thinking";
+  hintEl.textContent = "O'ylayapman…";
+
+  try { sourceNode?.disconnect(); workletNode?.disconnect(); } catch {}
+  mediaStream?.getTracks().forEach((track) => track.stop());
+  mediaStream = null;
+
+  const merged = mergeFloat32(recorded);
+  recorded = [];
+  if (merged.length < audioCtx.sampleRate * 0.3) {
+    hintEl.textContent = "Juda qisqa — yana urinib ko'ring";
+    state = "idle";
+    return;
+  }
+
+  const resampled = resample(merged, audioCtx.sampleRate, TARGET_RATE);
+  send({ type: "audio", pcm: floatToBase64Pcm(resampled), sample_rate: TARGET_RATE });
+}
+
+function mergeFloat32(chunks) {
+  let total = 0;
+  for (const chunk of chunks) total += chunk.length;
+  const out = new Float32Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
+  return out;
+}
+
+// Chiziqli interpolatsiya — nutq uchun yetarli sifat beradi.
+function resample(input, fromRate, toRate) {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const length = Math.floor(input.length / ratio);
+  const out = new Float32Array(length);
+  for (let i = 0; i < length; i++) {
+    const position = i * ratio;
+    const index = Math.floor(position);
+    const frac = position - index;
+    const a = input[index] || 0;
+    const b = input[index + 1] !== undefined ? input[index + 1] : a;
+    out[i] = a + (b - a) * frac;
+  }
+  return out;
+}
+
+function floatToBase64Pcm(samples) {
+  const pcm = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const value = Math.max(-1, Math.min(1, samples[i]));
+    pcm[i] = value < 0 ? value * 0x8000 : value * 0x7fff;
+  }
+  const bytes = new Uint8Array(pcm.buffer);
+  // Katta massivda `apply` stek chegarasidan oshib ketadi — bo'lakma-bo'lak.
+  let binary = "";
+  const STEP = 0x8000;
+  for (let i = 0; i < bytes.length; i += STEP) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + STEP));
+  }
+  return btoa(binary);
+}
+
+// ============================================================ Ovoz chiqarish
+
+let playQueue = Promise.resolve();
+
+function playPcm(base64, sampleRate) {
+  playQueue = playQueue.then(() => playPcmNow(base64, sampleRate)).catch(() => {});
+}
+
+async function playPcmNow(base64, sampleRate) {
+  await ensureAudio();
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const pcm = new Int16Array(bytes.buffer);
+
+  const buffer = audioCtx.createBuffer(1, pcm.length, sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 32768;
+
+  // Ovoz balandligini animatsiyaga bog'lash uchun analizator
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  state = "speaking";
+  let running = true;
+  (function meter() {
+    if (!running) return;
+    analyser.getByteFrequencyData(data);
+    let sum = 0;
+    for (const value of data) sum += value;
+    level = Math.min(1, sum / data.length / 90);
+    requestAnimationFrame(meter);
+  })();
+
+  return new Promise((resolve) => {
+    source.onended = () => {
+      running = false;
+      level = 0;
+      state = "idle";
+      resolve();
+    };
+    source.start();
+  });
+}
+
+// ============================================================ Harakatlar
+
+canvas.addEventListener("click", () => {
+  if (recording) stopRecording();
+  else startRecording();
+});
+
+document.getElementById("send").addEventListener("click", sendText);
+textEl.addEventListener("keydown", (event) => { if (event.key === "Enter") sendText(); });
+
+function sendText() {
+  const value = textEl.value.trim();
+  if (!value || !connected) return;
+  addMessage("me", value);
+  send({ type: "text", text: value });
+  textEl.value = "";
+  state = "thinking";
+}
+
+window.addEventListener("resize", fitCanvas);
+
+fitCanvas();
+connect();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

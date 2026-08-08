@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from ..bus import EventBus
 from ..config import Config
 from ..safety.gate import SafetyGate
+from .agenda import Agenda
 from .memory import Memory
 from .prompts import build_system_prompt
 
@@ -30,6 +32,20 @@ MIN_SENTENCE_CHARS = 12
 # Ovozda ma'nosiz markdown belgilari.
 _MARKDOWN_NOISE = re.compile(r"[*_`#]+")
 _CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+
+
+WEEKDAYS_UZ = (
+    "dushanba", "seshanba", "chorshanba", "payshanba", "juma", "shanba", "yakshanba",
+)
+
+
+def now_line() -> str:
+    """Modelga joriy vaqtni bildiruvchi qator."""
+    moment = datetime.now()
+    return (
+        f"hozir: {moment.strftime('%Y-%m-%d %H:%M')}, "
+        f"{WEEKDAYS_UZ[moment.weekday()]}"
+    )
 
 
 def clean_for_speech(text: str) -> str:
@@ -48,7 +64,10 @@ class Brain:
     config: Config
     bus: EventBus
     memory: Memory
+    agenda: Agenda
     gate: SafetyGate
+    # Jarvis'ga darhol gapirish imkonini beruvchi qayta chaqiruv (yadro beradi).
+    announce: Callable[[str], Awaitable[None]]
 
     _client: Any = None
     _mcp_server: Any = None
@@ -66,7 +85,7 @@ class Brain:
         from ..tools import server as tools_server
 
         self.config.ensure_dirs()
-        self._mcp_server = tools_server.build_server(self.memory)
+        self._mcp_server = tools_server.build_server(self.memory, self.agenda, self.announce)
         self._system_prompt = self._build_prompt()
 
         options = ClaudeAgentOptions(
@@ -120,8 +139,12 @@ class Brain:
 
         from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 
+        # Xotiraga foydalanuvchi aytgan matnni saqlaymiz, modelga esa vaqt bilan
+        # birga yuboramiz. Vaqtsiz «ertaga soat 10 da» ni sanaga aylantirib
+        # bo'lmaydi, tizim ko'rsatmasi esa seans davomida o'zgarmaydi — shuning
+        # uchun uni har bir savolga qo'shib turamiz.
         self.memory.add_turn(self._session_id, "user", text)
-        await self._client.query(text)
+        await self._client.query(f"[{now_line()}]\n{text}")
 
         buffer = ""
         full: list[str] = []

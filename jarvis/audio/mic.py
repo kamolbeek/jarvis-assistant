@@ -30,10 +30,12 @@ class MicStream:
         device: Any = None,
         preroll_ms: int = 300,
         queue_max: int = 100,
+        gain: float = 1.0,
     ) -> None:
         self.sample_rate = sample_rate
         self.frame_samples = frame_samples
         self.device = device
+        self.gain = max(0.1, float(gain))
         self._queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=queue_max)
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stream: Any = None
@@ -54,6 +56,12 @@ class MicStream:
             if status:
                 log.debug("Audio oqimi holati: %s", status)
             frame = indata[:, 0].copy()
+            if self.gain != 1.0:
+                # Uzoq masofadan gapirish uchun kuchaytirish. `clip` shart:
+                # kuchaytirilgan qiymat int16 chegarasidan chiqsa, o'ralib
+                # ketib, kuchli signal shovqinga aylanardi.
+                boosted = np.clip(frame.astype(np.float32) * self.gain, -32768, 32767)
+                frame = boosted.astype(np.int16)
             if self._loop is not None and not self._loop.is_closed():
                 self._loop.call_soon_threadsafe(self._push, frame)
 

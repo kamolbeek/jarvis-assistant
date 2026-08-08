@@ -37,6 +37,13 @@ audio:
   input_device: null               # null = tizim standarti; yoki qurilma nomi/raqami
   output_device: null
 
+  # Uzoq masofadan gapirish uchun kirish kuchaytirgichi.
+  # Xonaning narigi burchagidan chaqirmoqchi bo'lsangiz, 2.0–4.0 ga ko'taring
+  # va `activation.wake_word.threshold` ni 0.35 ga tushiring.
+  # Diqqat: kuchaytirish shovqinni ham kuchaytiradi — yolg'on ishga tushish
+  # ko'paysa, qaytaring. Eng yaxshi natija baribir yaxshi mikrofondan keladi.
+  input_gain: 1.0
+
   # Gapirishni tugatganini aniqlash
   endpointing:
     backend: "webrtcvad"           # webrtcvad | energy
@@ -68,10 +75,24 @@ brain:
   max_budget_usd: 2.0
 
 memory:
-  # Barqaror xotira: afzalliklar, faktlar, loyiha holati
+  # Barqaror xotira: afzalliklar, faktlar, loyihalar, vazifalar, aloqalar
   path: "~/.jarvis/memory.db"
   # Har bir suhbatdan keyin muhim faktlarni saqlab qo'yish
   autosave: true
+
+scheduler:
+  # Jarvis'ni "eslatuvchi" emas, "yordamchi" qiladigan qism:
+  # vaqti kelgan vazifalarni o'zi aytadi.
+  enabled: true
+  check_interval_sec: 30
+
+  # Kunlik brief: ertalab bugungi ishlarni aytib beradi. Bo'sh satr = o'chirilgan.
+  brief_time: "08:30"
+
+  # Jim soatlar — bu oraliqda uyg'otmaydi. To'plangan eslatmalar
+  # ertalab birinchi imkoniyatda aytiladi.
+  quiet_start_hour: 22
+  quiet_end_hour: 7
 
 safety:
   # Xavfsizlik darvozasi: qaysi amallar tasdiq so'raydi.
@@ -108,9 +129,20 @@ safety:
   audit_log: "~/.jarvis/audit.log"
 
 ui:
-  # Orb (dumaloq ikonka) bilan aloqa uchun lokal WebSocket
+  # Orb va telefon sahifasi shu manzilda xizmat qiladi.
+  #
+  #   127.0.0.1 — faqat shu kompyuter (eng xavfsiz, telefon ulanolmaydi)
+  #   0.0.0.0   — tarmoqdagi barcha qurilmalar, ya'ni telefoningiz ham
+  #
+  # Telefonni ulash uchun `0.0.0.0` qiling VA token qo'ying. Tokensiz
+  # tarmoqqa ochish — bir WiFi'dagi har kimga kompyuteringizni berish demak,
+  # shuning uchun Jarvis bunday holatda ishga tushmaydi.
   host: "127.0.0.1"
   port: 8765
+
+  # Token yaratish:  openssl rand -hex 16
+  token: ""
+
   # Orb ekranda qayerda tursin
   position: "bottom-right"         # bottom-right | bottom-left | top-right | top-left | center
 

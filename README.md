@@ -9,35 +9,47 @@ emas — Siri kabi, lekin butunlay sizniki va kompyuteringizni haqiqatan boshqar
 ```mermaid
 flowchart TD
     A["🎙 Uyg'otish<br/>«Hey Jarvis» · 👏👏 qarsak · ⌘⇧J"] --> B
+    P["📱 Telefon<br/>bosib-gapirish sahifasi"] --> B
 
     B["🔊 Ovoz quvuri<br/>VAD → STT (o'zbekcha) → … → TTS"] --> C
 
-    C["🧠 Jarvis miyasi<br/>Claude Agent SDK + barqaror xotira"] --> D
+    C["🧠 Jarvis miyasi<br/>Claude Agent SDK"] --> D
 
     D{"🛡 Xavfsizlik darvozasi<br/>tasdiq · taqiq · audit"}
 
     D -->|ruxsat| E["💻 Kompyuter<br/>fayl · shell · ilovalar"]
     D -->|ruxsat| F["🌐 Internet<br/>qidiruv · sahifa o'qish"]
-    D -->|ruxsat| G["📱 Kanallar<br/>iMessage · Shortcuts · Telegram · n8n"]
+    D -->|ruxsat| G["📨 Kanallar<br/>iMessage · Telegram · Shortcuts · n8n"]
 
-    C <--> H["🔵 Orb interfeysi<br/>Electron · doim ustida"]
+    M[("🗂 Xotira va agenda<br/>faktlar · loyihalar<br/>vazifalar · aloqalar")] <--> C
+    S["⏰ Rejalashtiruvchi"] --> M
+    S -.->|"vaqti kelganda<br/>o'zi gapiradi"| B
+
+    C <--> H["🔵 Orb<br/>doim ekran ustida"]
     D <--> H
 
     style C fill:#1a3a5c,stroke:#35e0ff,color:#dff6ff
     style D fill:#5c3a1a,stroke:#ffb545,color:#fff0d9
     style H fill:#1a3a5c,stroke:#35e0ff,color:#dff6ff
+    style S fill:#1a3a5c,stroke:#35e0ff,color:#dff6ff
+    style M fill:#14202c,stroke:#35e0ff,color:#dff6ff
 ```
 
 ## Nima qila oladi
 
 - **Ovoz bilan uyg'onadi** — «Hey Jarvis», ikki marta qarsak, yoki `⌘⇧J`.
+  Qarsak bilan chaqirsangiz «Buyrug'ingizni kutyapman» deydi.
 - **O'zbekcha gapiradi va tushunadi** — savol ham, javob ham o'zbek tilida.
 - **Kompyuterni boshqaradi** — fayl o'qiydi/yozadi, shell buyruqlarini bajaradi,
   ilovalarni ochadi, kod yozadi, loyihani davom ettiradi.
-- **Eslab qoladi** — afzalliklaringiz va loyiha holati suhbatlar orasida saqlanadi.
-- **Telefoningizga yetib boradi** — iMessage/SMS yuboradi, macOS Shortcuts orqali
-  iPhone'da amal bajaradi.
-- **Xabar beradi** — uzoq ish tugaganda Telegram yoki bildirishnoma yuboradi.
+- **Loyihalaringizni yuritadi** — har bir loyihaning holati, keyingi qadami va
+  muddati saqlanadi. «Loyihalarim qaysi bosqichda?» deb so'rasangiz, aytadi.
+- **O'zi eslatadi** — «ertaga soat 10 da Alisher bilan uchrashuv» desangiz,
+  ertaga soat 10 da **o'zi gapiradi**. So'rashingiz shart emas.
+- **Ertalab kunni tushuntiradi** — belgilangan vaqtda bugungi ishlarni aytib beradi.
+- **Sizning nomingizdan yozadi** — «Alisherga yoz, kechikaman de» desangiz,
+  Telegram yoki SMS orqali yuboradi.
+- **Telefonda ham ishlaydi** — telefon brauzeridan bosib-gapirish sahifasi.
 - **Har bir xavfli amal uchun so'raydi** — orb'da ✅/❌ chiqadi, hammasi jurnalga yoziladi.
 
 ## Tez boshlash
@@ -70,6 +82,83 @@ Ishga tushiring:
 ```
 
 Orb ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
+
+## Telefonda ishlatish
+
+Boshidan aniq aytish kerak: **iPhone'da fon rejimida «Hey Jarvis» deb uyg'otish
+mumkin emas.** Apple doim tinglash imkonini faqat Siri'ga bergan — hech qanday
+uchinchi tomon ilovasi buni qila olmaydi. Bu Jarvis'ning kamchiligi emas,
+iOS'ning chegarasi.
+
+Shuning uchun telefonda uchta haqiqiy yo'l bor, va ular birga yaxshi ishlaydi:
+
+**1. Bosib-gapirish sahifasi (asosiy yo'l).** Yadro telefon uchun sahifani o'zi
+tarqatadi. Telefon brauzerida ochasiz, orbni bosasiz, gapirasiz — javob o'sha
+telefonga ovoz bilan qaytadi. Ilova o'rnatish shart emas; sahifani "Home Screen"
+ga qo'shsangiz, oddiy ilovadek ko'rinadi.
+
+```yaml
+# config/jarvis.yaml
+ui:
+  host: "0.0.0.0"                 # tarmoqdagi qurilmalar uchun
+  token: "bu-yerga-tasodifiy-satr"  # openssl rand -hex 16
+```
+
+Jarvis ishga tushganda terminalda manzilni yozadi — telefonda o'shani oching.
+
+> **Nega token majburiy?** `0.0.0.0` — bu "bir WiFi'dagi hamma ulanishi mumkin"
+> degani. Tokensiz qo'shni ham sizning kompyuteringizda buyruq bajarardi.
+> Token bo'lmasa Jarvis ishga tushmaydi va buni aytadi.
+
+Uydan tashqarida ishlatish uchun **Tailscale** qo'ying (bepul) — telefoningiz
+va kompyuteringiz qayerda bo'lsa ham bitta xususiy tarmoqda bo'ladi.
+Portni internetga to'g'ridan-to'g'ri ochmang.
+
+**2. Siri qisqa yo'li.** Shortcuts'da "Jarvis" nomli qisqa yo'l yarating,
+u sahifani ochsin. Shunda «Hey Siri, Jarvis» deysiz — bir so'z ko'p, lekin
+telefonni qo'lga olmasdan ishlaydi.
+
+**3. Telegram ovozli xabar.** Kompyuter o'chiq bo'lsa ham ishlaydigan yagona
+yo'l — Jarvis keyin o'qiydi va bajaradi.
+
+## O'zbekcha uyg'otuvchi so'z: «Salom Jarvis»
+
+Hozir standart model — inglizcha talaffuzdagi **«hey jarvis»** (openWakeWord'da
+tayyor keladi). «Salom Jarvis» yoki o'zbekcha talaffuzdagi «hey Jarvis» uchun
+o'z modelingizni o'rgatish kerak. Bu bir martalik ish va bepul:
+
+1. openWakeWord'ning tayyor daftarida (`automatic_model_training.ipynb`,
+   Google Colab'da bepul ishlaydi) iborani kiriting: `salom jarvis`.
+2. U sintetik ovozlar bilan ma'lumot yaratib, `.onnx` model chiqaradi.
+3. Modelni `~/.jarvis/wakewords/` ga qo'ying va konfiguratsiyada ko'rsating:
+
+```yaml
+activation:
+  wake_word:
+    model: "salom_jarvis"
+    threshold: 0.45
+```
+
+Ancha tezroq muqobil: **Picovoice Porcupine** — veb-interfeysida istalgan
+iborani yozib, bir necha daqiqada model olasiz. Bepul tier shaxsiy foydalanish
+uchun yetarli. `backend: "porcupine"` qiling va `PICOVOICE_ACCESS_KEY` qo'ying.
+
+## Uzoq masofadan chaqirish
+
+Xonaning narigi burchagidan chaqirmoqchi bo'lsangiz:
+
+```yaml
+audio:
+  input_gain: 3.0        # kirish signalini kuchaytirish
+activation:
+  wake_word:
+    threshold: 0.35      # sezgirroq (standart 0.5)
+```
+
+Kuchaytirish shovqinni ham kuchaytiradi — yolg'on ishga tushish ko'paysa,
+qiymatlarni qaytaring. Rostini aytganda, eng katta farqni yaxshi mikrofon
+beradi: MacBook'ning ichki mikrofoni 1–2 metrgacha yaxshi ishlaydi, undan
+narisiga tashqi mikrofon kerak.
 
 ## O'zbek tili uchun ovoz: qaysi provayderni tanlash
 
@@ -133,13 +222,19 @@ ishonch ortgan sari qoidalarni yumshating.
 
 Buni oldindan bilib qo'ying, keyin ko'ngil qolmasin:
 
-**iPhone'ni to'liq boshqarib bo'lmaydi.** Apple ruxsat bermaydi. Shortcuts orqali
-cheklangan ishlar mumkin (eslatma, xabar, joylashuv), lekin «telefonimni to'liq
-boshqar» degani iOS'da yo'q. Android'da ADB va Tasker bilan ancha ko'p narsa mumkin.
+**Telefonda «Hey Jarvis» deb fon rejimida uyg'otib bo'lmaydi.** Apple buni faqat
+Siri'ga ruxsat bergan. Yuqoridagi uchta yo'l — sahifa, Siri qisqa yo'li, Telegram —
+mavjud eng yaxshi variantlar.
+
+**iPhone'ni to'liq boshqarib bo'lmaydi.** Shortcuts orqali cheklangan ishlar mumkin
+(eslatma, xabar, joylashuv), lekin «telefonimni to'liq boshqar» degani iOS'da yo'q.
+Android'da ADB va Tasker bilan ancha ko'p narsa mumkin.
 
 **Kompyuter yoqiq bo'lishi kerak.** Jarvis lokal ishlaydi — uxlab qolgan mashinada
-ishlamaydi. Doimiy ishlashi kerak bo'lgan ishlarni (kunlik hisobot, monitoring)
-VPS'dagi n8n'ga o'tkazing va `call_n8n` orqali ulang.
+ishlamaydi, eslatmalar ham aytilmaydi (uyg'onganda aytiladi). Uxlashini
+to'xtatish uchun: Tizim sozlamalari → Batareya → "Prevent automatic sleeping".
+Doimiy ishlashi kerak bo'lgan ishlarni VPS'dagi n8n'ga o'tkazing va `call_n8n`
+orqali ulang.
 
 **Ovoz kechikishi bor.** Uyg'onishdan javobgacha odatda 2–4 soniya: gapirish
 tugashini kutish, STT, model, TTS. Javob gap-gap chiqariladi, shuning uchun
@@ -157,16 +252,23 @@ xatolarga olib keladi. Muhim buyruqlarni sekinroq va aniq ayting.
 jarvis/
 ├── audio/          mikrofon, uyg'otuvchi so'z, qarsak, gapirish tugashi (VAD)
 ├── voice/          STT va TTS provayderlari + ijro
-├── brain/          Claude Agent SDK, xotira, tizim ko'rsatmasi
+├── brain/
+│   ├── agent.py    Claude Agent SDK ustidagi qatlam
+│   ├── agenda.py   loyihalar, vazifalar, aloqalar
+│   ├── memory.py   barqaror faktlar va suhbatlar
+│   └── prompts.py  o'zbekcha tizim ko'rsatmasi
 ├── safety/         xavfsizlik darvozasi va audit
-├── tools/          macOS, Shortcuts, Telegram, n8n asboblari
-├── ui/             orb bilan WebSocket aloqasi
-├── bus.py          hodisa shinasi (yadro ↔ orb)
+├── tools/          xotira, agenda, macOS, Telegram, Shortcuts asboblari
+├── ui/             orb va telefon uchun HTTP + WebSocket server
+├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
+├── bus.py          hodisa shinasi
 └── __main__.py     asosiy sikl
 
-ui/                 Electron orb: doim ustida turadigan suzuvchi interfeys
-config/             sozlamalar
-tests/              tashqi xizmatlarsiz ishlaydigan testlar
+ui/
+├── main.js         Electron orb oynasi
+└── renderer/
+    ├── orb.js      kompyuterdagi orb
+    └── phone.html  telefon sahifasi (bitta faylda)
 ```
 
 Testlar API kaliti va mikrofon talab qilmaydi:
@@ -175,11 +277,25 @@ Testlar API kaliti va mikrofon talab qilmaydi:
 python -m pytest tests/ -q
 ```
 
+## Misollar
+
+Ovoz bilan aytishingiz mumkin:
+
+| Siz aytasiz | Jarvis nima qiladi |
+| --- | --- |
+| «Ertaga soat 10 da Alisher bilan uchrashuv» | vazifa yozadi va **ertaga soat 10 da o'zi eslatadi** |
+| «Har kuni ertalab 9 da iLevel hisobotini tekshir» | takrorlanuvchi vazifa yaratadi |
+| «Loyihalarim qaysi bosqichda?» | har birining holati va keyingi qadamini aytadi |
+| «iLevel loyihasi test bosqichida, keyingi qadam — deploy» | loyiha holatini yangilaydi |
+| «Alisherga yoz, kechikaman de» | aloqani topib, Telegram/SMS yuboradi |
+| «Bugun nima ishlarim bor?» | kunlik ro'yxatni aytadi |
+| «Shu papkadagi kodni ko'r va testlarni ishga tushir» | o'qiydi, bajaradi, natijani aytadi |
+
 ## Keyingi bosqichlar
 
 - [ ] Uzluksiz suhbat rejimi — har safar «Hey Jarvis» demasdan davom ettirish
 - [ ] Jarvis gapirayotganda uni bo'lish (barge-in)
-- [ ] O'zbekcha uyg'otuvchi so'z modeli (hozir inglizcha «hey jarvis»)
+- [ ] Tayyor o'zbekcha uyg'otuvchi so'z modeli («Salom Jarvis») repoda
 - [ ] Brauzer boshqaruvi (Playwright)
-- [ ] Vaqt bo'yicha ishga tushuvchi vazifalar (kunlik brief)
+- [ ] Kalendar integratsiyasi (Google Calendar / Apple Calendar)
 - [ ] Supabase orqali xotirani qurilmalar o'rtasida sinxronlash
