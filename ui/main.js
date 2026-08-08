@@ -223,6 +223,37 @@ ipcMain.on("desk-open-folder", (_e, key) => {
   } catch { /* noma'lum papka — e'tiborsiz */ }
 });
 
+// --- Markaziy rasm: foydalanuvchi o'z rasmini tashlaydi, biz saqlaymiz ---
+//
+// Foydalanuvchi HUD ustiga rasm faylini tashlasa, u userData ichiga yoziladi
+// va keyingi ishga tushirishlarda ham o'sha rasm ko'rsatiladi.
+
+const FIGURE_PATH = () => path.join(app.getPath("userData"), "markaz.png");
+
+ipcMain.handle("figure-get", () => {
+  try {
+    return fs.existsSync(FIGURE_PATH()) ? FIGURE_PATH() : null;
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle("figure-save", (_e, buffer) => {
+  try {
+    fs.writeFileSync(FIGURE_PATH(), Buffer.from(buffer));
+    return FIGURE_PATH();
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle("figure-clear", () => {
+  try {
+    fs.rmSync(FIGURE_PATH(), { force: true });
+  } catch { /* yo'q bo'lsa ham mayli */ }
+  return null;
+});
+
 ipcMain.on("desk-open-url", (_e, url) => {
   // Faqat https va aniq ro'yxat — renderer buzilsa ham ixtiyoriy manzil ochilmasin
   const ALLOWED_URLS = new Set([

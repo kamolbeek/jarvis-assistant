@@ -29,6 +29,10 @@
 
   #scene { position: fixed; inset: 0; }
   #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #figure { position: absolute; inset: 0; width: 100%; height: 100%; display: none; object-fit: contain; pointer-events: none; }
+  #figure.on { display: block; }
+  #fx-canvas { pointer-events: none; }
+  body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
 
   /* ---------- umumiy HUD bloklari ---------- */
 
@@ -229,7 +233,10 @@
 </style>
 
 <div id="scene">
+  <!-- O'z rasmingiz — eng pastki qatlam, butun ekran -->
+  <img id="figure" alt="" draggable="false" />
   <canvas id="hud-canvas"></canvas>
+  <canvas id="fx-canvas"></canvas>
 
   <!-- Chap panel: ilovalar (havoladagi Control Panel/Steam ustuni o'rnida) -->
   <div class="blk" id="rail-left">
@@ -314,6 +321,7 @@
       <button data-state="speaking">Gapirish</button>
       <button data-state="error">Xato</button>
       <button class="wide" id="break">NUTQ bo'g'inini buzish / tuzatish</button>
+      <button class="wide" id="drop-hint">🖼 O'z rasmingizni shu yerga tashlang</button>
     </div>
   </details>
 </div>
@@ -491,7 +499,111 @@ document.getElementById("play").addEventListener("click", () => {
   timers = SCRIPT.map(([at, fn]) => setTimeout(fn, at));
 });
 
-window.addEventListener("resize", resize);
+/* --- O'z rasmingiz: sahifaga tashlang, uch marta bosib sozlang --- */
+/* Haqiqiy ish stolida rasm diskka saqlanadi va doim qoladi.          */
+
+const figureImg = document.getElementById("figure");
+const fxCanvas = document.getElementById("fx-canvas");
+const fxCtx = fxCanvas.getContext("2d");
+
+let figureOn = false;
+let figureCal = null;
+let calSteps = [];
+let lastFx = { eyes: 0.3, surge: 0.3 };
+
+try { figureCal = JSON.parse(localStorage.getItem("figure-cal") || "null"); } catch { figureCal = null; }
+
+function fxResize() {
+  const dpr = window.devicePixelRatio || 1;
+  fxCanvas.width = Math.round(innerWidth * dpr);
+  fxCanvas.height = Math.round(innerHeight * dpr);
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function figureRect() {
+  const box = figureImg.getBoundingClientRect();
+  const nw = figureImg.naturalWidth, nh = figureImg.naturalHeight;
+  if (!nw || !nh) return null;
+  const scale = Math.min(box.width / nw, box.height / nh);
+  const w = nw * scale, h = nh * scale;
+  return { x: box.left + (box.width - w) / 2, y: box.top + (box.height - h) / 2, w, h };
+}
+
+function startCalibration() {
+  calSteps = ["eyeL", "eyeR", "core"];
+  document.body.classList.add("calibrating");
+  caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
+}
+
+figureImg.addEventListener("click", (e) => {
+  if (!calSteps.length) return;
+  const rect = figureRect();
+  if (!rect) return;
+  const key = calSteps.shift();
+  figureCal = figureCal || {};
+  figureCal[key] = [(e.clientX - rect.x) / rect.w, (e.clientY - rect.y) / rect.h];
+  if (calSteps.length === 2) caption("Sozlash", "Endi O'NG ko'zga bosing");
+  else if (calSteps.length === 1) caption("Sozlash", "Endi REAKTORGA bosing");
+  else {
+    localStorage.setItem("figure-cal", JSON.stringify(figureCal));
+    document.body.classList.remove("calibrating");
+    caption("Sozlash", "Tayyor! «Uyg'onish»ni bosing — ko'zlar yonadi.");
+  }
+});
+
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith("image/")) return;
+  figureImg.src = URL.createObjectURL(file);
+  figureImg.onload = () => {
+    figureOn = true;
+    figureImg.classList.add("on");
+    localStorage.removeItem("figure-cal");
+    figureCal = null;
+    startCalibration();
+  };
+});
+
+document.getElementById("drop-hint").addEventListener("click", () =>
+  caption("Rasm", "Kompyuterdagi rasm faylini sichqoncha bilan shu oynaga sudrab tashlang"));
+
+/* Kadr siklini rasm rejimini hisobga olib qayta yozamiz */
+frame = function patchedFrame(now) {
+  const t = now / 1000;
+
+  const target =
+    state === "listening" ? 0.35 + Math.abs(Math.sin(t * 2.7) * Math.sin(t * 1.3)) * 0.55 :
+    state === "speaking" ? 0.30 + Math.abs(Math.sin(t * 4.4)) * 0.45 : 0.03;
+  level = target;
+  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
+  flash *= 0.93; if (flash < 0.01) flash = 0;
+
+  lastFx = DESK.draw(ctx, {
+    width: W, height: H, t, state, level: smoothLevel, flash, stats,
+    emblemHover, figure: figureOn,
+  }) || lastFx;
+
+  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
+  if (figureOn && figureCal) {
+    const rect = figureRect();
+    if (rect) DESK.drawFigureFx(fxCtx, rect, figureCal, t, lastFx.eyes, lastFx.surge);
+  }
+
+  if (dialPanel.classList.contains("on")) {
+    for (const s of systems) {
+      const until = heatUntil[s.id] || 0;
+      s.heat = s.status === "down" ? 0 : Math.max(0, Math.min(1, (until - t) / 1.4));
+    }
+    const size = dialCanvas.clientWidth || 314;
+    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
+  }
+  requestAnimationFrame(frame);
+};
+
+window.addEventListener("resize", () => { resize(); fxResize(); });
 resize();
+fxResize();
 requestAnimationFrame(frame);
 </script>

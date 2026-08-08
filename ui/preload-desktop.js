@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld("desk", {
   openFolder: (key) => ipcRenderer.send("desk-open-folder", String(key)),
   openUrl: (url) => ipcRenderer.send("desk-open-url", String(url)),
 
+  // Markaziy rasm: olish / saqlash / o'chirish.
+  getFigure: () => ipcRenderer.invoke("figure-get"),
+  saveFigure: (buffer) => ipcRenderer.invoke("figure-save", buffer),
+  clearFigure: () => ipcRenderer.invoke("figure-clear"),
+
   // Yadro manzili — orb bilan bir xil.
   coreUrl: process.env.JARVIS_WS_URL || "ws://127.0.0.1:8765",
 });

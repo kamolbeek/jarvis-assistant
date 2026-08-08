@@ -334,35 +334,103 @@ const DESK = (() => {
     if (f.state === "thinking") eyes = 0.45 + Math.abs(Math.sin(t * 2.2)) * 0.3;
     eyes = Math.min(1, eyes);
 
-    drawGrid(ctx, W, H);
+    // Rasm rejimida to'r chizilmaydi — foydalanuvchi rasmi o'zi to'liq fon
+    if (!f.figure) drawGrid(ctx, W, H);
     drawMotes(ctx, W, H, t);
 
-    // Orqa halqalar reaktor markazida
-    const anchor = SUIT.reactorAt(L.suit);
-    drawRings(ctx, anchor.x, anchor.y, L.suit.height * 0.46, t, energy);
+    // Markaz: foydalanuvchi rasmi bo'lsa, vektor zirh chizilmaydi —
+    // rasm DOM'da turadi, jonli effektlar esa fx qatlamida.
+    if (!f.figure) {
+      const anchor = SUIT.reactorAt(L.suit);
+      drawRings(ctx, anchor.x, anchor.y, L.suit.height * 0.46, t, energy);
+    }
 
     // Shesternyalar
     drawGearCluster(ctx, L.gearsTL.x, L.gearsTL.y, t, 0.8, 0.3);
     drawGearCluster(ctx, L.gearsR.x, L.gearsR.y, t, 1.0, 0.35);
 
-    // Zirh
-    SUIT.draw(ctx, {
-      cx: L.suit.cx, topY: L.suit.topY, height: L.suit.height,
-      t, eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6),
-    });
+    if (!f.figure) {
+      SUIT.draw(ctx, {
+        cx: L.suit.cx, topY: L.suit.topY, height: L.suit.height,
+        t, eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6),
+      });
 
-    // Zirh pastini fonga singdirish
-    const fade = ctx.createLinearGradient(0, L.suit.topY + L.suit.height * 0.82, 0, L.suit.topY + L.suit.height);
-    fade.addColorStop(0, "rgba(3, 8, 12, 0)");
-    fade.addColorStop(1, "rgba(3, 8, 12, 0.95)");
-    ctx.fillStyle = fade;
-    ctx.fillRect(L.suit.cx - L.suit.height, L.suit.topY + L.suit.height * 0.8,
-                 L.suit.height * 2, L.suit.height * 0.22);
+      // Zirh pastini fonga singdirish
+      const fade = ctx.createLinearGradient(0, L.suit.topY + L.suit.height * 0.82, 0, L.suit.topY + L.suit.height);
+      fade.addColorStop(0, "rgba(3, 8, 12, 0)");
+      fade.addColorStop(1, "rgba(3, 8, 12, 0.95)");
+      ctx.fillStyle = fade;
+      ctx.fillRect(L.suit.cx - L.suit.height, L.suit.topY + L.suit.height * 0.8,
+                   L.suit.height * 2, L.suit.height * 0.22);
+    }
 
     drawVoiceMeter(ctx, L.meter.x, L.meter.yTop, L.meter.height, f.level, active, t);
     drawSystemGauge(ctx, L.gauge.x, L.gauge.y, L.gauge.r, f.stats, t);
     drawEmblem(ctx, L.emblem.x, L.emblem.y, L.emblem.r, t,
                0.55 + mood.mark * 0.45, f.emblemHover);
+
+    return { eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6) };
+  }
+
+  // ------------------------------------------------------------- rasm effektlari
+
+  // Foydalanuvchi rasmi ustidagi jonli qatlam: ko'zlar nuri va reaktor.
+  // Nuqtalar kalibrlashda belgilanadi (rasmga nisbatan 0..1 koordinatalar).
+  function drawFigureFx(ctx, rect, cal, t, eyes, surge) {
+    if (!cal) return;
+    const px = (p) => [rect.x + p[0] * rect.w, rect.y + p[1] * rect.h];
+    ctx.save();
+    // Qo'shiluvchi aralashtirish — qora rasm ustida faqat nur ko'rinadi
+    ctx.globalCompositeOperation = "lighter";
+
+    // Ko'zlar: pulslanadigan nur
+    const eyeR = rect.w * 0.045;
+    for (const key of ["eyeL", "eyeR"]) {
+      if (!cal[key]) continue;
+      const [x, y] = px(cal[key]);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, eyeR * (1 + eyes));
+      g.addColorStop(0, P.toCss(P.RGB.white, 0.55 * eyes + 0.1));
+      g.addColorStop(0.4, P.toCss(P.RGB.cyan, 0.4 * eyes + 0.06));
+      g.addColorStop(1, P.toCss(P.RGB.cyan, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, eyeR * (1 + eyes) + 1, 0, TAU);
+      ctx.fill();
+    }
+
+    // Reaktor: nur + aylanuvchi segmentlar
+    if (cal.core) {
+      const [x, y] = px(cal.core);
+      const r = rect.w * 0.055;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2);
+      g.addColorStop(0, P.toCss(P.RGB.white, 0.35 + surge * 0.4));
+      g.addColorStop(0.5, P.toCss(P.RGB.cyan, 0.15 + surge * 0.2));
+      g.addColorStop(1, P.toCss(P.RGB.cyan, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 2, 0, TAU);
+      ctx.fill();
+
+      const spin = t * (0.6 + surge * 1.8);
+      ctx.lineWidth = 2.5;
+      for (let i = 0; i < 8; i++) {
+        const a = spin + (i / 8) * TAU;
+        ctx.beginPath();
+        ctx.arc(x, y, r, a, a + 0.45);
+        ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.35 + surge * 0.45);
+        ctx.stroke();
+      }
+      // Teskari aylanuvchi tashqi halqa
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 4; i++) {
+        const a = -spin * 0.6 + (i / 4) * TAU;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.45, a, a + 0.7);
+        ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.22 + surge * 0.3);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // Emblema ustiga bosilganini aniqlash
@@ -374,7 +442,7 @@ const DESK = (() => {
     return null;
   }
 
-  return { draw, hit, layout };
+  return { draw, hit, layout, drawFigureFx };
 })();
 
 if (typeof module !== "undefined") module.exports = DESK;

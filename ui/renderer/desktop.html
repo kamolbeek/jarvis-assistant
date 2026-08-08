@@ -27,6 +27,10 @@
   }
   #scene { position: fixed; inset: 0; }
   #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #figure { position: absolute; inset: 0; width: 100%; height: 100%; display: none; object-fit: contain; pointer-events: none; }
+  #figure.on { display: block; }
+  #fx-canvas { pointer-events: none; }
+  body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
 
   .blk { position: absolute; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
   .blk h3 { font-size: 9px; font-weight: 700; letter-spacing: 0.24em; color: rgba(236,253,255,0.4); margin-bottom: 7px; }
@@ -129,7 +133,10 @@
 </head>
 <body>
 <div id="scene">
+  <!-- Foydalanuvchi rasmi — eng pastki qatlam, butun ekran -->
+  <img id="figure" alt="" draggable="false" />
   <canvas id="hud-canvas"></canvas>
+  <canvas id="fx-canvas"></canvas>
 
   <div class="blk" id="rail-left">
     <h3>ILOVALAR</h3>
@@ -363,8 +370,121 @@ document.querySelectorAll(".chip[data-folder]").forEach((c) =>
 document.querySelectorAll(".link").forEach((l) =>
   l.addEventListener("click", () => window.desk.openUrl(l.dataset.url)));
 
-window.addEventListener("resize", resize);
+// --- Markaziy rasm: tashlash, kalibrlash, jonli effektlar ---
+//
+// Foydalanuvchi o'z rasmini (masalan, Iron Man HUD wallpaperini) oynaga
+// tashlaydi — vektor zirh o'rniga aynan o'sha rasm ko'rsatiladi. Uch marta
+// bosib sozlanadi: chap ko'z, o'ng ko'z, reaktor. Shundan keyin «Hey Jarvis»
+// deganda rasmning ko'zlari yonadi, reaktori aylanadi.
+
+const figureImg = document.getElementById("figure");
+const fxCanvas = document.getElementById("fx-canvas");
+const fxCtx = fxCanvas.getContext("2d");
+
+let figureOn = false;
+let figureCal = null;
+let calSteps = [];
+
+try { figureCal = JSON.parse(localStorage.getItem("figure-cal") || "null"); } catch { figureCal = null; }
+
+function figureRect() {
+  // Rasmning ekranda haqiqatan egallagan joyi (object-fit: contain hisobida)
+  const box = figureImg.getBoundingClientRect();
+  const nw = figureImg.naturalWidth, nh = figureImg.naturalHeight;
+  if (!nw || !nh) return null;
+  const scale = Math.min(box.width / nw, box.height / nh);
+  const w = nw * scale, h = nh * scale;
+  return { x: box.left + (box.width - w) / 2, y: box.top + (box.height - h) / 2, w, h };
+}
+
+function placeFigure() {
+  const dpr = window.devicePixelRatio || 1;
+  fxCanvas.width = Math.round(innerWidth * dpr);
+  fxCanvas.height = Math.round(innerHeight * dpr);
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function startCalibration() {
+  calSteps = ["eyeL", "eyeR", "core"];
+  document.body.classList.add("calibrating");
+  caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
+}
+
+figureImg.addEventListener("click", (e) => {
+  if (!calSteps.length) return;
+  const rect = figureRect();
+  if (!rect) return;
+  const key = calSteps.shift();
+  figureCal = figureCal || {};
+  figureCal[key] = [(e.clientX - rect.x) / rect.w, (e.clientY - rect.y) / rect.h];
+  if (calSteps.length === 2) caption("Sozlash", "Endi O'NG ko'zga bosing");
+  else if (calSteps.length === 1) caption("Sozlash", "Endi REAKTORGA bosing");
+  else {
+    localStorage.setItem("figure-cal", JSON.stringify(figureCal));
+    document.body.classList.remove("calibrating");
+    caption("Sozlash", "Tayyor! «Hey Jarvis» deganda ko'zlar yonadi.");
+  }
+});
+
+async function loadFigure() {
+  const saved = await window.desk.getFigure();
+  if (!saved) return;
+  figureImg.src = "file://" + saved + "?v=" + Math.random();
+  figureImg.onload = () => {
+    figureOn = true;
+    figureImg.classList.add("on");
+    if (!figureCal) startCalibration();
+  };
+}
+
+// Fayl tashlash — istalgan joyga
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith("image/")) return;
+  const buffer = await file.arrayBuffer();
+  const saved = await window.desk.saveFigure(new Uint8Array(buffer));
+  if (!saved) return;
+  localStorage.removeItem("figure-cal");
+  figureCal = null;
+  figureImg.src = "file://" + saved + "?v=" + Math.random();
+  figureImg.onload = () => {
+    figureOn = true;
+    figureImg.classList.add("on");
+    startCalibration();
+  };
+});
+
+// Kadr siklini rasm rejimiga moslaymiz
+const baseFrame = frame;
+frame = function patchedFrame(now) {
+  const t = now / 1000;
+  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
+  flash *= 0.93; if (flash < 0.01) flash = 0;
+
+  const out = DESK.draw(ctx, {
+    width: W, height: H, t, state, level: smoothLevel, flash, stats,
+    emblemHover, figure: figureOn,
+  });
+
+  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
+  if (figureOn && figureCal) {
+    const rect = figureRect();
+    if (rect) DESK.drawFigureFx(fxCtx, rect, figureCal, t, out.eyes, out.surge);
+  }
+
+  if (dialPanel.classList.contains("on")) {
+    const size = dialCanvas.clientWidth || 314;
+    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
+  }
+  requestAnimationFrame(frame);
+};
+
+window.addEventListener("resize", () => { resize(); placeFigure(); });
 resize();
+placeFigure();
+loadFigure();
 connect();
 requestAnimationFrame(frame);
 </script>

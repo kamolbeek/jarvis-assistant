@@ -114,6 +114,14 @@ oynalar ORQASIDA (ish stoli darajasida) turadi:
 - **Soat, sana, hafta kunlari, papkalar, tezkor havolalar** — hammasi jonli.
 - **Chap pastda dumaloq JARVIS** — bosilsa bo'g'in siferblatlari paneli ochiladi.
 
+**O'z rasmingizni qo'yish.** Internetdagi tayyor Iron Man HUD wallpaperini
+(yoki istalgan rasmni) sichqoncha bilan ish stoli HUD ustiga sudrab tashlang —
+markazda vektor chizma o'rniga aynan o'sha rasm turadi va doim saqlanib qoladi.
+Bir marta sozlaysiz: chap ko'z, o'ng ko'z va reaktorga bosasiz. Shundan keyin
+«Hey Jarvis» deganingizda rasmning ko'zlari yonadi, reaktori aylanadi va
+gapirganda kuchayadi. Demoda ham xuddi shunday ishlaydi — rasmni sahifaga
+tashlab ko'ring.
+
 O'chirish: `JARVIS_DESKTOP=0 ./scripts/run.sh`. Kichik burchak-vidjet har doim qoladi.
 
 ### HUD nimani ko'rsatadi

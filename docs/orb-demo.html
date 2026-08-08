@@ -29,6 +29,10 @@
 
   #scene { position: fixed; inset: 0; }
   #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #figure { position: absolute; inset: 0; width: 100%; height: 100%; display: none; object-fit: contain; pointer-events: none; }
+  #figure.on { display: block; }
+  #fx-canvas { pointer-events: none; }
+  body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
 
   /* ---------- umumiy HUD bloklari ---------- */
 
@@ -229,7 +233,10 @@
 </style>
 
 <div id="scene">
+  <!-- O'z rasmingiz — eng pastki qatlam, butun ekran -->
+  <img id="figure" alt="" draggable="false" />
   <canvas id="hud-canvas"></canvas>
+  <canvas id="fx-canvas"></canvas>
 
   <!-- Chap panel: ilovalar (havoladagi Control Panel/Steam ustuni o'rnida) -->
   <div class="blk" id="rail-left">
@@ -314,6 +321,7 @@
       <button data-state="speaking">Gapirish</button>
       <button data-state="error">Xato</button>
       <button class="wide" id="break">NUTQ bo'g'inini buzish / tuzatish</button>
+      <button class="wide" id="drop-hint">🖼 O'z rasmingizni shu yerga tashlang</button>
     </div>
   </details>
 </div>
@@ -1358,35 +1366,103 @@ const DESK = (() => {
     if (f.state === "thinking") eyes = 0.45 + Math.abs(Math.sin(t * 2.2)) * 0.3;
     eyes = Math.min(1, eyes);
 
-    drawGrid(ctx, W, H);
+    // Rasm rejimida to'r chizilmaydi — foydalanuvchi rasmi o'zi to'liq fon
+    if (!f.figure) drawGrid(ctx, W, H);
     drawMotes(ctx, W, H, t);
 
-    // Orqa halqalar reaktor markazida
-    const anchor = SUIT.reactorAt(L.suit);
-    drawRings(ctx, anchor.x, anchor.y, L.suit.height * 0.46, t, energy);
+    // Markaz: foydalanuvchi rasmi bo'lsa, vektor zirh chizilmaydi —
+    // rasm DOM'da turadi, jonli effektlar esa fx qatlamida.
+    if (!f.figure) {
+      const anchor = SUIT.reactorAt(L.suit);
+      drawRings(ctx, anchor.x, anchor.y, L.suit.height * 0.46, t, energy);
+    }
 
     // Shesternyalar
     drawGearCluster(ctx, L.gearsTL.x, L.gearsTL.y, t, 0.8, 0.3);
     drawGearCluster(ctx, L.gearsR.x, L.gearsR.y, t, 1.0, 0.35);
 
-    // Zirh
-    SUIT.draw(ctx, {
-      cx: L.suit.cx, topY: L.suit.topY, height: L.suit.height,
-      t, eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6),
-    });
+    if (!f.figure) {
+      SUIT.draw(ctx, {
+        cx: L.suit.cx, topY: L.suit.topY, height: L.suit.height,
+        t, eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6),
+      });
 
-    // Zirh pastini fonga singdirish
-    const fade = ctx.createLinearGradient(0, L.suit.topY + L.suit.height * 0.82, 0, L.suit.topY + L.suit.height);
-    fade.addColorStop(0, "rgba(3, 8, 12, 0)");
-    fade.addColorStop(1, "rgba(3, 8, 12, 0.95)");
-    ctx.fillStyle = fade;
-    ctx.fillRect(L.suit.cx - L.suit.height, L.suit.topY + L.suit.height * 0.8,
-                 L.suit.height * 2, L.suit.height * 0.22);
+      // Zirh pastini fonga singdirish
+      const fade = ctx.createLinearGradient(0, L.suit.topY + L.suit.height * 0.82, 0, L.suit.topY + L.suit.height);
+      fade.addColorStop(0, "rgba(3, 8, 12, 0)");
+      fade.addColorStop(1, "rgba(3, 8, 12, 0.95)");
+      ctx.fillStyle = fade;
+      ctx.fillRect(L.suit.cx - L.suit.height, L.suit.topY + L.suit.height * 0.8,
+                   L.suit.height * 2, L.suit.height * 0.22);
+    }
 
     drawVoiceMeter(ctx, L.meter.x, L.meter.yTop, L.meter.height, f.level, active, t);
     drawSystemGauge(ctx, L.gauge.x, L.gauge.y, L.gauge.r, f.stats, t);
     drawEmblem(ctx, L.emblem.x, L.emblem.y, L.emblem.r, t,
                0.55 + mood.mark * 0.45, f.emblemHover);
+
+    return { eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6) };
+  }
+
+  // ------------------------------------------------------------- rasm effektlari
+
+  // Foydalanuvchi rasmi ustidagi jonli qatlam: ko'zlar nuri va reaktor.
+  // Nuqtalar kalibrlashda belgilanadi (rasmga nisbatan 0..1 koordinatalar).
+  function drawFigureFx(ctx, rect, cal, t, eyes, surge) {
+    if (!cal) return;
+    const px = (p) => [rect.x + p[0] * rect.w, rect.y + p[1] * rect.h];
+    ctx.save();
+    // Qo'shiluvchi aralashtirish — qora rasm ustida faqat nur ko'rinadi
+    ctx.globalCompositeOperation = "lighter";
+
+    // Ko'zlar: pulslanadigan nur
+    const eyeR = rect.w * 0.045;
+    for (const key of ["eyeL", "eyeR"]) {
+      if (!cal[key]) continue;
+      const [x, y] = px(cal[key]);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, eyeR * (1 + eyes));
+      g.addColorStop(0, P.toCss(P.RGB.white, 0.55 * eyes + 0.1));
+      g.addColorStop(0.4, P.toCss(P.RGB.cyan, 0.4 * eyes + 0.06));
+      g.addColorStop(1, P.toCss(P.RGB.cyan, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, eyeR * (1 + eyes) + 1, 0, TAU);
+      ctx.fill();
+    }
+
+    // Reaktor: nur + aylanuvchi segmentlar
+    if (cal.core) {
+      const [x, y] = px(cal.core);
+      const r = rect.w * 0.055;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2);
+      g.addColorStop(0, P.toCss(P.RGB.white, 0.35 + surge * 0.4));
+      g.addColorStop(0.5, P.toCss(P.RGB.cyan, 0.15 + surge * 0.2));
+      g.addColorStop(1, P.toCss(P.RGB.cyan, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 2, 0, TAU);
+      ctx.fill();
+
+      const spin = t * (0.6 + surge * 1.8);
+      ctx.lineWidth = 2.5;
+      for (let i = 0; i < 8; i++) {
+        const a = spin + (i / 8) * TAU;
+        ctx.beginPath();
+        ctx.arc(x, y, r, a, a + 0.45);
+        ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.35 + surge * 0.45);
+        ctx.stroke();
+      }
+      // Teskari aylanuvchi tashqi halqa
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 4; i++) {
+        const a = -spin * 0.6 + (i / 4) * TAU;
+        ctx.beginPath();
+        ctx.arc(x, y, r * 1.45, a, a + 0.7);
+        ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.22 + surge * 0.3);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // Emblema ustiga bosilganini aniqlash
@@ -1398,7 +1474,7 @@ const DESK = (() => {
     return null;
   }
 
-  return { draw, hit, layout };
+  return { draw, hit, layout, drawFigureFx };
 })();
 
 /* --- Demo boshqaruvi: haqiqiy ish stolida bu ma'lumotlar yadrodan keladi --- */
@@ -1570,7 +1646,111 @@ document.getElementById("play").addEventListener("click", () => {
   timers = SCRIPT.map(([at, fn]) => setTimeout(fn, at));
 });
 
-window.addEventListener("resize", resize);
+/* --- O'z rasmingiz: sahifaga tashlang, uch marta bosib sozlang --- */
+/* Haqiqiy ish stolida rasm diskka saqlanadi va doim qoladi.          */
+
+const figureImg = document.getElementById("figure");
+const fxCanvas = document.getElementById("fx-canvas");
+const fxCtx = fxCanvas.getContext("2d");
+
+let figureOn = false;
+let figureCal = null;
+let calSteps = [];
+let lastFx = { eyes: 0.3, surge: 0.3 };
+
+try { figureCal = JSON.parse(localStorage.getItem("figure-cal") || "null"); } catch { figureCal = null; }
+
+function fxResize() {
+  const dpr = window.devicePixelRatio || 1;
+  fxCanvas.width = Math.round(innerWidth * dpr);
+  fxCanvas.height = Math.round(innerHeight * dpr);
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function figureRect() {
+  const box = figureImg.getBoundingClientRect();
+  const nw = figureImg.naturalWidth, nh = figureImg.naturalHeight;
+  if (!nw || !nh) return null;
+  const scale = Math.min(box.width / nw, box.height / nh);
+  const w = nw * scale, h = nh * scale;
+  return { x: box.left + (box.width - w) / 2, y: box.top + (box.height - h) / 2, w, h };
+}
+
+function startCalibration() {
+  calSteps = ["eyeL", "eyeR", "core"];
+  document.body.classList.add("calibrating");
+  caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
+}
+
+figureImg.addEventListener("click", (e) => {
+  if (!calSteps.length) return;
+  const rect = figureRect();
+  if (!rect) return;
+  const key = calSteps.shift();
+  figureCal = figureCal || {};
+  figureCal[key] = [(e.clientX - rect.x) / rect.w, (e.clientY - rect.y) / rect.h];
+  if (calSteps.length === 2) caption("Sozlash", "Endi O'NG ko'zga bosing");
+  else if (calSteps.length === 1) caption("Sozlash", "Endi REAKTORGA bosing");
+  else {
+    localStorage.setItem("figure-cal", JSON.stringify(figureCal));
+    document.body.classList.remove("calibrating");
+    caption("Sozlash", "Tayyor! «Uyg'onish»ni bosing — ko'zlar yonadi.");
+  }
+});
+
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith("image/")) return;
+  figureImg.src = URL.createObjectURL(file);
+  figureImg.onload = () => {
+    figureOn = true;
+    figureImg.classList.add("on");
+    localStorage.removeItem("figure-cal");
+    figureCal = null;
+    startCalibration();
+  };
+});
+
+document.getElementById("drop-hint").addEventListener("click", () =>
+  caption("Rasm", "Kompyuterdagi rasm faylini sichqoncha bilan shu oynaga sudrab tashlang"));
+
+/* Kadr siklini rasm rejimini hisobga olib qayta yozamiz */
+frame = function patchedFrame(now) {
+  const t = now / 1000;
+
+  const target =
+    state === "listening" ? 0.35 + Math.abs(Math.sin(t * 2.7) * Math.sin(t * 1.3)) * 0.55 :
+    state === "speaking" ? 0.30 + Math.abs(Math.sin(t * 4.4)) * 0.45 : 0.03;
+  level = target;
+  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
+  flash *= 0.93; if (flash < 0.01) flash = 0;
+
+  lastFx = DESK.draw(ctx, {
+    width: W, height: H, t, state, level: smoothLevel, flash, stats,
+    emblemHover, figure: figureOn,
+  }) || lastFx;
+
+  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
+  if (figureOn && figureCal) {
+    const rect = figureRect();
+    if (rect) DESK.drawFigureFx(fxCtx, rect, figureCal, t, lastFx.eyes, lastFx.surge);
+  }
+
+  if (dialPanel.classList.contains("on")) {
+    for (const s of systems) {
+      const until = heatUntil[s.id] || 0;
+      s.heat = s.status === "down" ? 0 : Math.max(0, Math.min(1, (until - t) / 1.4));
+    }
+    const size = dialCanvas.clientWidth || 314;
+    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
+  }
+  requestAnimationFrame(frame);
+};
+
+window.addEventListener("resize", () => { resize(); fxResize(); });
 resize();
+fxResize();
 requestAnimationFrame(frame);
 </script>
