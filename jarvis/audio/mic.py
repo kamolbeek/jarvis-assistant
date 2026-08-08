@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections import deque
 from collections.abc import AsyncIterator
 from typing import Any
@@ -23,6 +24,9 @@ class MicStream:
     "Hey Jarvis, ob-havo qanday?" deb bir nafasda aytsa, savol qismi yo'qolmaydi.
     """
 
+    # Navbat to'lgani haqida shuncha soniyada bir marta xabar beramiz.
+    DROP_WARN_SEC = 15.0
+
     def __init__(
         self,
         sample_rate: int = 16000,
@@ -41,6 +45,7 @@ class MicStream:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stream: Any = None
         self._dropped = 0
+        self._last_drop_warn = 0.0
 
         frame_ms = frame_samples * 1000 // sample_rate
         self._frame_ms = max(1, frame_ms)
@@ -88,10 +93,17 @@ class MicStream:
         try:
             self._queue.put_nowait(frame)
         except asyncio.QueueFull:
-            # Yadro band — eng eskisini tashlab, yangisini qo'yamiz.
+            # Yadro band — eng eskisini tashlab, yangisini qo'yamiz. Bu kutilgan
+            # hol: Jarvis o'ylayotganda navbatni hech kim o'qimaydi va eski
+            # audio baribir keraksiz. Shuning uchun har bir tashlangan kadr
+            # uchun emas, vaqt bo'yicha ogohlantiramiz — aks holda jurnal
+            # sekundiga bir marta shu xabar bilan to'lib ketadi.
             self._dropped += 1
-            if self._dropped % 50 == 1:
-                log.warning("Audio navbati to'ldi, kadrlar tashlanmoqda (%d)", self._dropped)
+            now = time.monotonic()
+            if now - self._last_drop_warn > self.DROP_WARN_SEC:
+                self._last_drop_warn = now
+                log.debug("Audio navbati to'ldi, eski kadrlar tashlanmoqda (%d)",
+                          self._dropped)
             try:
                 self._queue.get_nowait()
                 self._queue.put_nowait(frame)

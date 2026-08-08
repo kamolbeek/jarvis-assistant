@@ -33,7 +33,8 @@
   /* Uyqu holati: canvas pardasi fon rasmini xiralashtiradi, DOM panellari esa
      o'z ustida turadi — ularni alohida so'ndiramiz. Sinf kadr sikli tomonidan
      faqat chegara kesib o'tilganda almashtiriladi, har kadrda emas. */
-  body.dormant .blk, body.dormant #live-pill { opacity: 0.4; }
+  /* Chiqish yo'li uyqu holatida ham to'liq ko'rinadi — u so'nmasligi kerak. */
+  body.dormant .blk:not(#escape-hint), body.dormant #live-pill { opacity: 0.4; }
   .blk, #live-pill { transition: opacity 500ms ease; }
   body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
   body.wallpaper #rail-left, body.wallpaper #sys-block, body.wallpaper #dates,
@@ -145,6 +146,16 @@
     display: none;
   }
   #offline.on { display: block; }
+
+  /* Chiqish yo'li doim ko'rinib turishi kerak. Oyna butun ekranni egallaydi
+     va foydalanuvchi qamalib qolgandek his qilmasligi shart. */
+  #escape-hint {
+    top: 14px; right: 18px;
+    padding: 6px 14px; border-radius: 8px;
+    background: rgba(3, 8, 12, 0.86); border: 1px solid var(--edge);
+    font: 600 11px var(--mono); letter-spacing: 0.12em; color: var(--cyan);
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -215,6 +226,7 @@
   <div class="blk" id="caption"><b></b><span></span></div>
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
   <div class="blk" id="offline">YADRO BILAN ALOQA YO'Q</div>
+  <div class="blk" id="escape-hint">ESC — YOPISH</div>
 </div>
 
 <script src="palette.js"></script>
@@ -282,7 +294,23 @@ function resize() {
   dialCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+// Kadr siklini avlod raqami bilan yuritamiz. Oyna yashiringanda brauzer
+// requestAnimationFrame'ni to'xtatadi va u har doim ham o'zi tiklanmaydi —
+// natijada oyna ochilganda qop-qora ekran qoladi. Kuzatuvchi siklni qaytadan
+// yo'lga soladi, avlod raqami esa ikkita sikl bir vaqtda ishlab ketishining
+// oldini oladi.
+let generation = 0;
+let lastFrameAt = 0;
+
+function schedule() {
+  const mine = ++generation;
+  requestAnimationFrame((now) => {
+    if (mine === generation) frame(now);
+  });
+}
+
 function frame(now) {
+  lastFrameAt = now;
   const t = now / 1000;
   smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
   flash *= 0.93; if (flash < 0.01) flash = 0;
@@ -308,8 +336,12 @@ function frame(now) {
     const size = dialCanvas.clientWidth || 314;
     HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
   }
-  requestAnimationFrame(frame);
+  schedule();
 }
+
+setInterval(() => {
+  if (performance.now() - lastFrameAt > 1200) schedule();
+}, 600);
 
 function caption(who, text) {
   captionBox.querySelector("b").textContent = who || "";
@@ -612,7 +644,7 @@ resize();
 placeFigure();
 loadFigure();
 connect();
-requestAnimationFrame(frame);
+schedule();
 </script>
 </body>
 </html>

@@ -11,6 +11,11 @@ dependencies = [
     "numpy>=1.26",
     "openwakeword>=0.6.0",
     "webrtcvad>=2.0.10",
+    # `webrtcvad` ichida `pkg_resources` ni import qiladi. Python 3.12 dan
+    # boshlab u standart muhitda yo'q, shuning uchun aniq talab qilamiz —
+    # aks holda VAD jimgina zaxira detektorga o'tib ketadi va gapirish
+    # tugaganini aniqlash sezilarli yomonlashadi.
+    "setuptools>=68",
     # Tarmoq
     "httpx>=0.27",
     "websockets>=12.0",

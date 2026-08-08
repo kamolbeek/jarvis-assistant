@@ -86,12 +86,24 @@ function createWindow() {
 // Butun ekranni egallaydigan Rainmeter uslubidagi sahna. Ikki rejim bor:
 //
 //   JARVIS_DESKTOP=1 (standart) — asosiy oyna. Yashirin turadi va chaqirilganda
-//       (qarsak, «hey jarvis», ⌘⇧J) oynalar USTIDA ochiladi. Esc yashiradi.
+//       (qarsak, «hey jarvis», ⌘⇧J) ochiladi.
 //   JARVIS_DESKTOP=ambient      — jonli fon. Doim ko'rinadi, oynalar ORQASIDA.
 //   JARVIS_DESKTOP=0            — butunlay o'chirilgan.
 //
 // Ochilganda sahna darhol "to'liq ishlamaydi": uyqu holatida turadi va
 // foydalanuvchi gapirganda yonadi. Bu mantiq renderer tomonda.
+//
+// XAVFSIZLIK QOIDASI: bu oyna butun ekranni egallaydi, shuning uchun undan
+// chiqish yo'li HECH QACHON renderer'ga bog'liq bo'lmasligi kerak. Sahifaning
+// JS'i buzilsa ham foydalanuvchi qamalib qolmasligi shart. Shuning uchun:
+//   * oyna "hamma narsa ustida" emas — Cmd+Tab bilan boshqa ilovaga o'tsa,
+//     u oldinga chiqadi va HUD orqada qoladi;
+//   * fokus yo'qolsa, oyna o'zi yashirinadi;
+//   * Esc global tugma sifatida ro'yxatdan o'tadi (faqat oyna ochiq turganda) —
+//     u main jarayonida ishlaydi, sahifadan mustaqil;
+//   * ⌘⇧J ikkinchi marta bosilsa yopadi.
+// Bir marta bu qoida buzilgan edi va foydalanuvchi kompyuterni qayta
+// yoqishga majbur bo'lgan.
 
 const DESK_MODE = process.env.JARVIS_DESKTOP || "1";
 const DESK_AMBIENT = DESK_MODE === "ambient";
@@ -132,26 +144,64 @@ function createDesktopWindow() {
     deskWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     deskWin.showInactive();
   } else {
-    deskWin.setAlwaysOnTop(true, "screen-saver");
-    deskWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Fokus boshqa ilovaga o'tsa — yashiramiz. Bu eng ishonchli chiqish yo'li:
+    // foydalanuvchi Cmd+Tab bosса yoki boshqa oynaga bossa, HUD yo'qoladi.
+    deskWin.on("blur", hideDesktop);
+
+    // Sahifadan mustaqil klaviatura yo'li: bu hodisa main jarayonida,
+    // sahifa JS'i ishga tushmasa ham keladi.
+    deskWin.webContents.on("before-input-event", (event, input) => {
+      if (input.type !== "keyDown") return;
+      const quit = input.key === "Escape" || (input.meta && input.key.toLowerCase() === "w");
+      if (quit) {
+        event.preventDefault();
+        hideDesktop();
+      }
+    });
   }
 
   startStats();
   startWeather();
 }
 
+// Esc faqat HUD ochiq turganda global tugma bo'ladi. Global — chunki oyna
+// fokusda bo'lmasligi yoki sahifa javob bermasligi mumkin.
+let escapeBound = false;
+
+function bindEscape() {
+  if (escapeBound) return;
+  escapeBound = globalShortcut.register("Escape", hideDesktop);
+  if (!escapeBound) console.warn("Esc ro'yxatdan o'tmadi — oynani ⌘⇧J bilan yoping");
+}
+
+function releaseEscape() {
+  if (!escapeBound) return;
+  globalShortcut.unregister("Escape");
+  escapeBound = false;
+}
+
 function showDesktop() {
   if (!deskWin || DESK_AMBIENT) return;
-  if (!deskWin.isVisible()) {
-    deskWin.show();
-    deskWin.focus();
+  const wasHidden = !deskWin.isVisible();
+  // Ko'rinib turgan bo'lsa ham `show()` — oynani oldinga chiqaradi.
+  deskWin.show();
+  deskWin.focus();
+  if (wasHidden) {
     // Renderer yoqilish animatsiyasini noldan boshlaydi.
     deskWin.webContents.send("desk-visible");
   }
+  bindEscape();
 }
 
 function hideDesktop() {
+  releaseEscape();
   if (deskWin && !DESK_AMBIENT && deskWin.isVisible()) deskWin.hide();
+}
+
+function toggleDesktop() {
+  if (!deskWin || DESK_AMBIENT) return;
+  if (deskWin.isVisible()) hideDesktop();
+  else showDesktop();
 }
 
 ipcMain.on("desk-show", showDesktop);
@@ -337,12 +387,13 @@ app.whenReady().then(() => {
     createDesktopWindow();
   }
 
-  // Global tugma: uyg'otuvchi so'zsiz chaqirish. Asosiy oynani ham ochadi —
-  // qarsak bilan bir xil natija bo'lishi kerak.
+  // Global tugma: uyg'otuvchi so'zsiz chaqirish. Ikkinchi marta bosilsa
+  // oynani yopadi — ochish va yopish bitta tugmada bo'lishi kerak.
   const combo = process.env.JARVIS_HOTKEY || "CommandOrControl+Shift+J";
   const registered = globalShortcut.register(combo, () => {
-    win?.webContents.send("hotkey");
-    showDesktop();
+    const opening = !deskWin || DESK_AMBIENT || !deskWin.isVisible();
+    if (opening) win?.webContents.send("hotkey");
+    toggleDesktop();
   });
   if (!registered) {
     console.warn(`Global tugmani (${combo}) ro'yxatdan o'tkazib bo'lmadi`);

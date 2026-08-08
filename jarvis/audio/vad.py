@@ -151,6 +151,14 @@ def build_speech_detector(cfg: dict, sample_rate: int) -> SpeechDetector:
     if backend == "webrtcvad":
         try:
             return WebRtcSpeechDetector(sample_rate, int(cfg.get("aggressiveness", 2)))
+        except ModuleNotFoundError as exc:
+            # Eng ko'p uchraydigan holat: `webrtcvad` ichida `pkg_resources`
+            # kerak, u esa Python 3.12+ da standart muhitda yo'q. Sababi
+            # tushunarsiz `ModuleNotFoundError` bo'lib chiqadi — aytib qo'yamiz.
+            log.warning(
+                "webrtcvad ishlamadi (%s), energiya detektoriga o'tildi. "
+                "Tuzatish: pip install setuptools", exc,
+            )
         except Exception:
             log.warning("webrtcvad ishlamadi, energiya detektoriga o'tildi", exc_info=True)
     return EnergySpeechDetector()

@@ -148,7 +148,26 @@ chizilgan. Shuning uchun uyquda ularning ustiga qorayituvchi niqob qo'yiladi va
 nur qaytadan chiziladi — natijada yonish haqiqatan yonishga o'xshaydi,
 shunchaki yorqinlik oshishiga emas.
 
-`Esc` — oynani yashiradi. Qarsak yoki `⌘⇧J` bilan qaytadi.
+### Oynadan chiqish — to'rt yo'l
+
+Bu oyna butun ekranni egallaydi, shuning uchun undan chiqish yo'li **hech
+qachon sahifaning JS'iga bog'liq bo'lmasligi kerak**. Sahifa buzilsa ham
+foydalanuvchi qamalib qolmasligi shart. Shuning uchun to'rtta mustaqil yo'l bor:
+
+| Yo'l | Qayerda ishlaydi |
+|---|---|
+| `Esc` | global tugma — Electron'ning asosiy jarayonida, sahifadan mustaqil |
+| `⌘⇧J` ikkinchi marta | o'sha global tugma ochadi va yopadi |
+| `⌘Tab` yoki boshqa oynaga bosish | fokus ketishi bilan HUD o'zi yashirinadi |
+| `⌘W` | oyna fokusda bo'lganda |
+
+Oyna **hamma narsa ustida turmaydi**: boshqa ilova oldinga chiqsa, HUD orqada
+qoladi. Ekranning yuqori o'ng burchagida doim `ESC — YOPISH` yozuvi turadi.
+
+Bir marta bu qoida buzilgan edi — oyna `screen-saver` darajasida ochilib,
+menyu panelini ham bekitgan va chiqish faqat sahifaning JS'iga bog'liq
+bo'lgan. Sahifa esa qora ekran bo'lib qolgan va foydalanuvchi kompyuterni
+qayta yoqishga majbur bo'lgan.
 
 **Jonli fon rejimi.** Oyna emas, doimiy fon sifatida kerak bo'lsa (oynalar
 ORQASIDA turadigan Rainmeter uslubi):
