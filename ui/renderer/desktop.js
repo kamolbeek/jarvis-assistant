@@ -11,6 +11,51 @@
 const DESK = (() => {
   const TAU = Math.PI * 2;
 
+  // ------------------------------------------------------------- o'rnatilgan rasm
+  //
+  // ui/renderer/assets/markaz.jpg (1920x1080, SHIELD OS wallpaperi) uchun
+  // oldindan o'lchangan nuqtalar — rasmga nisbatan 0..1 koordinatalar.
+  // Foydalanuvchi boshqa rasm tashlasa, bu qiymatlar ishlatilmaydi —
+  // uch bosishli kalibrlash ishga tushadi.
+  const BUNDLED = {
+    cal: {
+      eyeL: [0.476, 0.262],
+      eyeR: [0.532, 0.262],
+      core: [0.501, 0.713],
+    },
+    // Rasmdagi JARVIS doirasi — bosilsa siferblat paneli ochiladi
+    emblem: { c: [0.193, 0.731], r: 0.078 },
+    // Rasmdagi statik elementlar ustidagi bosiladigan maydonlar.
+    // rect: [x, y, w, h] rasmga nisbatan; action turlari sahifada bajariladi.
+    hotspots: [
+      { rect: [0.058, 0.100, 0.082, 0.036], app: "Safari",          title: "Safari" },
+      { rect: [0.058, 0.145, 0.082, 0.036], app: "System Settings", title: "Sozlamalar" },
+      { rect: [0.058, 0.191, 0.082, 0.036], app: "Music",           title: "Musiqa" },
+      { rect: [0.058, 0.235, 0.082, 0.036], app: "Safari",          title: "Safari" },
+      { rect: [0.058, 0.280, 0.082, 0.036], app: "Finder",          title: "Finder" },
+      { rect: [0.058, 0.325, 0.082, 0.036], app: "Messages",        title: "Xabarlar" },
+
+      { rect: [0.385, 0.134, 0.055, 0.018], url: "https://google.com",    title: "Google" },
+      { rect: [0.385, 0.151, 0.055, 0.018], url: "https://gmail.com",     title: "Gmail" },
+      { rect: [0.385, 0.168, 0.055, 0.018], url: "https://facebook.com",  title: "Facebook" },
+      { rect: [0.385, 0.184, 0.055, 0.018], url: "https://youtube.com",   title: "YouTube" },
+      { rect: [0.385, 0.201, 0.055, 0.018], url: "https://imdb.com",      title: "IMDB" },
+      { rect: [0.385, 0.298, 0.055, 0.018], url: "https://yahoo.com",     title: "Yahoo" },
+      { rect: [0.385, 0.331, 0.055, 0.018], url: "https://wikipedia.org", title: "Wikipedia" },
+
+      { rect: [0.752, 0.764, 0.057, 0.026], folder: "downloads", title: "Yuklamalar" },
+      { rect: [0.767, 0.796, 0.057, 0.026], folder: "documents", title: "Hujjatlar" },
+      { rect: [0.786, 0.826, 0.057, 0.026], folder: "music",     title: "Musiqa" },
+      { rect: [0.828, 0.839, 0.057, 0.026], folder: "desktop",   title: "Ish stoli" },
+      { rect: [0.901, 0.764, 0.057, 0.026], folder: "documents", title: "Hujjatlar" },
+      { rect: [0.887, 0.795, 0.057, 0.026], folder: "pictures",  title: "Rasmlar" },
+      { rect: [0.868, 0.826, 0.057, 0.026], folder: "videos",    title: "Videolar" },
+
+      // Reaktor — bosilsa Jarvis uyg'onadi
+      { circle: [0.501, 0.713, 0.055], activate: true, title: "Jarvis'ni chaqirish" },
+    ],
+  };
+
   const METER_SLOTS = 18; // ovoz datchigi segmentlari
 
   // Suzuvchi zarrachalar — butun ekran bo'ylab siyrak
@@ -153,9 +198,8 @@ const DESK = (() => {
   // ------------------------------------------------------------- ovoz datchigi
 
   // Sariq (zargaldoq) vertikal ustun — ovoz darajasiga qarab ko'tarilib tushadi
-  function drawVoiceMeter(ctx, x, yTop, height, level, active, t) {
+  function drawVoiceMeter(ctx, x, yTop, height, level, active, t, barW = 36) {
     const slotH = height / METER_SLOTS;
-    const barW = 36;
     const lit = Math.round(level * METER_SLOTS);
 
     peakHold = Math.max(peakHold - 0.006, level);
@@ -364,10 +408,17 @@ const DESK = (() => {
                    L.suit.height * 2, L.suit.height * 0.22);
     }
 
-    drawVoiceMeter(ctx, L.meter.x, L.meter.yTop, L.meter.height, f.level, active, t);
-    drawSystemGauge(ctx, L.gauge.x, L.gauge.y, L.gauge.r, f.stats, t);
-    drawEmblem(ctx, L.emblem.x, L.emblem.y, L.emblem.r, t,
-               0.55 + mood.mark * 0.45, f.emblemHover);
+    if (f.figureRect && f.figure) {
+      // Rasm rejimi: datchik rasm o'ng chetidagi shkala ustida
+      const r = f.figureRect;
+      drawVoiceMeter(ctx, r.x + r.w * 0.972, r.y + r.h * 0.50, r.h * 0.28,
+                     f.level, active, t, Math.max(10, r.w * 0.014));
+    } else {
+      drawVoiceMeter(ctx, L.meter.x, L.meter.yTop, L.meter.height, f.level, active, t);
+      drawSystemGauge(ctx, L.gauge.x, L.gauge.y, L.gauge.r, f.stats, t);
+      drawEmblem(ctx, L.emblem.x, L.emblem.y, L.emblem.r, t,
+                 0.55 + mood.mark * 0.45, f.emblemHover);
+    }
 
     return { eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6) };
   }
@@ -384,7 +435,7 @@ const DESK = (() => {
     ctx.globalCompositeOperation = "lighter";
 
     // Ko'zlar: pulslanadigan nur
-    const eyeR = rect.w * 0.045;
+    const eyeR = rect.w * 0.030;
     for (const key of ["eyeL", "eyeR"]) {
       if (!cal[key]) continue;
       const [x, y] = px(cal[key]);
@@ -433,6 +484,24 @@ const DESK = (() => {
     ctx.restore();
   }
 
+  // Rasmdagi JARVIS doirasi ustiga jonli halqa — bosish mumkinligini bildiradi
+  function drawEmblemPulse(ctx, rect, emblem, t, mark) {
+    const x = rect.x + emblem.c[0] * rect.w;
+    const y = rect.y + emblem.c[1] * rect.h;
+    const r = emblem.r * rect.w * 0.5;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 3; i++) {
+      const a = t * 0.8 + (i / 3) * TAU;
+      ctx.beginPath();
+      ctx.arc(x, y, r, a, a + 1.0);
+      ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.25 + mark * 0.3);
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Emblema ustiga bosilganini aniqlash
   function hit(W, H, x, y) {
     const L = layout(W, H);
@@ -442,7 +511,7 @@ const DESK = (() => {
     return null;
   }
 
-  return { draw, hit, layout, drawFigureFx };
+  return { draw, hit, layout, drawFigureFx, drawEmblemPulse, BUNDLED };
 })();
 
 if (typeof module !== "undefined") module.exports = DESK;

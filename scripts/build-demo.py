@@ -23,6 +23,8 @@ SOURCES = [
 ]
 
 MARKER = "/*INJECT*/"
+FIGURE = ROOT / "ui" / "renderer" / "assets" / "markaz.jpg"
+FIGURE_MARKER = "/*FIGURE_B64*/"
 
 
 def main() -> int:
@@ -41,7 +43,12 @@ def main() -> int:
         ).rstrip()
         parts.append(f"// ---- {source.name} ----\n{code}")
 
-    OUT.write_text(shell.replace(MARKER, "\n\n".join(parts)), encoding="utf-8")
+    html = shell.replace(MARKER, "\n\n".join(parts))
+    if FIGURE.exists() and FIGURE_MARKER in html:
+        import base64
+        b64 = base64.b64encode(FIGURE.read_bytes()).decode("ascii")
+        html = html.replace(FIGURE_MARKER, b64)
+    OUT.write_text(html, encoding="utf-8")
     print(f"{OUT.relative_to(ROOT)} yig'ildi ({OUT.stat().st_size // 1024} KB)")
     return 0
 

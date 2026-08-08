@@ -33,6 +33,19 @@
   #figure.on { display: block; }
   #fx-canvas { pointer-events: none; }
   body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
+  /* O'rnatilgan wallpaper rejimi: rasmning o'z vidjetlari bor, DOM'dagilar yashirinadi */
+  body.wallpaper #rail-left, body.wallpaper #sys-block, body.wallpaper #dates,
+  body.wallpaper #links, body.wallpaper #weather, body.wallpaper #disk,
+  body.wallpaper #clock, body.wallpaper #folders, body.wallpaper #vertical-tag { display: none; }
+  /* Jonli ma'lumotlar chizig'i — rasm ostidagi qatorda */
+  #live-pill {
+    left: 50%; bottom: 8px; transform: translateX(-50%);
+    padding: 5px 14px; border-radius: 8px;
+    background: rgba(3, 8, 12, 0.92); border: 1px solid var(--edge);
+    font: 600 11px var(--mono); letter-spacing: 0.1em; color: var(--cyan);
+    display: none; white-space: nowrap;
+  }
+  body.wallpaper #live-pill { display: block; }
 
   /* ---------- umumiy HUD bloklari ---------- */
 
@@ -304,6 +317,7 @@
   </div>
 
   <!-- Suhbat matni -->
+  <div class="blk" id="live-pill"></div>
   <div class="blk" id="caption"><b></b><span></span></div>
 
   <!-- Emblema bosilganda: bo'g'in siferblatlari -->
@@ -511,7 +525,67 @@ let figureCal = null;
 let calSteps = [];
 let lastFx = { eyes: 0.3, surge: 0.3 };
 
+let bundled = false; // o'rnatilgan wallpaper rejimi (bosiladigan maydonlar bilan)
+
 try { figureCal = JSON.parse(localStorage.getItem("figure-cal") || "null"); } catch { figureCal = null; }
+
+// O'rnatilgan wallpaper — yig'ish vaqtida shu yerga joylanadi
+const FIGURE_B64 = "/*FIGURE_B64*/";
+if (FIGURE_B64 && !FIGURE_B64.startsWith("/*")) {
+  figureImg.src = "data:image/jpeg;base64," + FIGURE_B64;
+  figureImg.onload = () => {
+    figureOn = true;
+    bundled = true;
+    figureCal = DESK.BUNDLED.cal;
+    figureImg.classList.add("on");
+    document.body.classList.add("wallpaper");
+  };
+}
+
+// Bosiladigan maydonlar: rasmga nisbatan koordinatada qidiramiz
+function hotspotAt(clientX, clientY) {
+  if (!bundled) return null;
+  const rect = figureRect();
+  if (!rect) return null;
+  const nx = (clientX - rect.x) / rect.w;
+  const ny = (clientY - rect.y) / rect.h;
+  const e = DESK.BUNDLED.emblem;
+  if (Math.hypot(nx - e.c[0], ny - e.c[1]) <= e.r * 0.6) return { emblem: true, title: "Bo'g'inlar paneli" };
+  for (const h of DESK.BUNDLED.hotspots) {
+    if (h.circle) {
+      if (Math.hypot(nx - h.circle[0], ny - h.circle[1]) <= h.circle[2]) return h;
+    } else if (h.rect) {
+      const [x, y, w, hh] = h.rect;
+      if (nx >= x && nx <= x + w && ny >= y && ny <= y + hh) return h;
+    }
+  }
+  return null;
+}
+
+document.addEventListener("mousemove", (e) => {
+  const h = hotspotAt(e.clientX, e.clientY);
+  document.body.style.cursor = h ? "pointer" : "";
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#drawer") || e.target.closest("#dial-panel")) return;
+  const h = hotspotAt(e.clientX, e.clientY);
+  if (!h) return;
+  if (h.emblem) { dialPanel.classList.toggle("on"); return; }
+  if (h.activate) { setState("wake"); setTimeout(() => setState("listening"), 900); caption("Jarvis", "Buyrug'ingizni kutyapman."); return; }
+  if (h.url) { window.open(h.url, "_blank"); return; }
+  if (h.app) caption("Demo", `Haqiqiy ish stolida «${h.title}» ochiladi`);
+  if (h.folder) caption("Demo", `Haqiqiy ish stolida «${h.title}» papkasi ochiladi`);
+});
+
+// Jonli qator: soat + CPU/RAM/disk — rasm ostida
+setInterval(() => {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  document.getElementById("live-pill").textContent =
+    `${hh}:${mm}  ·  CPU ${Math.round(stats.cpu)}%  ·  RAM ${Math.round(stats.ram)}%  ·  DISK ${Math.round(stats.disk)}%`;
+}, 1000);
 
 function fxResize() {
   const dpr = window.devicePixelRatio || 1;
@@ -559,6 +633,8 @@ window.addEventListener("drop", (e) => {
   figureImg.src = URL.createObjectURL(file);
   figureImg.onload = () => {
     figureOn = true;
+    bundled = false;
+    document.body.classList.remove("wallpaper");
     figureImg.classList.add("on");
     localStorage.removeItem("figure-cal");
     figureCal = null;
@@ -580,15 +656,16 @@ frame = function patchedFrame(now) {
   smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
   flash *= 0.93; if (flash < 0.01) flash = 0;
 
+  const rect = figureOn ? figureRect() : null;
   lastFx = DESK.draw(ctx, {
     width: W, height: H, t, state, level: smoothLevel, flash, stats,
-    emblemHover, figure: figureOn,
+    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
   }) || lastFx;
 
   fxCtx.clearRect(0, 0, innerWidth, innerHeight);
-  if (figureOn && figureCal) {
-    const rect = figureRect();
-    if (rect) DESK.drawFigureFx(fxCtx, rect, figureCal, t, lastFx.eyes, lastFx.surge);
+  if (figureOn && figureCal && rect) {
+    DESK.drawFigureFx(fxCtx, rect, figureCal, t, lastFx.eyes, lastFx.surge);
+    if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, lastFx.eyes);
   }
 
   if (dialPanel.classList.contains("on")) {

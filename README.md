@@ -114,13 +114,20 @@ oynalar ORQASIDA (ish stoli darajasida) turadi:
 - **Soat, sana, hafta kunlari, papkalar, tezkor havolalar** — hammasi jonli.
 - **Chap pastda dumaloq JARVIS** — bosilsa bo'g'in siferblatlari paneli ochiladi.
 
-**O'z rasmingizni qo'yish.** Internetdagi tayyor Iron Man HUD wallpaperini
-(yoki istalgan rasmni) sichqoncha bilan ish stoli HUD ustiga sudrab tashlang —
-markazda vektor chizma o'rniga aynan o'sha rasm turadi va doim saqlanib qoladi.
-Bir marta sozlaysiz: chap ko'z, o'ng ko'z va reaktorga bosasiz. Shundan keyin
-«Hey Jarvis» deganingizda rasmning ko'zlari yonadi, reaktori aylanadi va
-gapirganda kuchayadi. Demoda ham xuddi shunday ishlaydi — rasmni sahifaga
-tashlab ko'ring.
+**Standart fon — SHIELD OS wallpaperi.** Mashhur Iron Man HUD wallpaperi
+(`ui/renderer/assets/markaz.jpg`, MIT litsenziyali ochiq repodan) o'rnatilgan
+holda keladi va butun ekranni egallaydi. Uning ustida hammasi jonli:
+
+- «Hey Jarvis» deganingizda **Iron Man'ning ko'zlari yonadi**, ko'kragidagi
+  reaktor kuchayib aylanadi;
+- rasmdagi ilova tugmalari, saytlar ro'yxati va papkalar **haqiqatan bosiladi**
+  (Safari, Sozlamalar, YouTube, Yuklamalar...);
+- reaktorga bossangiz — Jarvis uyg'onadi;
+- chap pastdagi JARVIS doirasiga bossangiz — bo'g'in siferblatlari ochiladi;
+- o'ng chetda sariq ovoz datchigi, pastda jonli soat va CPU/RAM/disk.
+
+**Boshqa rasm qo'yish.** Istalgan rasmni HUD ustiga sudrab tashlang — saqlanadi
+va uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor).
 
 O'chirish: `JARVIS_DESKTOP=0 ./scripts/run.sh`. Kichik burchak-vidjet har doim qoladi.
 

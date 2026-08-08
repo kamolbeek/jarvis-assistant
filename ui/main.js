@@ -259,6 +259,8 @@ ipcMain.on("desk-open-url", (_e, url) => {
   const ALLOWED_URLS = new Set([
     "https://youtube.com", "https://gmail.com", "https://github.com",
     "https://t.me", "https://wikipedia.org", "https://claude.ai",
+    "https://google.com", "https://facebook.com", "https://imdb.com",
+    "https://yahoo.com",
   ]);
   if (ALLOWED_URLS.has(url)) shell.openExternal(url);
 });

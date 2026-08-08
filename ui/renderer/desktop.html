@@ -31,6 +31,17 @@
   #figure.on { display: block; }
   #fx-canvas { pointer-events: none; }
   body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
+  body.wallpaper #rail-left, body.wallpaper #sys-block, body.wallpaper #dates,
+  body.wallpaper #links, body.wallpaper #weather, body.wallpaper #disk,
+  body.wallpaper #clock, body.wallpaper #folders, body.wallpaper #vertical-tag { display: none; }
+  #live-pill {
+    left: 50%; bottom: 8px; transform: translateX(-50%);
+    padding: 5px 14px; border-radius: 8px;
+    background: rgba(3, 8, 12, 0.92); border: 1px solid var(--edge);
+    font: 600 11px var(--mono); letter-spacing: 0.1em; color: var(--cyan);
+    display: none; white-space: nowrap;
+  }
+  body.wallpaper #live-pill { display: block; }
 
   .blk { position: absolute; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
   .blk h3 { font-size: 9px; font-weight: 700; letter-spacing: 0.24em; color: rgba(236,253,255,0.4); margin-bottom: 7px; }
@@ -195,6 +206,7 @@
     <div class="chip" data-folder="desktop">Ish stoli</div>
   </div>
 
+  <div class="blk" id="live-pill"></div>
   <div class="blk" id="caption"><b></b><span></span></div>
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
   <div class="blk" id="offline">YADRO BILAN ALOQA YO'Q</div>
@@ -426,16 +438,82 @@ figureImg.addEventListener("click", (e) => {
   }
 });
 
+let bundled = false; // o'rnatilgan wallpaper rejimi
+
 async function loadFigure() {
   const saved = await window.desk.getFigure();
-  if (!saved) return;
-  figureImg.src = "file://" + saved + "?v=" + Math.random();
+  if (saved) {
+    // Foydalanuvchi o'z rasmini qo'ygan — o'sha ustun
+    figureImg.src = "file://" + saved + "?v=" + Math.random();
+    figureImg.onload = () => {
+      figureOn = true;
+      bundled = false;
+      figureImg.classList.add("on");
+      if (!figureCal) startCalibration();
+    };
+    return;
+  }
+  // Standart: o'rnatilgan SHIELD OS wallpaperi — kalibrlash shart emas,
+  // nuqtalar oldindan o'lchangan, statik elementlar bosiladigan qilingan.
+  figureImg.src = "assets/markaz.jpg";
   figureImg.onload = () => {
     figureOn = true;
+    bundled = true;
+    figureCal = DESK.BUNDLED.cal;
     figureImg.classList.add("on");
-    if (!figureCal) startCalibration();
+    document.body.classList.add("wallpaper");
   };
 }
+
+// Rasmdagi statik elementlar ustidagi bosiladigan maydonlar
+function hotspotAt(clientX, clientY) {
+  if (!bundled) return null;
+  const rect = figureRect();
+  if (!rect) return null;
+  const nx = (clientX - rect.x) / rect.w;
+  const ny = (clientY - rect.y) / rect.h;
+  const e = DESK.BUNDLED.emblem;
+  if (Math.hypot(nx - e.c[0], ny - e.c[1]) <= e.r * 0.6) return { emblem: true };
+  for (const h of DESK.BUNDLED.hotspots) {
+    if (h.circle) {
+      if (Math.hypot(nx - h.circle[0], ny - h.circle[1]) <= h.circle[2]) return h;
+    } else if (h.rect) {
+      const [x, y, w, hh] = h.rect;
+      if (nx >= x && nx <= x + w && ny >= y && ny <= y + hh) return h;
+    }
+  }
+  return null;
+}
+
+document.addEventListener("mousemove", (e) => {
+  const h = hotspotAt(e.clientX, e.clientY);
+  if (h) document.body.style.cursor = "pointer";
+  else if (bundled) document.body.style.cursor = "";
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#dial-panel")) return;
+  const h = hotspotAt(e.clientX, e.clientY);
+  if (!h) return;
+  if (h.emblem) { dialPanel.classList.toggle("on"); return; }
+  if (h.activate) { send({ type: "activate" }); return; }
+  if (h.url) { window.desk.openUrl(h.url); return; }
+  if (h.app) { window.desk.openApp(h.app); return; }
+  if (h.folder) { window.desk.openFolder(h.folder); return; }
+});
+
+function send(message) {
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+}
+
+// Jonli qator: soat + haqiqiy CPU/RAM/disk — rasm ostida
+setInterval(() => {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  document.getElementById("live-pill").textContent =
+    `${hh}:${mm}  ·  CPU ${Math.round(stats.cpu)}%  ·  RAM ${Math.round(stats.ram)}%  ·  DISK ${Math.round(stats.disk)}%`;
+}, 1000);
 
 // Fayl tashlash — istalgan joyga
 window.addEventListener("dragover", (e) => e.preventDefault());
@@ -451,6 +529,8 @@ window.addEventListener("drop", async (e) => {
   figureImg.src = "file://" + saved + "?v=" + Math.random();
   figureImg.onload = () => {
     figureOn = true;
+    bundled = false;
+    document.body.classList.remove("wallpaper");
     figureImg.classList.add("on");
     startCalibration();
   };
@@ -463,15 +543,16 @@ frame = function patchedFrame(now) {
   smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
   flash *= 0.93; if (flash < 0.01) flash = 0;
 
+  const rect = figureOn ? figureRect() : null;
   const out = DESK.draw(ctx, {
     width: W, height: H, t, state, level: smoothLevel, flash, stats,
-    emblemHover, figure: figureOn,
+    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
   });
 
   fxCtx.clearRect(0, 0, innerWidth, innerHeight);
-  if (figureOn && figureCal) {
-    const rect = figureRect();
-    if (rect) DESK.drawFigureFx(fxCtx, rect, figureCal, t, out.eyes, out.surge);
+  if (figureOn && figureCal && rect) {
+    DESK.drawFigureFx(fxCtx, rect, figureCal, t, out.eyes, out.surge);
+    if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, out.eyes);
   }
 
   if (dialPanel.classList.contains("on")) {
