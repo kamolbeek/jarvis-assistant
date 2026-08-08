@@ -158,8 +158,14 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
             fatal=True,
         )
     if peak < 0.06:
-        return Result(True, f"Signal juda past (eng yuqori {peak:.2f}).\n"
-                            f"`audio.input_gain` ni 2.0–3.0 ga ko'taring.")
+        # Dasturiy kuchaytirish shovqinni ham kuchaytiradi, shuning uchun avval
+        # tizim sozlamasini tekshirishni taklif qilamiz — sabab ko'pincha o'sha.
+        return Result(True, f"Signal past (eng yuqori {peak:.2f}, kerak 0.06+).\n"
+                            f"1) Tizim sozlamalari > Ovoz > Kirish: qurilmani tanlab,\n"
+                            f"   «Kirish balandligi» surgichini oxirigacha suring.\n"
+                            f"2) Mikrofonga yaqinroq va odatdagidek balandlikda gapiring.\n"
+                            f"3) Shundan keyin ham past bo'lsa — config/jarvis.yaml da\n"
+                            f"   `audio.input_gain` ni 2.0–3.0 ga ko'taring.")
 
     check_microphone.audio = np.concatenate(frames)  # type: ignore[attr-defined]
     return Result(True, f"Eng yuqori daraja: {peak:.2f}")
