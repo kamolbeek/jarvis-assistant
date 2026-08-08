@@ -22,6 +22,8 @@ def _cfg(stt: str = "elevenlabs", tts: str = "elevenlabs") -> Config:
 def test_env_check_reports_every_missing_key(monkeypatch: pytest.MonkeyPatch):
     for key in ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY"):
         monkeypatch.delenv(key, raising=False)
+    # `claude` ham yo'q — miya uchun hech qanday yo'l qolmaydi
+    monkeypatch.setattr("jarvis.doctor.shutil.which", lambda _: None)
 
     result = check_env(_cfg())
 
@@ -29,6 +31,18 @@ def test_env_check_reports_every_missing_key(monkeypatch: pytest.MonkeyPatch):
     assert result.fatal is True, "kalitsiz qolgan tekshiruvlar ma'nosiz"
     assert "ANTHROPIC_API_KEY" in result.detail
     assert "ELEVENLABS_API_KEY" in result.detail
+
+
+def test_claude_code_counts_as_brain_auth(monkeypatch: pytest.MonkeyPatch):
+    """API kaliti yo'q, lekin Claude Code bor — bu ham yaroqli yo'l."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
+    monkeypatch.setattr("jarvis.doctor.shutil.which", lambda name: "/usr/bin/claude")
+
+    result = check_env(_cfg())
+
+    assert result.ok is True, result.detail
+    assert "Claude Code" in result.detail
 
 
 def test_env_check_passes_when_keys_present(monkeypatch: pytest.MonkeyPatch):

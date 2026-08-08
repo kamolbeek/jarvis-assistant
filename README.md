@@ -60,12 +60,39 @@ cd jarvis-assistant
 ./scripts/install.sh
 ```
 
-Keyin `.env` faylini to'ldiring (kamida ikkita kalit):
+Keyin `.env` faylini to'ldiring:
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...      # miya
 ELEVENLABS_API_KEY=...            # ovoz (STT + TTS)
 ```
+
+### Nega kalit kerak — va qachon kerak emas
+
+**Miya (Claude)** Anthropic serverlarida ishlaydi, kompyuteringizda emas — model
+o'nlab gigabayt va kuchli videokarta talab qiladi. Shuning uchun kirish kaliti
+kerak. Ikki yo'l bor:
+
+1. **API kaliti** — har so'rov uchun to'lov ([console.anthropic.com](https://console.anthropic.com)).
+2. **Claude Code obunasi** — agar sizda Claude Pro/Max obunasi bo'lsa,
+   Mac'da `claude` o'rnatib kiring (`claude` deb yozing, brauzerda tasdiqlang).
+   Claude Agent SDK ichida aynan Claude Code'ni ishlatadi, shuning uchun
+   `ANTHROPIC_API_KEY` ni umuman qo'ymasangiz ham ishlashi mumkin —
+   `python -m jarvis doctor` buni aniq aytadi.
+
+**Ovoz esa butunlay kompyuteringizda ishlashi mumkin** — kalitsiz, internetsiz,
+bepul. `config/jarvis.yaml` da:
+
+```yaml
+voice:
+  stt:
+    provider: "whisper_local"     # Whisper Mac'ning o'zida ishlaydi
+  tts:
+    provider: "macos"             # macOS ning o'z ovozi
+```
+
+Kamchiligi — o'zbekcha aniqligi ElevenLabs'dan pastroq va birinchi ishga
+tushirishda model yuklab olinadi (~1.5 GB). Lekin hech qanday to'lov yo'q.
 
 macOS ruxsatlarini bering — **Tizim sozlamalari → Maxfiylik va xavfsizlik**:
 

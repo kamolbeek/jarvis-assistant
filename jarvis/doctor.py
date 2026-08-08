@@ -47,11 +47,26 @@ def _header(text: str) -> None:
 
 
 def check_env(cfg: Config) -> Result:
-    """Kalitlar joyidami?"""
-    missing: list[str] = []
+    """Kalitlar joyidami?
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        missing.append("ANTHROPIC_API_KEY — miya ishlamaydi")
+    Miya uchun ikki yo'l bor va ikkalasi ham yaroqli: API kaliti (har so'rov
+    uchun to'lov) yoki Claude Code obunasi. Claude Agent SDK ichida Claude Code
+    buyrug'ini ishlatadi, shuning uchun `claude` o'rnatilgan va unga kirilgan
+    bo'lsa, kalitsiz ham ishlashi mumkin. Buni faqat haqiqiy so'rov aniqlaydi,
+    shuning uchun bu yerda to'xtatmaymiz — miya tekshiruvi hal qiladi.
+    """
+    missing: list[str] = []
+    notes: list[str] = []
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        notes.append("Miya: API kaliti")
+    elif shutil.which("claude"):
+        notes.append("Miya: API kaliti yo'q, Claude Code orqali sinaladi")
+    else:
+        missing.append(
+            "ANTHROPIC_API_KEY yo'q va `claude` ham o'rnatilmagan — miya ishlamaydi.\n"
+            "Yo .env ga kalit qo'ying, yo Claude Code o'rnatib obunangiz bilan kiring."
+        )
 
     stt = str(cfg.get("voice.stt.provider", "elevenlabs"))
     tts = str(cfg.get("voice.tts.provider", "elevenlabs"))
@@ -67,7 +82,7 @@ def check_env(cfg: Config) -> Result:
 
     if missing:
         return Result(False, "\n".join(missing), fatal=True)
-    return Result(True, f"STT: {stt} · TTS: {tts}")
+    return Result(True, "\n".join([f"STT: {stt} · TTS: {tts}", *notes]))
 
 
 def check_devices(cfg: Config) -> Result:
