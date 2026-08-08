@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jarvis</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <!-- Orb: bosilsa Jarvis uyg'onadi -->
+      <div id="orb-wrap" class="interactive" title="Jarvis'ni chaqirish">
+        <canvas id="orb" width="240" height="240"></canvas>
+        <div id="status-dot"></div>
+      </div>
+
+      <!-- Nima eshitilgani / Jarvis nima deyayotgani -->
+      <div id="caption" class="panel hidden">
+        <span id="caption-role"></span>
+        <p id="caption-text"></p>
+      </div>
+
+      <!-- Xavfsizlik darvozasi tasdiq so'raganda -->
+      <div id="confirm" class="panel hidden interactive">
+        <p id="confirm-action"></p>
+        <pre id="confirm-detail"></pre>
+        <div class="row">
+          <button id="approve" class="btn ok">Ha</button>
+          <button id="deny" class="btn no">Yo'q</button>
+        </div>
+        <span class="hint">Enter — ha · Esc — yo'q</span>
+      </div>
+
+      <!-- Ulanish yo'qolganda -->
+      <div id="offline" class="panel warn hidden">
+        Yadro bilan aloqa yo'q — <code>jarvis</code> ishga tushganini tekshiring
+      </div>
+    </div>
+
+    <script src="orb.js"></script>
+  </body>
+</html>

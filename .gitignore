@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+.env
+config/jarvis.yaml
+
+# Jarvis ish fayllari
+data/
+*.db
+*.sqlite3
+audit.log
+*.wav
+
+node_modules/
+ui/dist/
+.DS_Store

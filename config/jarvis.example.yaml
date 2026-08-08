@@ -1,0 +1,121 @@
+# Jarvis konfiguratsiyasi.
+# Ishlatish uchun nusxa oling:  cp config/jarvis.example.yaml config/jarvis.yaml
+
+identity:
+  name: "Jarvis"
+  # Foydalanuvchiga qanday murojaat qilsin
+  user_name: "Kamoliddin"
+  # Asosiy muloqot tili: javoblar shu tilda bo'ladi
+  language: "uz"
+
+activation:
+  # Uyg'otuvchi so'z ("hey jarvis"). openWakeWord'da tayyor model bor.
+  wake_word:
+    enabled: true
+    backend: "openwakeword"        # openwakeword | porcupine
+    model: "hey_jarvis"
+    threshold: 0.5                 # 0..1 — pastroq = sezgirroq (lekin ko'p yolg'on ishga tushish)
+    cooldown_sec: 2.0
+
+  # Ikki marta qarsak — "tars-tars".
+  clap:
+    enabled: true
+    # Zarba deb hisoblash uchun energiya sakrashi (adaptiv shovqin darajasiga nisbatan)
+    onset_ratio: 8.0
+    min_gap_sec: 0.12              # ikki qarsak orasidagi eng qisqa vaqt
+    max_gap_sec: 0.70              # eng uzun vaqt
+    cooldown_sec: 2.0
+
+  # Global tugma (UI orqali). macOS'da Accessibility ruxsati kerak.
+  hotkey:
+    enabled: true
+    combo: "Cmd+Shift+J"
+
+audio:
+  sample_rate: 16000
+  frame_ms: 20
+  input_device: null               # null = tizim standarti; yoki qurilma nomi/raqami
+  output_device: null
+
+  # Gapirishni tugatganini aniqlash
+  endpointing:
+    backend: "webrtcvad"           # webrtcvad | energy
+    aggressiveness: 2              # 0..3
+    silence_ms: 900                # shuncha jimlikdan keyin yozib olish tugaydi
+    max_utterance_sec: 30
+    preroll_ms: 300                # uyg'otuvchi so'zdan oldingi audio (kontekst uchun)
+
+voice:
+  stt:
+    provider: "elevenlabs"         # elevenlabs | mohir | whisper_local
+    language: "uz"
+    # whisper_local uchun:
+    model: "mlx-community/whisper-large-v3-turbo"
+
+  tts:
+    provider: "elevenlabs"         # elevenlabs | azure | mohir | macos
+    voice: "Rachel"                # ElevenLabs ovoz nomi yoki ID
+    model: "eleven_multilingual_v2"
+    speed: 1.0
+    # azure uchun: uz-UZ-SardorNeural | uz-UZ-MadinaNeural
+
+brain:
+  model: "claude-opus-5"
+  # Ishchi papka — Jarvis fayl/kod ishlarini shu yerda bajaradi
+  workspace: "~/jarvis-workspace"
+  max_turns: 40
+  # Har bir suhbat uchun sarf chegarasi (AQSH dollarida). null = cheklovsiz.
+  max_budget_usd: 2.0
+
+memory:
+  # Barqaror xotira: afzalliklar, faktlar, loyiha holati
+  path: "~/.jarvis/memory.db"
+  # Har bir suhbatdan keyin muhim faktlarni saqlab qo'yish
+  autosave: true
+
+safety:
+  # Xavfsizlik darvozasi: qaysi amallar tasdiq so'raydi.
+  # "ask"   — ovoz/UI orqali tasdiq so'raydi
+  # "allow" — avtomatik ruxsat
+  # "deny"  — umuman ta'qiqlangan
+  default: "ask"
+  rules:
+    Read: "allow"
+    Glob: "allow"
+    Grep: "allow"
+    WebSearch: "allow"
+    WebFetch: "allow"
+    Write: "ask"
+    Edit: "ask"
+    Bash: "ask"
+    NotebookEdit: "ask"
+
+  # Bu naqshlar hech qachon bajarilmaydi (tasdiq so'ralmaydi ham).
+  forbidden_patterns:
+    - "rm -rf /"
+    - "rm -rf ~"
+    - ":(){ :|:& };:"
+    - "mkfs"
+    - "dd if=/dev/zero"
+    - "sudo rm"
+    - "> /dev/sda"
+
+  # Bu papkalardan tashqariga yozish taqiqlanadi (workspace avtomatik qo'shiladi).
+  writable_roots:
+    - "~/jarvis-workspace"
+    - "~/Downloads"
+
+  audit_log: "~/.jarvis/audit.log"
+
+ui:
+  # Orb (dumaloq ikonka) bilan aloqa uchun lokal WebSocket
+  host: "127.0.0.1"
+  port: 8765
+  # Orb ekranda qayerda tursin
+  position: "bottom-right"         # bottom-right | bottom-left | top-right | top-left | center
+
+channels:
+  telegram:
+    enabled: false
+  n8n:
+    enabled: false
