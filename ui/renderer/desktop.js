@@ -1,0 +1,380 @@
+// Ish stoli HUD sahnasi — butun ekranni egallaydigan chizuvchi.
+//
+// Havoladagi Rainmeter uslubida: markazda zirh chizmasi (SUIT), orqasida
+// aylanuvchi halqalar, chetlarda shesternyalar, o'ngda sariq ovoz datchigi
+// va tizim o'lchagichi, chap pastda dumaloq JARVIS emblemasi.
+//
+// Bu fayl faqat chizadi — ma'lumotni (holat, ovoz darajasi, CPU/RAM)
+// chaqiruvchi beradi. DOM elementlari (ilova tugmalari, ob-havo, soat)
+// sahifaning o'zida, bu yerda faqat grafika.
+
+const DESK = (() => {
+  const TAU = Math.PI * 2;
+
+  const METER_SLOTS = 18; // ovoz datchigi segmentlari
+
+  // Suzuvchi zarrachalar — butun ekran bo'ylab siyrak
+  const MOTES = Array.from({ length: 42 }, () => ({
+    x: Math.random(),
+    y: Math.random(),
+    drift: 0.004 + Math.random() * 0.01,
+    phase: Math.random() * TAU,
+    size: 0.5 + Math.random() * 1.3,
+  }));
+
+  let peakHold = 0; // datchik cho'qqi chizig'i sekin tushadi
+
+  // ------------------------------------------------------------- fon
+
+  function drawGrid(ctx, W, H) {
+    const step = 48;
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.035);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = step; x < W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = step; y < H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+
+    // Har to'rtinchi kesishmada kichik xoch — chizma qog'ozi hissi
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.08);
+    ctx.beginPath();
+    for (let x = step * 4; x < W; x += step * 4) {
+      for (let y = step * 4; y < H; y += step * 4) {
+        ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y);
+        ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4);
+      }
+    }
+    ctx.stroke();
+  }
+
+  function drawMotes(ctx, W, H, t) {
+    for (const m of MOTES) {
+      const y = (m.y + t * m.drift) % 1;
+      const tw = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.9 + m.phase));
+      ctx.beginPath();
+      ctx.arc(m.x * W, y * H, m.size, 0, TAU);
+      ctx.fillStyle = P.toCss(P.RGB.cyan, 0.10 * tw);
+      ctx.fill();
+    }
+  }
+
+  // ------------------------------------------------------------- halqalar
+
+  // Zirh orqasidagi katta aylanuvchi chizma halqalari
+  function drawRings(ctx, cx, cy, R, t, energy) {
+    // Belgili halqa
+    const spin = t * 0.06;
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.22);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 90; i++) {
+      const a = spin + (i / 90) * TAU;
+      const major = i % 15 === 0;
+      const r0 = R * (major ? 0.955 : 0.975);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, TAU);
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.18);
+    ctx.stroke();
+
+    // Uzuq ichki halqa — teskari aylanadi
+    ctx.setLineDash([3, 9]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.88, -t * 0.1, -t * 0.1 + TAU);
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.16);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Qisman yoylar — energiya bilan yorqinlashadi
+    for (const [k, from, sweep, speed, w] of [
+      [1.06, 0.4, 1.3, 0.22, 2], [1.06, 3.6, 0.6, 0.22, 2],
+      [0.80, 2.0, 1.8, -0.15, 2.6], [0.72, 5.0, 0.9, 0.3, 1.4],
+    ]) {
+      const a = from + t * speed;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * k, a, a + sweep);
+      ctx.strokeStyle = P.toCss(P.RGB.cyan, (0.25 + energy * 0.3));
+      ctx.lineWidth = w;
+      ctx.stroke();
+    }
+  }
+
+  // ------------------------------------------------------------- shesternya
+
+  function drawGear(ctx, cx, cy, r, teeth, rot, alpha) {
+    const toothH = r * 0.16;
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, alpha);
+    ctx.lineWidth = 1.2;
+
+    // Tishli tashqi kontur
+    ctx.beginPath();
+    for (let i = 0; i < teeth; i++) {
+      const a0 = rot + (i / teeth) * TAU;
+      const a1 = rot + ((i + 0.38) / teeth) * TAU;
+      const a2 = rot + ((i + 0.5) / teeth) * TAU;
+      const a3 = rot + ((i + 0.88) / teeth) * TAU;
+      const R1 = r + toothH;
+      if (i === 0) ctx.moveTo(cx + Math.cos(a0) * R1, cy + Math.sin(a0) * R1);
+      ctx.arc(cx, cy, R1, a0, a1);
+      ctx.lineTo(cx + Math.cos(a2) * r, cy + Math.sin(a2) * r);
+      ctx.arc(cx, cy, r, a2, a3);
+      ctx.lineTo(cx + Math.cos(rot + ((i + 1) / teeth) * TAU) * R1,
+                 cy + Math.sin(rot + ((i + 1) / teeth) * TAU) * R1);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Ichki halqa va kesmalar
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.62, 0, TAU);
+    ctx.stroke();
+    for (let i = 0; i < 5; i++) {
+      const a = rot + (i / 5) * TAU;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r * 0.2, cy + Math.sin(a) * r * 0.2);
+      ctx.lineTo(cx + Math.cos(a) * r * 0.62, cy + Math.sin(a) * r * 0.62);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.2, 0, TAU);
+    ctx.stroke();
+  }
+
+  // Bir-biriga "tishlashgan" shesternyalar guruhi
+  function drawGearCluster(ctx, x, y, t, scale, alpha) {
+    drawGear(ctx, x, y, 56 * scale, 14, t * 0.3, alpha);
+    drawGear(ctx, x + 74 * scale, y + 48 * scale, 32 * scale, 10, -t * 0.3 * (56 / 32) + 0.16, alpha * 0.8);
+    drawGear(ctx, x - 52 * scale, y + 66 * scale, 24 * scale, 8, -t * 0.3 * (56 / 24) + 0.3, alpha * 0.65);
+  }
+
+  // ------------------------------------------------------------- ovoz datchigi
+
+  // Sariq (zargaldoq) vertikal ustun — ovoz darajasiga qarab ko'tarilib tushadi
+  function drawVoiceMeter(ctx, x, yTop, height, level, active, t) {
+    const slotH = height / METER_SLOTS;
+    const barW = 36;
+    const lit = Math.round(level * METER_SLOTS);
+
+    peakHold = Math.max(peakHold - 0.006, level);
+
+    for (let i = 0; i < METER_SLOTS; i++) {
+      const y = yTop + height - (i + 1) * slotH;
+      const on = i < lit && active;
+      // Yuqori segmentlar qizg'ishroq — klassik daraja o'lchagich
+      const hot = i / METER_SLOTS;
+      const color = hot > 0.82 ? P.RGB.red : P.RGB.amber;
+      ctx.fillStyle = P.toCss(color, on ? 0.5 + hot * 0.5 : 0.07);
+      ctx.fillRect(x, y + 2, barW, slotH - 4);
+      if (on) {
+        ctx.shadowColor = P.toCss(color, 0.8);
+        ctx.shadowBlur = 8;
+        ctx.fillRect(x, y + 2, barW, slotH - 4);
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    // Cho'qqi chizig'i
+    if (active && peakHold > 0.02) {
+      const py = yTop + height - peakHold * height;
+      ctx.fillStyle = P.toCss(P.RGB.white, 0.85);
+      ctx.fillRect(x, py, barW, 2);
+    }
+
+    // Ramka burchaklari
+    ctx.strokeStyle = P.toCss(P.RGB.amber, 0.5);
+    ctx.lineWidth = 1.4;
+    for (const [bx, by, dx, dy] of [
+      [x - 5, yTop - 5, 10, 0], [x - 5, yTop - 5, 0, 10],
+      [x + barW + 5, yTop - 5, -10, 0], [x + barW + 5, yTop - 5, 0, 10],
+      [x - 5, yTop + height + 5, 10, 0], [x - 5, yTop + height + 5, 0, -10],
+      [x + barW + 5, yTop + height + 5, -10, 0], [x + barW + 5, yTop + height + 5, 0, -10],
+    ]) {
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + dx, by + dy);
+      ctx.stroke();
+    }
+
+    // Yozuv
+    ctx.font = "700 10px ui-monospace, Menlo, monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = P.toCss(P.RGB.amber, active ? 0.9 : 0.4);
+    ctx.fillText("OVOZ", x + barW / 2, yTop + height + 24);
+  }
+
+  // ------------------------------------------------------------- tizim o'lchagichi
+
+  // Dumaloq o'lchagich: CPU / RAM / DISK — uch konsentrik yoy
+  function drawSystemGauge(ctx, cx, cy, r, stats, t) {
+    const rows = [
+      { key: "cpu", label: "CPU", color: P.RGB.cyan, k: 1.0 },
+      { key: "ram", label: "RAM", color: P.RGB.amber, k: 0.78 },
+      { key: "disk", label: "DISK", color: P.RGB.cyan, k: 0.56 },
+    ];
+
+    // Fon bo'linmalari
+    ctx.strokeStyle = P.toCss(P.RGB.cyan, 0.15);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * TAU;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r * 1.06, cy + Math.sin(a) * r * 1.06);
+      ctx.lineTo(cx + Math.cos(a) * r * 1.12, cy + Math.sin(a) * r * 1.12);
+      ctx.stroke();
+    }
+
+    for (const row of rows) {
+      const value = Math.max(0, Math.min(1, (stats && stats[row.key] || 0) / 100));
+      const rr = r * row.k;
+      // Fon yoyi
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, -Math.PI / 2, -Math.PI / 2 + TAU);
+      ctx.strokeStyle = P.toCss(row.color, 0.12);
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      // Qiymat yoyi
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, -Math.PI / 2, -Math.PI / 2 + TAU * value);
+      ctx.strokeStyle = P.toCss(row.color, 0.85);
+      ctx.stroke();
+    }
+
+    // Markazda CPU foizi
+    ctx.textAlign = "center";
+    ctx.font = `700 ${Math.round(r * 0.42)}px ui-monospace, Menlo, monospace`;
+    ctx.fillStyle = P.toCss(P.RGB.white, 0.9);
+    ctx.fillText(`${Math.round(stats && stats.cpu || 0)}%`, cx, cy + r * 0.14);
+
+    // Pastda yozuvlar
+    ctx.font = "600 9.5px ui-monospace, Menlo, monospace";
+    let ly = cy + r * 1.34;
+    for (const row of rows) {
+      const value = Math.round(stats && stats[row.key] || 0);
+      ctx.fillStyle = P.toCss(row.color, 0.8);
+      ctx.fillText(`${row.label} ${value}%`, cx, ly);
+      ly += 15;
+    }
+  }
+
+  // ------------------------------------------------------------- emblema
+
+  // Chap pastdagi dumaloq JARVIS — bosilsa siferblat paneli ochiladi
+  function drawEmblem(ctx, cx, cy, r, t, mark, hover) {
+    // Nur
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.5);
+    g.addColorStop(0, P.toCss(P.RGB.cyan, 0.2 * mark));
+    g.addColorStop(1, P.toCss(P.RGB.cyan, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.5, 0, TAU);
+    ctx.fill();
+
+    // Halqalar
+    for (const [k, w, a] of [[1, 2, 0.9], [0.8, 1.2, 0.5], [0.62, 1.6, 0.75]]) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * k, 0, TAU);
+      ctx.strokeStyle = P.toCss(P.RGB.cyan, a * (hover ? 1.2 : 1) * mark);
+      ctx.lineWidth = w;
+      ctx.stroke();
+    }
+
+    // Aylanuvchi segmentlar
+    for (let i = 0; i < 3; i++) {
+      const a = t * 0.8 + (i / 3) * TAU;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.9, a, a + 1.1);
+      ctx.strokeStyle = P.toCss(P.RGB.white, 0.35 * mark);
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+    }
+
+    // Yozuv
+    ctx.font = `800 ${Math.round(r * 0.30)}px ui-sans-serif, -apple-system, system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = P.toCss(P.RGB.cyan, 0.9);
+    ctx.shadowBlur = 12 * mark;
+    ctx.fillStyle = P.toCss(P.RGB.white, 0.7 + 0.3 * mark);
+    ctx.fillText("JARVIS", cx, cy);
+    ctx.shadowBlur = 0;
+    ctx.textBaseline = "alphabetic";
+  }
+
+  // ------------------------------------------------------------- joylashuv
+
+  function layout(W, H) {
+    const suitH = Math.min(H * 0.80, W * 0.55);
+    return {
+      suit: { cx: W * 0.5, topY: H * 0.5 - suitH * 0.52, height: suitH },
+      emblem: { x: 118, y: H - 128, r: 62 },
+      meter: { x: W - 108, yTop: H * 0.16, height: Math.min(240, H * 0.30) },
+      gauge: { x: W - 150, y: H * 0.66, r: 54 },
+      gearsTL: { x: 265, y: 138 },
+      gearsR: { x: W - 305, y: H * 0.38 },
+    };
+  }
+
+  /**
+   * Bir kadr. f = { width, height, t, state, level, flash, stats:{cpu,ram,disk} }
+   */
+  function draw(ctx, f) {
+    const { width: W, height: H, t } = f;
+    const L = layout(W, H);
+    ctx.clearRect(0, 0, W, H);
+
+    const mood = P.STATE_MOOD[f.state] || P.STATE_MOOD.idle;
+    const active = f.state === "listening" || f.state === "speaking";
+    const energy = Math.min(1, mood.glow + f.flash * 0.5);
+
+    // Ko'zlar: kutishda xira, uyg'onganda chaqnaydi, o'ylashda sekin pulsatsiya
+    let eyes = 0.25 + mood.glow * 0.5 + f.flash * 0.6;
+    if (f.state === "thinking") eyes = 0.45 + Math.abs(Math.sin(t * 2.2)) * 0.3;
+    eyes = Math.min(1, eyes);
+
+    drawGrid(ctx, W, H);
+    drawMotes(ctx, W, H, t);
+
+    // Orqa halqalar reaktor markazida
+    const anchor = SUIT.reactorAt(L.suit);
+    drawRings(ctx, anchor.x, anchor.y, L.suit.height * 0.46, t, energy);
+
+    // Shesternyalar
+    drawGearCluster(ctx, L.gearsTL.x, L.gearsTL.y, t, 0.8, 0.3);
+    drawGearCluster(ctx, L.gearsR.x, L.gearsR.y, t, 1.0, 0.35);
+
+    // Zirh
+    SUIT.draw(ctx, {
+      cx: L.suit.cx, topY: L.suit.topY, height: L.suit.height,
+      t, eyes, surge: Math.min(1, mood.core * 0.6 + f.flash + f.level * 0.6),
+    });
+
+    // Zirh pastini fonga singdirish
+    const fade = ctx.createLinearGradient(0, L.suit.topY + L.suit.height * 0.82, 0, L.suit.topY + L.suit.height);
+    fade.addColorStop(0, "rgba(3, 8, 12, 0)");
+    fade.addColorStop(1, "rgba(3, 8, 12, 0.95)");
+    ctx.fillStyle = fade;
+    ctx.fillRect(L.suit.cx - L.suit.height, L.suit.topY + L.suit.height * 0.8,
+                 L.suit.height * 2, L.suit.height * 0.22);
+
+    drawVoiceMeter(ctx, L.meter.x, L.meter.yTop, L.meter.height, f.level, active, t);
+    drawSystemGauge(ctx, L.gauge.x, L.gauge.y, L.gauge.r, f.stats, t);
+    drawEmblem(ctx, L.emblem.x, L.emblem.y, L.emblem.r, t,
+               0.55 + mood.mark * 0.45, f.emblemHover);
+  }
+
+  // Emblema ustiga bosilganini aniqlash
+  function hit(W, H, x, y) {
+    const L = layout(W, H);
+    const dx = x - L.emblem.x;
+    const dy = y - L.emblem.y;
+    if (dx * dx + dy * dy <= (L.emblem.r * 1.15) ** 2) return "emblem";
+    return null;
+  }
+
+  return { draw, hit, layout };
+})();
+
+if (typeof module !== "undefined") module.exports = DESK;

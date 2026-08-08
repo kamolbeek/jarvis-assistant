@@ -81,6 +81,157 @@ function createWindow() {
   });
 }
 
+// ---------------------------------------------------------------- Ish stoli HUD
+//
+// Butun ekranni egallaydigan, oynalar ORQASIDA (ish stoli darajasida)
+// turadigan Rainmeter uslubidagi sahna. JARVIS_DESKTOP=0 bilan o'chiriladi.
+
+let deskWin = null;
+
+function createDesktopWindow() {
+  const { x, y, width, height } = screen.getPrimaryDisplay().bounds;
+
+  deskWin = new BrowserWindow({
+    x, y, width, height,
+    // "desktop" turi oynani ish stoli fonining darajasiga qo'yadi —
+    // oddiy oynalar uning ustida ochiladi, xuddi jonli fon kabi.
+    type: "desktop",
+    frame: false,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload-desktop.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  deskWin.loadFile(path.join(__dirname, "renderer", "desktop.html"));
+  deskWin.on("closed", () => { deskWin = null; });
+
+  startStats();
+  startWeather();
+}
+
+// --- Tizim ko'rsatkichlari: CPU (o'lchovlar farqidan), RAM, disk, ish vaqti ---
+
+const os = require("node:os");
+const fs = require("node:fs");
+const { execFile } = require("node:child_process");
+const { shell } = require("electron");
+
+let prevCpu = null;
+
+function cpuPercent() {
+  const cpus = os.cpus();
+  let idle = 0, total = 0;
+  for (const c of cpus) {
+    for (const k of Object.keys(c.times)) total += c.times[k];
+    idle += c.times.idle;
+  }
+  let percent = 0;
+  if (prevCpu) {
+    const dTotal = total - prevCpu.total;
+    const dIdle = idle - prevCpu.idle;
+    if (dTotal > 0) percent = (1 - dIdle / dTotal) * 100;
+  }
+  prevCpu = { idle, total };
+  return percent;
+}
+
+function startStats() {
+  const send = () => {
+    if (!deskWin) return;
+    let disk = null;
+    try {
+      // Node 18+: statfsSync. Ba'zi tizimlarda yo'q bo'lishi mumkin.
+      const s = fs.statfsSync("/");
+      const totalB = s.blocks * s.bsize;
+      const freeB = s.bavail * s.bsize;
+      disk = { percent: (1 - freeB / totalB) * 100, usedGb: (totalB - freeB) / 1e9, freeGb: freeB / 1e9 };
+    } catch { /* disk ko'rsatkichisiz davom etamiz */ }
+
+    deskWin.webContents.send("stats", {
+      cpu: cpuPercent(),
+      ram: (1 - os.freemem() / os.totalmem()) * 100,
+      disk: disk ? disk.percent : 0,
+      diskUsedGb: disk ? disk.usedGb : null,
+      diskFreeGb: disk ? disk.freeGb : null,
+      uptimeSec: os.uptime(),
+    });
+  };
+  send();
+  setInterval(send, 2000);
+}
+
+// --- Ob-havo: open-meteo (kalitsiz). Tarmoq bo'lmasa jim o'tib ketadi. ---
+
+async function fetchWeather() {
+  const lat = process.env.JARVIS_LAT || "41.31";
+  const lon = process.env.JARVIS_LON || "69.24";
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&forecast_days=2`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const d = data.daily;
+    return {
+      today: { max: Math.round(d.temperature_2m_max[0]), min: Math.round(d.temperature_2m_min[0]), code: d.weather_code[0] },
+      tomorrow: { max: Math.round(d.temperature_2m_max[1]), min: Math.round(d.temperature_2m_min[1]), code: d.weather_code[1] },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function startWeather() {
+  const send = async () => {
+    if (!deskWin) return;
+    const weather = await fetchWeather();
+    if (weather && deskWin) deskWin.webContents.send("weather", weather);
+  };
+  send();
+  setInterval(send, 30 * 60 * 1000);
+}
+
+// --- Ochish buyruqlari: faqat oq ro'yxatdagilar ---
+
+const ALLOWED_APPS = new Set([
+  "Finder", "Safari", "Terminal", "Notes", "Music", "System Settings",
+  "Calendar", "Mail", "Messages",
+]);
+
+const FOLDER_KEYS = {
+  downloads: "downloads", documents: "documents", pictures: "pictures",
+  music: "music", videos: "videos", desktop: "desktop",
+};
+
+ipcMain.on("desk-open-app", (_e, name) => {
+  if (!ALLOWED_APPS.has(name)) return;
+  if (process.platform === "darwin") execFile("open", ["-a", name]);
+});
+
+ipcMain.on("desk-open-folder", (_e, key) => {
+  const mapped = FOLDER_KEYS[key];
+  if (!mapped) return;
+  try {
+    shell.openPath(app.getPath(mapped));
+  } catch { /* noma'lum papka — e'tiborsiz */ }
+});
+
+ipcMain.on("desk-open-url", (_e, url) => {
+  // Faqat https va aniq ro'yxat — renderer buzilsa ham ixtiyoriy manzil ochilmasin
+  const ALLOWED_URLS = new Set([
+    "https://youtube.com", "https://gmail.com", "https://github.com",
+    "https://t.me", "https://wikipedia.org", "https://claude.ai",
+  ]);
+  if (ALLOWED_URLS.has(url)) shell.openExternal(url);
+});
+
 // Renderer sichqoncha interaktiv element ustida ekanini aytadi.
 ipcMain.on("set-interactive", (_event, interactive) => {
   if (!win) return;
@@ -106,6 +257,11 @@ app.whenReady().then(() => {
   }
 
   createWindow();
+
+  // Ish stoli HUD — standart yoqilgan; JARVIS_DESKTOP=0 bilan o'chiriladi.
+  if (process.env.JARVIS_DESKTOP !== "0") {
+    createDesktopWindow();
+  }
 
   // Global tugma: uyg'otuvchi so'zsiz chaqirish.
   const combo = process.env.JARVIS_HOTKEY || "CommandOrControl+Shift+J";

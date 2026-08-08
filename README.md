@@ -99,6 +99,23 @@ HUD ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
 > brauzerda oching — barcha holatlar, bo'g'inlarni «buzib» ko'rish va to'liq
 > suhbat oqimi bor.
 
+### Ish stoli rejimi
+
+Jarvis endi butun ish stolini egallaydi — Rainmeter uslubidagi to'liq HUD,
+oynalar ORQASIDA (ish stoli darajasida) turadi:
+
+- **Markazda zirh chizmasi** — «Hey Jarvis» deganingizda ko'zlari yonadi,
+  reaktori kuchayadi, orqasidagi halqalar tezlashadi.
+- **Chapda ilovalar paneli** — Finder, Safari, Terminal va boshqalar; bosilsa ochiladi.
+- **Tizim bloki** — ish vaqti, CPU, xotira, disk (jonli, har 2 soniyada).
+- **O'ngda sariq ovoz datchigi** — gapirganingizda ustunlar ko'tarilib tushadi.
+- **Dumaloq o'lchagich** — CPU/RAM/disk yoylari.
+- **Ob-havo** — bugun/ertaga (open-meteo, kalitsiz; `JARVIS_LAT`/`JARVIS_LON`).
+- **Soat, sana, hafta kunlari, papkalar, tezkor havolalar** — hammasi jonli.
+- **Chap pastda dumaloq JARVIS** — bosilsa bo'g'in siferblatlari paneli ochiladi.
+
+O'chirish: `JARVIS_DESKTOP=0 ./scripts/run.sh`. Kichik burchak-vidjet har doim qoladi.
+
 ### HUD nimani ko'rsatadi
 
 Markazda JARVIS yozuvi — asosiy ikonka. «Hey Jarvis» deganingizda u yorqin

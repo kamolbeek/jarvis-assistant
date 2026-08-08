@@ -15,7 +15,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SHELL = ROOT / "docs" / "demo-shell.html"
 OUT = ROOT / "docs" / "orb-demo.html"
-SOURCES = [ROOT / "ui" / "renderer" / "palette.js", ROOT / "ui" / "renderer" / "hud.js"]
+SOURCES = [
+    ROOT / "ui" / "renderer" / "palette.js",
+    ROOT / "ui" / "renderer" / "suit.js",
+    ROOT / "ui" / "renderer" / "hud.js",
+    ROOT / "ui" / "renderer" / "desktop.js",
+]
 
 MARKER = "/*INJECT*/"
 
