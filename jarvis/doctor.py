@@ -232,18 +232,39 @@ async def check_microphone(cfg: Config, seconds: float = 3.0) -> Result:
     return Result(True, f"Eng yuqori daraja: {peak:.2f}")
 
 
-def check_wake_word(cfg: Config) -> Result:
-    """Model yuklanadimi va sizning ovozingizda qanday ball beradi?"""
+WAKE_TIMEOUT_SEC = 240.0
+
+
+async def check_wake_word(cfg: Config) -> Result:
+    """Model yuklanadimi va sizning ovozingizda qanday ball beradi?
+
+    Model birinchi marta yuklab olinadi (~20 MB) va bu qadam har bir venv
+    uchun alohida takrorlanadi. Yuklash bloklaydi va hech nima chop etmaydi,
+    shuning uchun uni alohida oqimda, muddat bilan bajaramiz — diagnostika
+    jim qotib turgandan ko'ra "vaqt tugadi" deb aytgani yaxshi.
+    """
     section = cfg.section("activation.wake_word")
     if not section.get("enabled", True):
         return Result(True, "O'chirilgan (qarsak va tugma ishlaydi)")
 
-    try:
+    print(f"      {DIM}Model tekshirilmoqda — birinchi marta ~20 MB "
+          f"yuklab olinadi, bir-ikki daqiqa ketishi mumkin…{RESET}")
+
+    def build():
         from .audio.wake import build_wake_detector
 
-        detector = build_wake_detector(section)
+        return build_wake_detector(section)
+
+    try:
+        detector = await asyncio.wait_for(asyncio.to_thread(build), WAKE_TIMEOUT_SEC)
         if detector is None:
             return Result(True, "O'chirilgan")
+    except TimeoutError:
+        return Result(False,
+                      f"Model {WAKE_TIMEOUT_SEC / 60:.0f} daqiqada yuklanmadi.\n"
+                      "Internetni tekshiring. Uyg'otuvchi so'zsiz ham ishlatish\n"
+                      "mumkin: config/jarvis.yaml da `activation.wake_word.enabled: false`\n"
+                      "— qarsak va ⌘⇧J ishlashda davom etadi.")
     except Exception as exc:
         return Result(False, f"{type(exc).__name__}: {exc}\n"
                              f"Birinchi ishga tushirishda model yuklab olinadi — "
@@ -260,8 +281,13 @@ def check_wake_word(cfg: Config) -> Result:
     try:
         if audio is not None:
             step = cfg.frame_samples
-            for start in range(0, max(0, audio.size - step + 1), step):
-                detector.push(audio[start : start + step])
+
+            def scan() -> None:
+                for start in range(0, max(0, audio.size - step + 1), step):
+                    detector.push(audio[start : start + step])
+
+            # Modelni ishlatish ham bloklaydi — CPU'da bir necha soniya.
+            await asyncio.to_thread(scan)
             parts.append(f"Aytganingizdagi eng yuqori ball: {detector.peak:.2f}")
             if detector.peak < candidate:
                 parts.append(
@@ -436,7 +462,7 @@ async def run_doctor() -> int:
     report("Qurilmalar", check_devices(cfg))
     if not stop:
         report("Mikrofon", await check_microphone(cfg))
-    report("Uyg'otuvchi so'z", check_wake_word(cfg))
+    report("Uyg'otuvchi so'z", await check_wake_word(cfg))
 
     _header("Ovoz")
     if not stop:

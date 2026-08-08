@@ -9,11 +9,18 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+import time
 
 import pytest
 
 from jarvis.config import Config
-from jarvis.doctor import check_env, check_permissions, collect_logs, hint_for
+from jarvis.doctor import (
+    check_env,
+    check_permissions,
+    check_wake_word,
+    collect_logs,
+    hint_for,
+)
 
 
 def _cfg(stt: str = "elevenlabs", tts: str = "elevenlabs") -> Config:
@@ -124,6 +131,41 @@ def test_hint_recognises_elevenlabs_key_id_mistake():
 def test_hint_is_empty_for_unknown_errors():
     """Tanimagan xatoga o'ylab topilgan maslahat bermaymiz."""
     assert hint_for("ConnectionResetError: tarmoq uzildi") == ""
+
+
+@pytest.mark.asyncio
+async def test_wake_check_gives_up_instead_of_hanging(monkeypatch: pytest.MonkeyPatch):
+    """Model yuklanmasa, diagnostika jim qotib turmasligi kerak.
+
+    openWakeWord modeli har bir venv uchun qaytadan yuklanadi va bu qadam
+    hech nima chop etmaydi — tashqaridan qarasa, dastur muzlab qolgandek.
+    Muddat tugasa, sababi va yo'li aytilishi kerak.
+    """
+    import jarvis.audio.wake as wake_module
+
+    def never_finishes(_cfg):
+        time.sleep(5)
+        raise AssertionError("bu yergacha yetmasligi kerak")
+
+    monkeypatch.setattr(wake_module, "build_wake_detector", never_finishes)
+    monkeypatch.setattr("jarvis.doctor.WAKE_TIMEOUT_SEC", 0.2)
+
+    result = await check_wake_word(Config(data={}))
+
+    assert result.ok is False
+    assert result.fatal is False, "uyg'otuvchi so'zsiz ham ishlatish mumkin"
+    assert "enabled: false" in result.detail, "chiqish yo'li ko'rsatilishi kerak"
+
+
+@pytest.mark.asyncio
+async def test_wake_check_skips_quickly_when_disabled():
+    """O'chirilgan bo'lsa, model umuman yuklanmasligi kerak."""
+    cfg = Config(data={"activation": {"wake_word": {"enabled": False}}})
+
+    result = await check_wake_word(cfg)
+
+    assert result.ok is True
+    assert "qarsak" in result.detail
 
 
 def test_collect_logs_captures_then_detaches():
