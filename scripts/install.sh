@@ -42,18 +42,37 @@ else
   echo "   npm topilmadi — orb'siz ishlaydi. `brew install node` bilan qo'shing."
 fi
 
+echo "==> Ma'lumotlar papkasi"
+
+# Hamma narsa bitta ko'rinadigan joyda: xotira, jurnal, ish fayllari, sozlama.
+# Repo o'chirilsa ham shu papka joyida qoladi — Jarvisning "esi" shu yerda.
+JARVIS_HOME="${JARVIS_HOME:-$HOME/Documents/Jarvis}"
+mkdir -p "$JARVIS_HOME"/{workspace,logs,wakewords,ui}
+echo "   $JARVIS_HOME"
+
 echo "==> Konfiguratsiya"
-[ -f .env ] || { cp .env.example .env; echo "   .env yaratildi — kalitlarni to'ldiring"; }
-[ -f config/jarvis.yaml ] || {
-  cp config/jarvis.example.yaml config/jarvis.yaml
-  echo "   config/jarvis.yaml yaratildi"
+[ -f "$JARVIS_HOME/.env" ] || [ -f .env ] || {
+  cp .env.example .env
+  echo "   .env yaratildi — kalitlarni to'ldiring"
+}
+[ -f "$JARVIS_HOME/jarvis.yaml" ] || [ -f config/jarvis.yaml ] || {
+  cp config/jarvis.example.yaml "$JARVIS_HOME/jarvis.yaml"
+  echo "   $JARVIS_HOME/jarvis.yaml yaratildi"
 }
 
-mkdir -p ~/jarvis-workspace ~/.jarvis
-
-cat <<'EOF'
+cat <<EOF
 
 O'rnatildi.
+
+Barcha ma'lumot shu papkada saqlanadi:
+  $JARVIS_HOME
+    memory.db     xotira: faktlar, loyihalar, vazifalar, aloqalar
+    audit.log     har bir amalning jurnali
+    workspace/    Jarvis yozadigan yagona papka
+    logs/         ishlash jurnali
+    jarvis.yaml   sozlamangiz
+
+Repo o'chirilsa ham bu papka joyida qoladi. Zaxira nusxa olsangiz — shuni oling.
 
 Keyingi qadamlar:
   1. .env faylini to'ldiring — kamida ANTHROPIC_API_KEY va ELEVENLABS_API_KEY
@@ -61,6 +80,7 @@ Keyingi qadamlar:
        - Mikrofon        -> Terminal (yoki iTerm)
        - Kirish imkoni   -> Terminal  (ilovalarni boshqarish uchun)
        - Avtomatlashtirish -> Terminal (Messages, System Events)
-  3. Ishga tushiring:  ./scripts/run.sh
+  3. Tekshiring:        python -m jarvis doctor
+  4. Ishga tushiring:   ./scripts/run.sh
 
 EOF

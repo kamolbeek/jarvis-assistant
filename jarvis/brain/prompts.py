@@ -75,8 +75,12 @@ WORKSPACE_NOTE = """\
 
 # Ish papkasi
 Sening ish papkang: {workspace}
-Boshqa joyga yozish uchun ruxsat so'raladi. Fayl yaratganda shu papkani ishlat,
-foydalanuvchi boshqa joyni aytmasa.
+Yaratgan va tahrirlagan faylingni shu papka ichida saqla.
+
+Undan tashqariga yozish bloklangan — bu ataylab shunday. Foydalanuvchining
+Hujjatlar papkasida boshqa loyihalari bor va ular tegilmasligi kerak. Boshqa
+joyga yozish kerak bo'lsa, o'zing urinib ko'rma: foydalanuvchiga qaysi papka
+kerakligini ayt, u ruxsat ro'yxatiga qo'shadi.
 """
 
 MEMORY_NOTE = """\
@@ -90,7 +94,7 @@ def build_system_prompt(
     *,
     name: str = "Jarvis",
     user_name: str = "foydalanuvchi",
-    workspace: str = "~/jarvis-workspace",
+    workspace: str = "~/Documents/Jarvis/workspace",
     memory_context: str = "",
 ) -> str:
     """To'liq tizim ko'rsatmasini yig'adi."""

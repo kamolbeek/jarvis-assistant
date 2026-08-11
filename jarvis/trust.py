@@ -19,7 +19,6 @@ to'sib turiladi.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 GREEN = "\033[32m"
 RED = "\033[31m"
@@ -33,17 +32,17 @@ GATED_TOOLS = ("Write", "Edit", "Bash", "NotebookEdit")
 
 def apply(mode: str) -> int:
     """`on` — so'ramasdan bajaradi, `off` — har safar so'raydi."""
-    from .config import CONFIG_PATH
+    from .config import ensure_user_config
     from .configpatch import patch_file
 
     if mode not in ("on", "off"):
         print(f"{RED}Ishlatilishi: python -m jarvis trust on|off{RESET}", file=sys.stderr)
         return 2
 
-    path = Path(CONFIG_PATH)
-    if not path.exists():
-        print(f"{RED}{path} topilmadi. Avval:\n"
-              f"  cp config/jarvis.example.yaml config/jarvis.yaml{RESET}", file=sys.stderr)
+    try:
+        path = ensure_user_config()
+    except OSError as exc:
+        print(f"{RED}Sozlama faylini tayyorlab bo'lmadi: {exc}{RESET}", file=sys.stderr)
         return 1
 
     policy = "allow" if mode == "on" else "ask"

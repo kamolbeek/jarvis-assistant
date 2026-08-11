@@ -25,6 +25,35 @@ Misollar:
 """
 
 
+def run_migration() -> None:
+    """Eski joylardagi ma'lumotni `~/Documents/Jarvis` ga ko'chiradi.
+
+    Har ishga tushishda chaqiriladi, lekin amalda faqat bir marta ish
+    qiladi: manzilda allaqachon bor narsa tegilmaydi. Xato bo'lsa Jarvis
+    baribir ishga tushadi — ko'chirish muvaffaqiyatsizligi tizimni
+    to'xtatib qo'yishi noto'g'ri bo'lardi.
+    """
+    try:
+        from .migrate import migrate_default
+
+        moved = migrate_default()
+    except Exception:
+        # Sabab jurnalga tushsa yetarli — ko'chirish ishlamagani uchun
+        # Jarvisni ishga tushirmaslik noto'g'ri bo'lardi.
+        logging.getLogger("jarvis").warning(
+            "Ma'lumotni ko'chirib bo'lmadi — eski joyda qoldi", exc_info=True
+        )
+        return
+
+    if not moved:
+        return
+
+    print("Ma'lumot yangi papkaga ko'chirildi:")
+    for line in moved:
+        print(f"  {line}")
+    print("Eski nusxalar joyida qoldirildi — ishonch hosil qilgach o'zingiz o'chirasiz.\n")
+
+
 def configure_logging(verbose: bool) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
@@ -55,6 +84,10 @@ def main() -> int:
     parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
+
+    # Har qanday buyruqdan oldin: ma'lumot bitta uyda bo'lsin. `trust` ham
+    # sozlamani tahrirlaydi, shuning uchun ko'chirish undan ham oldin turadi.
+    run_migration()
 
     if args.command == "trust":
         from .trust import apply

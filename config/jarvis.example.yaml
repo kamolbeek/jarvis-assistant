@@ -1,5 +1,15 @@
 # Jarvis konfiguratsiyasi.
-# Ishlatish uchun nusxa oling:  cp config/jarvis.example.yaml config/jarvis.yaml
+#
+# Bu fayl — ASOS, uni tahrirlamang: yangilanish kelganda ustidan yoziladi.
+# O'zingiznikini `~/Documents/Jarvis/jarvis.yaml` da yarating va faqat
+# o'zgartirmoqchi bo'lgan qatorlarni yozing — qolgani shu yerdan olinadi.
+# `./scripts/install.sh` buni o'zi qilib beradi.
+#
+# ${JARVIS_HOME} — barcha ma'lumot saqlanadigan papka, standarti
+# `~/Documents/Jarvis`. Butun tizimni boshqa diskka ko'chirish uchun
+# shu bitta o'zgaruvchini o'zgartirish kifoya:
+#
+#     export JARVIS_HOME=/Volumes/Ishchi/Jarvis
 
 identity:
   name: "Jarvis"
@@ -120,14 +130,15 @@ voice:
 brain:
   model: "claude-opus-5"
   # Ishchi papka — Jarvis fayl/kod ishlarini shu yerda bajaradi
-  workspace: "~/jarvis-workspace"
+  workspace: "${JARVIS_HOME}/workspace"
   max_turns: 40
   # Har bir suhbat uchun sarf chegarasi (AQSH dollarida). null = cheklovsiz.
   max_budget_usd: 2.0
 
 memory:
-  # Barqaror xotira: afzalliklar, faktlar, loyihalar, vazifalar, aloqalar
-  path: "~/.jarvis/memory.db"
+  # Barqaror xotira: afzalliklar, faktlar, loyihalar, vazifalar, aloqalar.
+  # Bu fayl — Jarvisning eng qimmatli qismi. Uni zaxiralab turing.
+  path: "${JARVIS_HOME}/memory.db"
   # Har bir suhbatdan keyin muhim faktlarni saqlab qo'yish
   autosave: true
 
@@ -182,11 +193,19 @@ safety:
     - "> /dev/sda"
 
   # Bu papkalardan tashqariga yozish taqiqlanadi (workspace avtomatik qo'shiladi).
+  #
+  # Ataylab tor: Jarvis faqat o'z papkasining ichiga yozadi. Shunda unga
+  # kompyuterga keng ruxsat bergan taqdiringizda ham hujjatlaringiz,
+  # yuklamalaringiz va boshqa loyihalaringiz tegilmagan qoladi — noto'g'ri
+  # tushunilgan bitta buyruq begona faylni almashtirib yubora olmaydi.
+  #
+  # Boshqa papkaga yozishi kerak bo'lsa, uni shu yerga o'zingiz qo'shasiz.
   writable_roots:
-    - "~/jarvis-workspace"
-    - "~/Downloads"
+    - "${JARVIS_HOME}/workspace"
 
-  audit_log: "~/.jarvis/audit.log"
+  # Har bir amal shu yerga yoziladi — keyin "nima bo'ldi?" degan savolga
+  # javob shu faylda turadi.
+  audit_log: "${JARVIS_HOME}/audit.log"
 
 ui:
   # Orb va telefon sahifasi shu manzilda xizmat qiladi.

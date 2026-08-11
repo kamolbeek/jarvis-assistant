@@ -18,6 +18,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -123,6 +124,93 @@ def _header(text: str) -> None:
 
 
 # ---------------------------------------------------------------- tekshiruvlar
+
+
+# Eski, tarqoq joylar. Sozlamada shulardan biri qolib ketsa, Jarvis jimgina
+# eski manzilga yozishda davom etadi — buni aytib qo'yish kerak.
+LEGACY_ROOTS = (Path.home() / ".jarvis", Path.home() / "jarvis-workspace")
+
+
+def _under(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
+def check_storage(cfg: Config) -> Result:
+    """Ma'lumot qayerda yotibdi, u yerga yozib bo'ladimi, eskisi qolmadimi."""
+    from .config import REPO_ROOT, user_config_path
+    from .migrate import has_content, leftovers
+
+    home = cfg.home
+    notes = [f"Papka: {home}"]
+
+    try:
+        cfg.ensure_dirs()
+    except OSError as exc:
+        return Result(False, f"Papkani yaratib bo'lmadi: {home}\n{exc}", fatal=False)
+
+    probe = home / ".yozish-sinovi"
+    try:
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        return Result(
+            False,
+            f"Yozib bo'lmadi: {exc}\n"
+            "macOS: Tizim sozlamalari > Maxfiylik va xavfsizlik > Fayllar va papkalar —\n"
+            "Terminal'ga Hujjatlar papkasiga ruxsat bering.",
+        )
+
+    named = {
+        "xotira": cfg.memory_path,
+        "audit": cfg.audit_log,
+        "ish papkasi": cfg.workspace,
+    }
+    stale = {
+        name: path
+        for name, path in named.items()
+        if any(_under(path, root) for root in LEGACY_ROOTS)
+    }
+    outside = {
+        name: path
+        for name, path in named.items()
+        if not _under(path, home) and name not in stale
+    }
+
+    size = cfg.memory_path.stat().st_size if cfg.memory_path.exists() else 0
+    if size:
+        notes.append(f"Xotira bazasi: {cfg.memory_path.name} ({size // 1024} KB)")
+    else:
+        notes.append("Xotira bazasi: hali bo'sh (birinchi suhbatdan keyin to'ladi)")
+
+    for path in leftovers(REPO_ROOT):
+        notes.append(f"Eski nusxa hali joyida: {path} — kerak bo'lmasa o'zingiz o'chirasiz")
+
+    if has_content(REPO_ROOT / ".env") and not has_content(home / ".env"):
+        notes.append(
+            f"Kalitlar hali repo ichida ({REPO_ROOT / '.env'}).\n"
+            f"Repo o'chsa ular ham ketadi. Ko'chirish:\n"
+            f"  mv {REPO_ROOT / '.env'} {home / '.env'}"
+        )
+
+    notes.append(f"Sozlama: {user_config_path()}")
+
+    if stale:
+        detail = "\n".join(
+            [f"{name} hali eski joyda: {path}" for name, path in stale.items()]
+            + [
+                "",
+                "Sozlamangizda eski yo'l qolgan. Tuzatish uchun quyidagi qatorlarni",
+                f"{user_config_path()} dan o'chiring — asosdagi yangi qiymat ishlaydi:",
+                "  brain.workspace / memory.path / safety.audit_log",
+            ]
+            + notes
+        )
+        return Result(False, detail)
+
+    for name, path in outside.items():
+        notes.append(f"{name} papkadan tashqarida: {path} (o'zingiz shunday sozlagansiz)")
+
+    return Result(True, "\n".join(notes))
 
 
 def check_env(cfg: Config) -> Result:
@@ -554,6 +642,9 @@ async def run_doctor() -> int:
             failures += 1
             if result.fatal:
                 stop = True
+
+    _header("Ma'lumot")
+    report("Saqlash papkasi", check_storage(cfg))
 
     _header("Sozlamalar")
     report("Kalitlar (.env)", check_env(cfg))

@@ -134,7 +134,8 @@ def test_trust_on_flips_the_gated_tools(tmp_path, monkeypatch):
         "  forbidden_patterns:\n"
         '    - "rm -rf /"\n'
     )
-    monkeypatch.setattr("jarvis.config.CONFIG_PATH", config)
+    # Sozlama endi ma'lumotlar papkasida yashaydi — buyruq o'shani topishi kerak.
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
 
     assert trust.apply("on") == 0
 
@@ -153,6 +154,6 @@ def test_trust_on_flips_the_gated_tools(tmp_path, monkeypatch):
 def test_trust_rejects_a_bad_mode(tmp_path, monkeypatch):
     from jarvis import trust
 
-    monkeypatch.setattr("jarvis.config.CONFIG_PATH", tmp_path / "jarvis.yaml")
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path))
 
     assert trust.apply("maybe") == 2

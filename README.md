@@ -74,6 +74,62 @@ ANTHROPIC_API_KEY=sk-ant-...      # miya
 ELEVENLABS_API_KEY=...            # ovoz (STT + TTS)
 ```
 
+### Hamma narsa qayerda saqlanadi
+
+Jarvisning barcha ma'lumoti bitta ko'rinadigan papkada:
+
+```
+~/Documents/Jarvis/
+├── memory.db      xotira: faktlar, loyihalar, vazifalar, aloqalar
+├── audit.log      har bir amalning jurnali
+├── jarvis.yaml    sizning sozlamangiz
+├── workspace/     Jarvis yozadigan yagona papka
+├── logs/          ishlash jurnali
+├── wakewords/     o'zingiz o'rgatgan uyg'otuvchi so'z modellari
+└── ui/            orbning joyi, HUD ustidagi rasm
+```
+
+Bu ataylab shunday. Ilgari fayllar uch xil yashirin joyga tarqalgan edi
+(`~/.jarvis`, `~/jarvis-workspace`, repo ichi) — foydalanuvchi ularni
+ko'rmasdi va zaxira nusxaga ham qo'shmasdi. Endi **repo o'chirilsa yoki
+qaytadan klon qilinsa ham** Jarvisning "esi" joyida qoladi. Zaxira nusxa
+olsangiz — shu papkani oling.
+
+Boshqa diskka ko'chirish uchun bitta o'zgaruvchi kifoya:
+
+```bash
+export JARVIS_HOME=/Volumes/Ishchi/Jarvis
+```
+
+**Eski o'rnatishdan o'tish o'zi bo'ladi.** Birinchi ishga tushirishda Jarvis
+eski joylardagi ma'lumotni yangi papkaga **nusxalaydi** va nima ko'chirganini
+aytadi. Eskisi joyida qoladi — hech narsa o'chirilmaydi va ustiga yozilmaydi,
+shuning uchun noto'g'ri ketsa ham qaytib olish mumkin. Ishonch hosil qilgach
+eski papkalarni o'zingiz o'chirasiz.
+
+`python -m jarvis doctor` ma'lumot aynan qayerda yotganini birinchi qator
+qilib ko'rsatadi.
+
+### Jarvis boshqa loyihalaringizga tegmaydi
+
+Hujjatlar papkangizda boshqa ishlaringiz bo'lishi tabiiy. Jarvis ularga
+yoza olmaydi: ruxsat etilgan yagona papka — `~/Documents/Jarvis/workspace`.
+
+Bu xavfsizlik darvozasining ikkinchi qatlami va u tasdiqdan **oldin**
+ishlaydi: chegaradan tashqariga yozish urinishi tasdiq so'ramaydi ham,
+shunchaki bajarilmaydi. Ya'ni noto'g'ri tushunilgan bitta buyruq ham,
+shoshib bosilgan «ha» ham begona faylni almashtira olmaydi.
+
+Boshqa papkaga yozishi kerak bo'lsa, uni o'zingiz qo'shasiz:
+
+```yaml
+# ~/Documents/Jarvis/jarvis.yaml
+safety:
+  writable_roots:
+    - "${JARVIS_HOME}/workspace"
+    - "~/Documents/MVP loyiha"     # o'zingiz ruxsat bergan papka
+```
+
 ### Nega kalit kerak — va qachon kerak emas
 
 **Miya (Claude)** Anthropic serverlarida ishlaydi, kompyuteringizda emas — model
@@ -99,7 +155,7 @@ kerak. Ikki yo'l bor:
 > `python -m jarvis doctor` qaysi yo'l ishlatilayotganini aytadi.
 
 **Ovoz esa butunlay kompyuteringizda ishlashi mumkin** — kalitsiz, internetsiz,
-bepul. `config/jarvis.yaml` da:
+bepul. `~/Documents/Jarvis/jarvis.yaml` da:
 
 ```yaml
 voice:
@@ -155,7 +211,7 @@ qolsa, tizim o'zi qayta ko'taradi.
 ```bash
 ./scripts/autostart.sh status   # holati
 ./scripts/autostart.sh off      # o'chirish
-tail -f ~/.jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
+tail -f ~/Documents/Jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
 ```
 
 **Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *ishga tushiruvchi
@@ -334,7 +390,7 @@ bo'lishi talab qilinadi. Quloqchinda fon deyarli nol — sezgirlik yuqori;
 baland dinamikda fon o'z-o'zidan ko'tariladi — yolg'on bo'linish bo'lmaydi.
 
 ```yaml
-# config/jarvis.yaml
+# ~/Documents/Jarvis/jarvis.yaml
 conversation:
   follow_up: true
   follow_up_sec: 8                 # javobdan keyingi tinglash oynasi
@@ -363,7 +419,7 @@ telefonga ovoz bilan qaytadi. Ilova o'rnatish shart emas; sahifani "Home Screen"
 ga qo'shsangiz, oddiy ilovadek ko'rinadi.
 
 ```yaml
-# config/jarvis.yaml
+# ~/Documents/Jarvis/jarvis.yaml
 ui:
   host: "0.0.0.0"                 # tarmoqdagi qurilmalar uchun
   token: "bu-yerga-tasodifiy-satr"  # openssl rand -hex 16
@@ -463,7 +519,7 @@ uchun o'z modelingizni o'rgatasiz. Bu bir martalik ish va bepul:
 1. openWakeWord'ning tayyor daftarida (`automatic_model_training.ipynb`,
    Google Colab'da bepul ishlaydi) iborani kiriting: `salom jarvis`.
 2. U sintetik ovozlar bilan ma'lumot yaratib, `.onnx` model chiqaradi.
-3. Modelni `~/.jarvis/wakewords/` ga qo'ying va konfiguratsiyada ko'rsating:
+3. Modelni `~/Documents/Jarvis/wakewords/` ga qo'ying va konfiguratsiyada ko'rsating:
 
 ```yaml
 activation:
@@ -497,7 +553,7 @@ narisiga tashqi mikrofon kerak.
 
 Bu loyihaning eng nozik qismi — o'zbekcha sifat provayderdan provayderga
 sezilarli farq qiladi. Shuning uchun provayderlar almashtiriladigan qilingan:
-`config/jarvis.yaml` da bir qator o'zgartirsangiz kifoya.
+`~/Documents/Jarvis/jarvis.yaml` da bir qator o'zgartirsangiz kifoya.
 
 | Provayder | STT | TTS | Izoh |
 | --- | :---: | :---: | --- |
@@ -511,7 +567,7 @@ solishtiring. Ovoz sifati — bu tizimda foydalanish tajribasini eng ko'p
 belgilaydigan omil.
 
 ```yaml
-# config/jarvis.yaml
+# ~/Documents/Jarvis/jarvis.yaml
 voice:
   stt:
     provider: "mohir"          # elevenlabs | mohir | whisper_local
@@ -559,7 +615,7 @@ safety:
     - "rm -rf /"
     - "sudo rm"
   writable_roots:       # bulardan tashqariga yozib bo'lmaydi
-    - "~/jarvis-workspace"
+    - "${JARVIS_HOME}/workspace"
 ```
 
 Uch qatlam:
@@ -569,7 +625,7 @@ Uch qatlam:
    (shell `>` yo'naltirishlari ham tekshiriladi).
 3. **Tasdiq** — qolgan xavfli amallar HUD'da ✅/❌ bo'lib chiqadi.
 
-Hammasi `~/.jarvis/audit.log` ga yoziladi. **Boshidan to'liq erkinlik bermang** —
+Hammasi `~/Documents/Jarvis/audit.log` ga yoziladi. **Boshidan to'liq erkinlik bermang** —
 ishonch ortgan sari qoidalarni yumshating.
 
 ## Halol cheklovlar
@@ -618,6 +674,8 @@ jarvis/
 ├── bus.py          hodisa shinasi
 ├── health.py       bo'g'inlar tirikligi — HUD siferblatlari shundan
 ├── doctor.py       diagnostika (`jarvis doctor`)
+├── config.py       sozlama va ma'lumot papkasi (`JARVIS_HOME`)
+├── migrate.py      eski joylardagi ma'lumotni yangi papkaga ko'chirish
 └── __main__.py     asosiy sikl
 
 ui/

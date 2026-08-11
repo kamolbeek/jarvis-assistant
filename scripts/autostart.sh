@@ -15,7 +15,11 @@ REPO="$(pwd)"
 
 LABEL="com.jarvis.assistant"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG_DIR="$HOME/.jarvis/logs"
+
+# Ma'lumotlar papkasi — jurnal ham shu yerda. launchd bizning shell
+# muhitimizni ko'rmaydi, shuning uchun qiymat plist ichiga yozib qo'yiladi.
+JARVIS_HOME="${JARVIS_HOME:-$HOME/Documents/Jarvis}"
+LOG_DIR="$JARVIS_HOME/logs"
 
 if [ "$(uname)" != "Darwin" ]; then
   echo "Bu skript faqat macOS uchun."
@@ -88,6 +92,14 @@ install() {
 
   <key>WorkingDirectory</key>
   <string>$REPO</string>
+
+  <!-- Ma'lumot qayerda saqlanishi. Busiz launchd ostidagi Jarvis standart
+       papkani tanlardi va sizniki bilan boshqa-boshqa "es" bo'lib qolardi. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>JARVIS_HOME</key>
+    <string>$JARVIS_HOME</string>
+  </dict>
 
   <key>RunAtLoad</key>
   <true/>

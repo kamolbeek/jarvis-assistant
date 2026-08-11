@@ -20,9 +20,27 @@ const MARGIN = 24;
 
 let win = null;
 
+// Jarvisning barcha ma'lumoti bitta papkada — yadro bilan bir xil joyda.
+// Electron'ning o'z `userData` papkasi (~/Library/Application Support/...)
+// ishlatilmaydi: u yashirin, zaxiraga tushmaydi va foydalanuvchi u yerda
+// nima yotganini bilmaydi.
+function jarvisHome() {
+  const custom = (process.env.JARVIS_HOME || "").trim();
+  return custom || path.join(app.getPath("home"), "Documents", "Jarvis");
+}
+
+// Holat fayllari uchun kichik ichki papka: `~/Documents/Jarvis/ui/`.
+function uiStateDir() {
+  const dir = path.join(jarvisHome(), "ui");
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch { /* yaratib bo'lmasa, quyidagi o'qish/yozish o'zi xato beradi */ }
+  return dir;
+}
+
 // Foydalanuvchi orbni sudrab ko'chirsa, joyi eslab qolinadi — har ishga
 // tushirishda uni qaytadan surishga majbur qilmaymiz.
-const ORB_STATE = () => path.join(app.getPath("userData"), "orb-position.json");
+const ORB_STATE = () => path.join(uiStateDir(), "orb-position.json");
 
 function savedPosition() {
   try {
@@ -355,10 +373,11 @@ ipcMain.on("desk-open-folder", (_e, key) => {
 
 // --- Markaziy rasm: foydalanuvchi o'z rasmini tashlaydi, biz saqlaymiz ---
 //
-// Foydalanuvchi HUD ustiga rasm faylini tashlasa, u userData ichiga yoziladi
-// va keyingi ishga tushirishlarda ham o'sha rasm ko'rsatiladi.
+// Foydalanuvchi HUD ustiga rasm faylini tashlasa, u ma'lumotlar papkasiga
+// yoziladi va keyingi ishga tushirishlarda ham o'sha rasm ko'rsatiladi.
+// `~/Documents/Jarvis/ui/markaz.png` — qo'lda almashtirish ham oson.
 
-const FIGURE_PATH = () => path.join(app.getPath("userData"), "markaz.png");
+const FIGURE_PATH = () => path.join(uiStateDir(), "markaz.png");
 
 ipcMain.handle("figure-get", () => {
   try {

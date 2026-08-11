@@ -12,6 +12,11 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
+# Ma'lumotlar papkasi. Yadro ham, orb ham AYNAN shu qiymatga qarashi kerak —
+# aks holda orbning holati bir joyda, xotira boshqa joyda bo'lib qolardi.
+export JARVIS_HOME="${JARVIS_HOME:-$HOME/Documents/Jarvis}"
+mkdir -p "$JARVIS_HOME"
+
 # Ikkita nusxa bitta mikrofon va bitta portni talashadi — ikkinchisi
 # tushunarsiz xato bilan yiqiladi. Sababini oldindan aytamiz.
 if pgrep -f "python -m jarvis" >/dev/null 2>&1; then

@@ -213,9 +213,7 @@ def apply_thresholds(values: list[str]) -> int:
     Qo'lda tahrirlash o'rniga shu buyruq: YAML bo'sh joyga sezgir va bitta
     ortiqcha probel butun faylni yaroqsiz qiladi.
     """
-    from pathlib import Path
-
-    from .config import CONFIG_PATH
+    from .config import ensure_user_config
     from .configpatch import patch_file
 
     if not values or len(values) > 2:
@@ -235,11 +233,10 @@ def apply_thresholds(values: list[str]) -> int:
               f"past bo'lishi kerak{RESET}", file=sys.stderr)
         return 2
 
-    path = Path(CONFIG_PATH)
-    if not path.exists():
-        print(f"{RED}{path} topilmadi. Avval:\n"
-              f"  cp config/jarvis.example.yaml config/jarvis.yaml{RESET}",
-              file=sys.stderr)
+    try:
+        path = ensure_user_config()
+    except OSError as exc:
+        print(f"{RED}Sozlama faylini tayyorlab bo'lmadi: {exc}{RESET}", file=sys.stderr)
         return 1
 
     try:
