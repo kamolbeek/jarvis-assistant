@@ -37,7 +37,15 @@ class Result:
 
 # Tanish xato imzolari -> aniq maslahat. Xom xato matni foydalanuvchiga
 # hech narsa demaydi; sabab ma'lum bo'lsa, aynan nima qilishni aytamiz.
+# TARTIB MUHIM: birinchi mos kelgan qoida g'olib. Aniqroq sabablar
+# yuqorida turishi kerak — umumiy «401» aks holda ularni yashirib qo'yadi.
 HINTS: list[tuple[tuple[str, ...], str]] = [
+    (
+        ("oauth", "token has been revoked", "token expired"),
+        "Claude obunasiga kirish eskirgan yoki bekor qilingan.\n"
+        "Terminalda `claude` deb yozing va brauzerda qaytadan kiring —\n"
+        "so'ng Jarvisni qayta ishga tushiring. Kalit ham, to'lov ham kerak emas.",
+    ),
     (
         ("API key ID used as API key", "invalid_api_key"),
         "ElevenLabs'da kalitning O'ZI emas, uning ID raqami qo'yilgan.\n"
@@ -48,12 +56,6 @@ HINTS: list[tuple[tuple[str, ...], str]] = [
     (
         ("401",),
         "Kalit qabul qilinmadi — .env dagi qiymatni qaytadan tekshiring.",
-    ),
-    (
-        ("oauth", "token has been revoked", "token expired"),
-        "Claude obunasiga kirish eskirgan yoki bekor qilingan.\n"
-        "Terminalda `claude` deb yozing va brauzerda qaytadan kiring —\n"
-        "so'ng Jarvisni qayta ishga tushiring. Kalit ham, to'lov ham kerak emas.",
     ),
     (
         ("credit balance", "insufficient_quota", "billing"),
