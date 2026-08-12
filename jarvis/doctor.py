@@ -50,6 +50,12 @@ HINTS: list[tuple[tuple[str, ...], str]] = [
         "Kalit qabul qilinmadi — .env dagi qiymatni qaytadan tekshiring.",
     ),
     (
+        ("oauth", "token has been revoked", "token expired"),
+        "Claude obunasiga kirish eskirgan yoki bekor qilingan.\n"
+        "Terminalda `claude` deb yozing va brauzerda qaytadan kiring —\n"
+        "so'ng Jarvisni qayta ishga tushiring. Kalit ham, to'lov ham kerak emas.",
+    ),
+    (
         ("credit balance", "insufficient_quota", "billing"),
         "Anthropic hisobingizda mablag' qolmagan.\n"
         "Agar sizda Claude Pro yoki Max obunasi bo'lsa, pul to'lash shart emas:\n"

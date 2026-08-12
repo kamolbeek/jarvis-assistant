@@ -317,3 +317,11 @@ def test_subscription_only_says_no_api_charge(monkeypatch: pytest.MonkeyPatch):
     result = check_env(_cfg())
 
     assert "to'lov yo'q" in result.detail
+
+
+def test_hint_recognises_a_revoked_subscription_token():
+    """Obuna tokeni eskirsa — qaytadan kirish kerak, kalit sotib olish emas."""
+    advice = hint_for("API Error: 401 OAuth access token has been revoked")
+
+    assert "claude" in advice
+    assert "to'lov" in advice
