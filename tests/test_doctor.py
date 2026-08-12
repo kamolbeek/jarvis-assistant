@@ -294,3 +294,26 @@ def test_hint_points_at_the_subscription_when_credits_run_out():
 
     assert "ANTHROPIC_API_KEY" in advice
     assert "obuna" in advice
+
+
+def test_api_key_holder_is_told_about_the_subscription(monkeypatch: pytest.MonkeyPatch):
+    """Kalit ham, obuna ham bor — ikki marta to'lash haqida ogohlantirilsin."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
+    monkeypatch.setattr("jarvis.doctor.shutil.which", lambda name: "/usr/bin/claude")
+
+    result = check_env(_cfg())
+
+    assert result.ok is True
+    assert "to'lov" in result.detail
+    assert "ANTHROPIC_API_KEY" in result.detail
+
+
+def test_subscription_only_says_no_api_charge(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
+    monkeypatch.setattr("jarvis.doctor.shutil.which", lambda name: "/usr/bin/claude")
+
+    result = check_env(_cfg())
+
+    assert "to'lov yo'q" in result.detail

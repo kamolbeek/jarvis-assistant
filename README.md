@@ -80,12 +80,23 @@ ELEVENLABS_API_KEY=...            # ovoz (STT + TTS)
 o'nlab gigabayt va kuchli videokarta talab qiladi. Shuning uchun kirish kaliti
 kerak. Ikki yo'l bor:
 
-1. **API kaliti** — har so'rov uchun to'lov ([console.anthropic.com](https://console.anthropic.com)).
-2. **Claude Code obunasi** — agar sizda Claude Pro/Max obunasi bo'lsa,
-   Mac'da `claude` o'rnatib kiring (`claude` deb yozing, brauzerda tasdiqlang).
-   Claude Agent SDK ichida aynan Claude Code'ni ishlatadi, shuning uchun
-   `ANTHROPIC_API_KEY` ni umuman qo'ymasangiz ham ishlashi mumkin —
-   `python -m jarvis doctor` buni aniq aytadi.
+1. **Claude Pro/Max obunasi** — agar obunangiz bo'lsa, **API uchun alohida
+   to'lash shart emas**. Mac'da `claude` o'rnatib kiring (`claude` deb yozing,
+   brauzerda tasdiqlang) va `.env` da `ANTHROPIC_API_KEY` ni **qo'ymang**.
+   Claude Agent SDK ichida aynan Claude Code'ni ishlatadi, u esa obunangiz
+   bilan kiradi — Jarvis o'sha tarif ichida ishlaydi.
+2. **API kaliti** — obunangiz bo'lmasa, har so'rov uchun alohida to'lov
+   ([console.anthropic.com](https://console.anthropic.com)).
+
+> **Diqqat — ikki marta to'lash tuzog'i.** `.env` da kalit turgan bo'lsa, u
+> obunadan **ustun** turadi: Jarvis obunani chetlab o'tib, API hisobidan
+> pul yechadi. Obunangiz bor bo'lsa, kalit qatorini izohga aylantiring:
+>
+> ```bash
+> sed -i '' 's|^ANTHROPIC_API_KEY=|# ANTHROPIC_API_KEY=|' .env
+> ```
+>
+> `python -m jarvis doctor` qaysi yo'l ishlatilayotganini aytadi.
 
 **Ovoz esa butunlay kompyuteringizda ishlashi mumkin** — kalitsiz, internetsiz,
 bepul. `config/jarvis.yaml` da:

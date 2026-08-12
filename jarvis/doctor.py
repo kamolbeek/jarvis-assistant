@@ -126,9 +126,16 @@ def check_env(cfg: Config) -> Result:
     notes: list[str] = []
 
     if os.environ.get("ANTHROPIC_API_KEY"):
-        notes.append("Miya: API kaliti")
+        # Kalit obunadan ustun turadi. Obunasi borlar buni bilmay, bir ishni
+        # ikki marta to'lab yurishlari mumkin — shuning uchun aniq aytamiz.
+        note = "Miya: API kaliti (har so'rov uchun alohida to'lov)"
+        if shutil.which("claude"):
+            note += ("\n  Sizda Claude Code ham bor. Obunangiz bilan ishlatish uchun\n"
+                     "  .env dagi ANTHROPIC_API_KEY qatorini izohga aylantiring (#) —\n"
+                     "  shunda API uchun alohida to'lov ketmaydi.")
+        notes.append(note)
     elif shutil.which("claude"):
-        notes.append("Miya: API kaliti yo'q, Claude Code orqali sinaladi")
+        notes.append("Miya: Claude Code obunasi orqali (API uchun to'lov yo'q)")
     else:
         missing.append(
             "ANTHROPIC_API_KEY yo'q va `claude` ham o'rnatilmagan — miya ishlamaydi.\n"
