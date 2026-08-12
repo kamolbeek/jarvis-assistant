@@ -19,6 +19,8 @@ Misollar:
   jarvis doctor     Har bir qismni alohida tekshirish (birinchi ishga tushirishdan oldin)
   jarvis wake-test  Chaqiruv ballini o'lchash va chegarani sozlash
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
+  jarvis trust on   Har bir amal uchun tasdiq so'ramasin
+  jarvis trust off  Tasdiqni qaytarish
   jarvis -v         Batafsil jurnal bilan
 """
 
@@ -45,13 +47,19 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set"],
+        choices=["run", "doctor", "wake-test", "wake-set", "trust"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
-             "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish",
+             "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
+             "trust on|off — tasdiq so'rashni o'chirish/yoqish",
     )
     parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
+
+    if args.command == "trust":
+        from .trust import apply
+
+        return apply(args.values[0] if args.values else "")
 
     if args.command == "wake-set":
         from .waketune import apply_thresholds

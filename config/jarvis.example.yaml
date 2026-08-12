@@ -28,7 +28,7 @@ activation:
     # Ro'yxatga yalang «jarvis» qo'shilsa, salomlashuv talab qilinmaydi —
     # ismning o'zi yetadi. Diqqat: suhbat orasida ismni aytsangiz ham
     # uyg'onadi, shuning uchun bu ataylab tanlanadigan sozlama.
-    phrases: ["hey jarvis", "hi jarvis", "salom jarvis"]
+    phrases: ["hey jarvis", "hi jarvis", "salom jarvis", "jarvis"]
     # Shubhali deb hisoblash chegarasi. Buni juda pastga qo'yish yaramaydi:
     # o'lchab ko'rilganda oq shovqinning o'zi 0.10–0.13 ball oladi, ya'ni
     # 0.15 dan past chegara xonadagi shitirlashdan ham STT chaqiruvini
@@ -65,6 +65,13 @@ audio:
   # ko'paysa, qaytaring. Eng yaxshi natija baribir yaxshi mikrofondan keladi.
   input_gain: 1.0
 
+  # Tinglayotganda tizim ovozini pasaytirish. Musiqa chalinayotganda
+  # mikrofon uni ham eshitadi va sizning ovozingiz uning ichida yo'qoladi.
+  # Aks sadoni dasturiy yo'q qilish og'ir ish; ovozni pasaytirish esa
+  # arzon va aynan shu muammoni yechadi. Tinglash tugagach qaytariladi.
+  duck_while_listening: true
+  duck_volume: 20                # foizda
+
   # Gapirishni tugatganini aniqlash
   endpointing:
     backend: "webrtcvad"           # webrtcvad | energy
@@ -87,6 +94,11 @@ conversation:
   barge_in_min_speech_ms: 350       # shuncha uzluksiz nutqdan keyin to'xtaydi
   barge_in_margin: 2.0              # foniga nisbatan shuncha baland bo'lishi kerak
 
+# Eshitish va gapirish ALOHIDA tanlanadi — har biri uchun eng yaxshisini
+# olish mumkin. O'zbek tili uchun tavsiya:
+#   stt: mohir  (o'zbek nutqiga ixtisoslashgan)
+#   tts: azure  (uz-UZ-MadinaNeural — haqiqiy o'zbek neyron ovozi)
+# ElevenLabs ovozi tabiiyroq, lekin inglizcha aksent bilan gapiradi.
 voice:
   stt:
     provider: "elevenlabs"         # elevenlabs | mohir | whisper_local

@@ -18,12 +18,14 @@ _WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 # Bitta so'zning o'zi yakun uchun yetarli.
 END_WORDS = frozenset({
+    "cancel", "kensel", "otmena",
     "yakunla", "yakunlaymiz", "tugat", "tugatdik", "xayr", "salomat",
     "yop", "yopamiz", "chiqamiz", "bormadim", "ketdim",
 })
 
 # Ikki so'zli aniq buyruqlar — alohida so'z sifatida noaniq bo'lganlari.
 END_PHRASES = (
+    "cancel", "bekor qil", "hammasini yop", "otchir",
     "suhbatni yakunla", "suhbatni tugat", "suhbat tugadi",
     "boldi yetadi", "boldi bas", "hozircha yetadi", "keyin gaplashamiz",
     "kerak emas rahmat", "rahmat yetadi", "boshqa kerak emas",
@@ -36,6 +38,25 @@ def _tokens(text: str) -> list[str]:
     for mark in _APOSTROPHES:
         cleaned = cleaned.replace(mark, "")
     return [m.group() for m in _WORD.finditer(cleaned)]
+
+
+# «To'xta» — bu yakun emas. Jarvis gapirishdan to'xtaydi, lekin suhbat
+# davom etadi va sahna ochiq qoladi. Ikkisini ajratish muhim: «to'xta»
+# deganda hammasi yopilib ketsa, foydalanuvchi qaytadan chaqirishga majbur
+# bo'lardi.
+STOP_WORDS = frozenset({"toxta", "tuxta", "jim", "bas", "shosh"})
+STOP_PHRASES = ("jim bol", "bas qil", "gapirma", "toxtat")
+
+
+def is_stop_speaking(text: str) -> bool:
+    """«To'xta» — gapirishni to'xtat, lekin suhbatni yopma."""
+    words = _tokens(text)
+    if not words or len(words) > 3:
+        return False
+
+    joined = " ".join(words)
+    return (any(phrase in joined for phrase in STOP_PHRASES)
+            or any(word in STOP_WORDS for word in words))
 
 
 def is_end_of_conversation(text: str) -> bool:

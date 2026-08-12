@@ -155,6 +155,15 @@ async def set_volume(percent: int) -> None:
     await osascript(f"set volume output volume {level}")
 
 
+async def get_volume() -> int:
+    """Hozirgi ovoz balandligi (0..100)."""
+    raw = await osascript("output volume of (get volume settings)")
+    try:
+        return max(0, min(100, int(raw.strip())))
+    except ValueError as exc:
+        raise MacOsError(f"Ovoz balandligi o'qilmadi: {raw!r}") from exc
+
+
 async def lock_screen() -> None:
     """Ekranni qulflaydi."""
     await osascript(

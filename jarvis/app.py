@@ -16,7 +16,7 @@ import logging
 import random
 import signal
 import sys
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 import numpy as np
@@ -46,7 +46,7 @@ from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
 from .ui.server import UiServer, base64_to_pcm
 from .voice.consent import consent_prompt, parse_consent
-from .voice.intents import is_end_of_conversation
+from .voice.intents import is_end_of_conversation, is_stop_speaking
 from .voice.stt import build_stt, transcribe_guarded
 from .voice.tts import Speaker, build_tts
 
@@ -152,6 +152,11 @@ class Jarvis:
             ),
             frame_ms=int(config.get("audio.frame_ms", 20)),
         )
+
+        # Tinglayotganda tizim ovozini pasaytirish — musiqa ustidan
+        # eshitilishi uchun.
+        self._duck_enabled = bool(config.get("audio.duck_while_listening", True))
+        self._duck_level = int(config.get("audio.duck_volume", 20))
 
         # Ovozli tasdiq: tugma bosish shart emas, «ha» / «yo'q» deyish yetadi.
         vc = config.section("safety.voice_confirm")
@@ -585,7 +590,15 @@ class Jarvis:
                     log.info("Suhbat tugadi: %d navbat", turn)
                 break
 
-            # «Bo'ldi, suhbatni yakunla» — bu miyaga bormaydi. Uni Claude'ga
+            # «To'xta» — gapirishni to'xtat, lekin suhbatni yopma. Ikkisini
+            # ajratmasak, foydalanuvchi har «to'xta» deganda qaytadan
+            # chaqirishga majbur bo'lardi.
+            if is_stop_speaking(text):
+                log.info("Ovoz bilan to'xtatildi: «%s»", text)
+                self.speaker.stop()
+                continue
+
+            # «Bekor qil» / «cancel» — bu miyaga bormaydi. Uni Claude'ga
             # yuborib javob kutish sekin ham, keraksiz ham.
             if is_end_of_conversation(text):
                 log.info("Suhbat ovoz bilan yakunlandi: «%s»", text)
@@ -622,8 +635,46 @@ class Jarvis:
             return float(self._talk.get("first_wait_sec", 6))
         return float(self._talk.get("follow_up_sec", 8))
 
+    @asynccontextmanager
+    async def _ducked(self):
+        """Tinglash davomida tizim ovozini pasaytiradi.
+
+        Musiqa chalinayotganda mikrofon uni ham eshitadi va foydalanuvchi
+        ovozi uning ichida yo'qoladi — STT musiqani matnga aylantirib,
+        «tushunmadim» chiqadi. Aks sadoni dasturiy yo'q qilish (AEC) og'ir
+        ish; ovozni pasaytirish esa arzon va aynan shu muammoni yechadi.
+
+        Eski daraja saqlanadi va tinglash tugagach qaytariladi — hatto xato
+        bo'lsa ham, aks holda musiqa jim bo'lib qolardi.
+        """
+        if not self._duck_enabled:
+            yield
+            return
+
+        from .tools import macos
+
+        previous: int | None = None
+        try:
+            previous = await macos.get_volume()
+            if previous > self._duck_level:
+                await macos.set_volume(self._duck_level)
+        except macos.MacOsError:
+            log.debug("Ovoz balandligi boshqarilmadi", exc_info=True)
+            previous = None
+
+        try:
+            yield
+        finally:
+            if previous is not None:
+                with suppress(Exception):
+                    await macos.set_volume(previous)
+
     async def _capture_utterance(self, patience_sec: float = 6.0) -> str:
         """Foydalanuvchini tinglaydi va aytganini matnga aylantiradi."""
+        async with self._ducked():
+            return await self._listen(patience_sec)
+
+    async def _listen(self, patience_sec: float) -> str:
         await self.bus.set_state(State.LISTENING)
 
         endpoint_cfg = self.config.section("audio.endpointing")

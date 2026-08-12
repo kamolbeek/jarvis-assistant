@@ -54,3 +54,29 @@ def test_apostrophes_do_not_matter():
     assert is_end_of_conversation("bo'ldi bas") is True
     assert is_end_of_conversation("boldi bas") is True
     assert is_end_of_conversation("bo‘ldi bas") is True
+
+
+# --- «To'xta» va «cancel» ni ajratish ------------------------------------------
+#
+# Ikkisi boshqa narsa: «to'xta» — gapirishni to'xtat, lekin suhbat davom
+# etadi; «cancel» — hammasini yop. Aralashib ketsa, foydalanuvchi har
+# «to'xta» deganda qaytadan chaqirishga majbur bo'lardi.
+
+from jarvis.voice.intents import is_stop_speaking
+
+
+@pytest.mark.parametrize("text", ["to'xta", "toxta", "jim bo'l", "bas qil", "gapirma"])
+def test_stop_only_stops_talking(text: str):
+    assert is_stop_speaking(text) is True, text
+    assert is_end_of_conversation(text) is False, text
+
+
+@pytest.mark.parametrize("text", ["cancel", "bekor qil", "hammasini yop"])
+def test_cancel_closes_everything(text: str):
+    assert is_end_of_conversation(text) is True, text
+    assert is_stop_speaking(text) is False, text
+
+
+def test_stop_word_in_a_long_sentence_is_ignored():
+    """«bu ishni to'xtat deb yozib qo'y» — bu buyruq emas, matn."""
+    assert is_stop_speaking("bu loyihani to'xtatilgan deb belgila") is False

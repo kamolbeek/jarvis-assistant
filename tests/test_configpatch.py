@@ -112,3 +112,47 @@ def test_broken_result_never_reaches_the_disk(tmp_path, monkeypatch):
         patch_file(path, "wake_word", {"threshold": 0.33})
 
     assert path.read_text() == SAMPLE, "asl fayl tegilmagan bo'lishi kerak"
+
+
+# --- Ishonch rejimi ------------------------------------------------------------
+
+
+def test_trust_on_flips_the_gated_tools(tmp_path, monkeypatch):
+    """`trust on` — tasdiq so'ralmaydi, lekin taqiqlar joyida qoladi."""
+    import yaml as _yaml
+
+    from jarvis import trust
+
+    config = tmp_path / "jarvis.yaml"
+    config.write_text(
+        "safety:\n"
+        '  default: "ask"\n'
+        "  rules:\n"
+        '    Read: "allow"\n'
+        '    Bash: "ask"\n'
+        '    Write: "ask"\n'
+        "  forbidden_patterns:\n"
+        '    - "rm -rf /"\n'
+    )
+    monkeypatch.setattr("jarvis.config.CONFIG_PATH", config)
+
+    assert trust.apply("on") == 0
+
+    data = _yaml.safe_load(config.read_text())["safety"]
+    assert data["default"] == "allow"
+    assert data["rules"]["Bash"] == "allow"
+    assert data["rules"]["Write"] == "allow"
+    assert data["forbidden_patterns"] == ["rm -rf /"], "taqiqlar tegilmasligi kerak"
+
+    assert trust.apply("off") == 0
+    data = _yaml.safe_load(config.read_text())["safety"]
+    assert data["default"] == "ask"
+    assert data["rules"]["Bash"] == "ask"
+
+
+def test_trust_rejects_a_bad_mode(tmp_path, monkeypatch):
+    from jarvis import trust
+
+    monkeypatch.setattr("jarvis.config.CONFIG_PATH", tmp_path / "jarvis.yaml")
+
+    assert trust.apply("maybe") == 2
