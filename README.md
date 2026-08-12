@@ -662,6 +662,10 @@ Ovoz bilan aytishingiz mumkin:
 | «Alisherga yoz, kechikaman de» | aloqani topib, Telegram/SMS yuboradi |
 | «Bugun nima ishlarim bor?» | kunlik ro'yxatni aytadi |
 | «Shu papkadagi kodni ko'r va testlarni ishga tushir» | o'qiydi, bajaradi, natijani aytadi |
+| «Roshkaning Ishondingmi qo'shig'ini qo'y» | YouTube'dan topib, brauzerda qo'yadi |
+| «Yigirmanchi sekunddan qo'y» | o'sha joydan boshlaydi |
+| «YouTube sahifasini yop» | varaqni yopadi |
+| «Bo'ldi, suhbatni yakunla» | xayrlashadi va HUD'ni yopadi |
 
 ## Keyingi bosqichlar
 

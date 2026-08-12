@@ -19,7 +19,7 @@ from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
 
 from ..brain.agenda import Agenda, format_when, parse_when
 from ..brain.memory import Memory
-from . import channels, macos
+from . import channels, macos, media
 
 log = logging.getLogger("jarvis.tools")
 
@@ -308,6 +308,42 @@ def _system_tools(agenda: Agenda) -> list[Any]:
         except macos.MacOsError as exc:
             return _fail(str(exc))
 
+    @tool(
+        "play_youtube",
+        "YouTube'dan qo'shiq yoki videoni topib, brauzerda qo'yadi. "
+        "`nima` — qo'shiq nomi va ijrochi. `sekund` berilsa, o'sha joydan boshlaydi. "
+        "Masalan: nima='Roshka Ishondingmi', sekund=20.",
+        {"nima": str, "sekund": int},
+    )
+    async def play_youtube(args: dict[str, Any]) -> dict[str, Any]:
+        query = str(args.get("nima", "")).strip()
+        start = int(args.get("sekund") or 0)
+        try:
+            video_id, title = await media.find_video(query)
+            await macos.open_url(media.watch_url(video_id, start))
+        except (media.MediaError, macos.MacOsError) as exc:
+            return _fail(str(exc))
+
+        what = title or query
+        when = f", {start}-sekunddan" if start else ""
+        return _ok(f"Qo'yildi: {what}{when}")
+
+    @tool("close_youtube", "YouTube ochilgan varaqlarni yopadi.", {})
+    async def close_youtube(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            count = await media.close_youtube()
+        except media.MediaError as exc:
+            return _fail(str(exc))
+        return _ok(f"{count} ta varaq yopildi" if count else "YouTube ochiq emas edi")
+
+    @tool("playpause", "Ijroni to'xtatadi yoki davom ettiradi.", {})
+    async def playpause(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            await media.playpause()
+        except (media.MediaError, macos.MacOsError) as exc:
+            return _fail(str(exc))
+        return _ok("Bajarildi")
+
     @tool("frontmost_app", "Hozir qaysi ilova faol ekanini aytadi.", {}, annotations=READ_ONLY)
     async def frontmost_app(args: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -417,7 +453,8 @@ def _system_tools(agenda: Agenda) -> list[Any]:
         except channels.ChannelError as exc:
             return _fail(str(exc))
 
-    return [notify, open_app, open_url, frontmost_app, send_message, send_telegram,
+    return [notify, open_app, open_url, play_youtube, close_youtube, playpause,
+            frontmost_app, send_message, send_telegram,
             list_shortcuts, run_shortcut, call_n8n]
 
 
