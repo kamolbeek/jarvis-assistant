@@ -88,6 +88,16 @@ class EventBus:
     async def log_line(self, text: str, level: str = "info") -> None:
         await self.emit({"type": "log", "level": level, "text": text})
 
+    async def hud(self, action: str) -> None:
+        """To'liq ekranli HUD oynasini ochish/yopish.
+
+        Buni yadro aniq buyruq sifatida yuboradi. Ilgari renderer buni
+        holat o'zgarishidan taxmin qilardi — natijada nima uchun ochilmagani
+        jurnaldan ko'rinmasdi. Endi sabab ham, buyruq ham bitta joyda.
+        """
+        log.info("HUD: %s", action)
+        await self.emit({"type": "hud", "action": action})
+
     # --- Tasdiq oqimi ---
 
     async def request_confirm(self, action: str, detail: str, timeout: float = 60.0) -> bool:

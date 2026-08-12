@@ -137,3 +137,55 @@ async def test_shutdown_breaks_the_loop():
     await talker.run()
 
     assert talker.handled == []
+
+
+# --- Ovoz bilan yakunlash ------------------------------------------------------
+#
+# «Bo'ldi, suhbatni yakunla» miyaga bormaydi va sahnani yopadi. Jimlik bilan
+# tugagan suhbat esa sahnani yopmaydi — foydalanuvchi davom ettirishi mumkin.
+
+
+class Recorder:
+    """Shinadagi hodisalarni yozib boradi."""
+
+    def __init__(self, bus):
+        self.events: list[dict] = []
+        bus.subscribe(self._on)
+
+    async def _on(self, event: dict) -> None:
+        self.events.append(event)
+
+    def hud_actions(self) -> list[str]:
+        return [e["action"] for e in self.events if e.get("type") == "hud"]
+
+
+@pytest.mark.asyncio
+async def test_voice_command_ends_and_closes_the_scene():
+    talker = FakeTalker(["bugun nima ishlarim bor", "bo'ldi, yetadi"])
+    recorder = Recorder(talker.jarvis.bus)
+
+    await talker.run()
+
+    assert talker.handled == ["bugun nima ishlarim bor"], "yakun miyaga bormasligi kerak"
+    assert recorder.hud_actions() == ["hide"]
+
+
+@pytest.mark.asyncio
+async def test_silence_leaves_the_scene_open():
+    """Jim qolish — yakun emas; oyna har safar ochilib-yopilib turmasligi kerak."""
+    talker = FakeTalker(["savol"])
+    recorder = Recorder(talker.jarvis.bus)
+
+    await talker.run()
+
+    assert recorder.hud_actions() == []
+
+
+@pytest.mark.asyncio
+async def test_farewell_is_spoken_before_closing():
+    talker = FakeTalker(["xayr"])
+
+    await talker.run()
+
+    assert talker.spoken, "xayrlashuv aytilishi kerak"
+    assert talker.handled == []

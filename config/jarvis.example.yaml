@@ -25,6 +25,9 @@ activation:
     # Diqqat: tekshirish STT chaqiruvi, ya'ni pul va ~0.5 s kechikish.
     # «hey jarvis» bunga tushmaydi (u to'g'ridan-to'g'ri chegaradan o'tadi).
     # Butunlay o'chirish uchun: phrases: []
+    # Ro'yxatga yalang «jarvis» qo'shilsa, salomlashuv talab qilinmaydi —
+    # ismning o'zi yetadi. Diqqat: suhbat orasida ismni aytsangiz ham
+    # uyg'onadi, shuning uchun bu ataylab tanlanadigan sozlama.
     phrases: ["hey jarvis", "hi jarvis", "salom jarvis"]
     # Shubhali deb hisoblash chegarasi. Buni juda pastga qo'yish yaramaydi:
     # o'lchab ko'rilganda oq shovqinning o'zi 0.10–0.13 ball oladi, ya'ni

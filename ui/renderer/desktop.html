@@ -365,13 +365,14 @@ function connect() {
     try { data = JSON.parse(event.data); } catch { return; }
     const t = performance.now() / 1000;
     switch (data.type) {
+      // Yadro aniq buyruq yuboradi — holatdan taxmin qilmaymiz.
+      case "hud":
+        if (data.action === "show") desk.show();
+        else if (data.action === "hide") desk.hide();
+        break;
       case "state":
         if (data.state === "wake" && state !== "wake") flash = 1;
         state = data.state;
-        // Chaqirilgani — oynani ochish uchun yetarli sabab (qarsak, «hey
-        // jarvis», tugma — hammasi shu yo'ldan o'tadi). Lekin sahna hali
-        // uyquda qoladi: gapirilmaguncha yonmaydi.
-        if (state !== "idle") desk.show();
         break;
       case "level":
         level = data.value;

@@ -126,6 +126,14 @@ NOT_UNDERSTOOD = (
     "Tushunmadim, qaytaring iltimos.",
 )
 
+# Foydalanuvchi suhbatni yakunlaganda. Qisqa bo'lishi kerak — bu javob emas,
+# xayrlashuv, va sahna shu paytda yopiladi.
+FAREWELLS = (
+    "Xo'p, shu yerda to'xtaymiz.",
+    "Bo'ldi. Kerak bo'lsam chaqiring.",
+    "Xayr. Shu yerdaman.",
+)
+
 # Xatolik yuz berganda.
 ERROR_REPLY = "Kechirasiz, xatolik yuz berdi: {error}"
 

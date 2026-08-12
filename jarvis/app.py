@@ -33,6 +33,7 @@ from .brain.memory import Memory
 from .brain.prompts import (
     CLAP_GREETINGS,
     ERROR_REPLY,
+    FAREWELLS,
     FIRST_GREETING,
     GREETINGS,
     NOT_UNDERSTOOD,
@@ -45,6 +46,7 @@ from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
 from .ui.server import UiServer, base64_to_pcm
 from .voice.consent import consent_prompt, parse_consent
+from .voice.intents import is_end_of_conversation
 from .voice.stt import build_stt, transcribe_guarded
 from .voice.tts import Speaker, build_tts
 
@@ -537,6 +539,9 @@ class Jarvis:
     async def _session(self, source: str = "so'z") -> None:
         """Uyg'onish: signal, salomlashish, so'ng suhbat."""
         await self.bus.set_state(State.WAKE)
+        # To'liq ekranli sahnani aniq buyruq bilan ochamiz — chaqiruv qanday
+        # kelganidan qat'i nazar (so'z, qarsak yoki tugma).
+        await self.bus.hud("show")
         await self._play_chime()
 
         if not self._greeted:
@@ -564,6 +569,7 @@ class Jarvis:
         follow_up = bool(self._talk.get("follow_up", True))
         max_turns = int(self._talk.get("max_turns", 12))
         turn = 0
+        closed = False
 
         while not self._shutdown.is_set():
             # Gapni bo'lgan foydalanuvchi allaqachon gapirib turgan bo'ladi —
@@ -579,6 +585,14 @@ class Jarvis:
                     log.info("Suhbat tugadi: %d navbat", turn)
                 break
 
+            # «Bo'ldi, suhbatni yakunla» — bu miyaga bormaydi. Uni Claude'ga
+            # yuborib javob kutish sekin ham, keraksiz ham.
+            if is_end_of_conversation(text):
+                log.info("Suhbat ovoz bilan yakunlandi: «%s»", text)
+                await self._speak(random.choice(FAREWELLS))
+                closed = True
+                break
+
             await self._handle_utterance(text)
             turn += 1
 
@@ -588,6 +602,11 @@ class Jarvis:
                 log.info("Suhbat navbatlari chegarasiga yetdi (%d)", max_turns)
                 break
 
+        # Sahna faqat aniq yakunlanganda yopiladi. Jimlik bilan tugagan
+        # suhbatdan keyin oyna ochiq qoladi — foydalanuvchi davom ettirishi
+        # mumkin va u har safar qaytadan ochilib-yopilib turmasligi kerak.
+        if closed:
+            await self.bus.hud("hide")
         await self.bus.set_state(State.IDLE)
 
     def _patience(self, turn: int) -> float:
