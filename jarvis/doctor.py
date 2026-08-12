@@ -42,9 +42,13 @@ class Result:
 HINTS: list[tuple[tuple[str, ...], str]] = [
     (
         ("oauth", "token has been revoked", "token expired"),
-        "Claude obunasiga kirish eskirgan yoki bekor qilingan.\n"
-        "Terminalda `claude` deb yozing va brauzerda qaytadan kiring —\n"
-        "so'ng Jarvisni qayta ishga tushiring. Kalit ham, to'lov ham kerak emas.",
+        "Claude obunasiga kirish eskirgan yoki umuman qilinmagan.\n"
+        "Claude Code o'rnatilganini tekshiring:\n"
+        "    claude --version\n"
+        "«command not found» chiqsa, o'rnating:\n"
+        "    npm install -g @anthropic-ai/claude-code\n"
+        "So'ng `claude` deb yozib, obunangiz bilan kiring va Jarvisni\n"
+        "qayta ishga tushiring. Kalit ham, to'lov ham kerak emas.",
     ),
     (
         ("API key ID used as API key", "invalid_api_key"),
