@@ -17,6 +17,30 @@ source .venv/bin/activate
 export JARVIS_HOME="${JARVIS_HOME:-$HOME/Documents/Jarvis}"
 mkdir -p "$JARVIS_HOME"
 
+# Yadroning manzilini interfeysga beramiz. Eng muhimi — TOKEN.
+#
+# `ui.token` qo'yilgan bo'lsa (telefonni ulash uchun kerak), yadro tokensiz
+# WebSocket ulanishini rad etadi. Orb va HUD esa tokenni hech qayerdan
+# olmasdi — natijada ekranda hech nima yonmasdi, garchi yadro chaqiruvni
+# eshitib, holatini o'zgartirib turgan bo'lsa ham. Tokenni shu yerda,
+# sozlamaning o'zidan o'qib beramiz.
+JARVIS_WS_URL="$(python - <<'PY' 2>/dev/null || true
+from jarvis.config import load_config
+
+cfg = load_config()
+port = int(cfg.get("ui.port", 8765))
+token = str(cfg.get("ui.token") or "")
+# Interfeys doim shu kompyuterda — `ui.host` 0.0.0.0 bo'lsa ham loopback.
+print(f"ws://127.0.0.1:{port}" + (f"?t={token}" if token else ""))
+PY
+)"
+if [ -n "$JARVIS_WS_URL" ]; then
+  export JARVIS_WS_URL
+else
+  echo "==> DIQQAT: yadro manzilini sozlamadan o'qib bo'lmadi."
+  echo "    Token qo'yilgan bo'lsa, orb va HUD yadroga ulana olmaydi."
+fi
+
 # Ikkita nusxa bitta mikrofon va bitta portni talashadi — ikkinchisi
 # tushunarsiz xato bilan yiqiladi. Sababini oldindan aytamiz.
 if pgrep -f "python -m jarvis" >/dev/null 2>&1; then

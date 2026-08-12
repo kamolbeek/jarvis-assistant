@@ -134,7 +134,13 @@ function connect() {
     handleEvent(data);
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
+    // 4401 — yadro tokenni qabul qilmadi. «Ishga tushganini tekshiring»
+    // degan umumiy maslahat bu holatda foydalanuvchini yo'ldan adashtiradi:
+    // yadro ishlab turibdi, faqat bizni kiritmayapti.
+    offlinePanel.innerHTML = event.code === 4401
+      ? "Yadro tokenni qabul qilmadi — <code>./scripts/run.sh</code> orqali ishga tushiring"
+      : "Yadro bilan aloqa yo'q — <code>jarvis</code> ishga tushganini tekshiring";
     statusDot.classList.add("offline");
     offlinePanel.classList.remove("hidden");
     setState("idle");

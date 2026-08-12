@@ -18,6 +18,7 @@ from jarvis.doctor import (
     check_env,
     check_permissions,
     check_telegram,
+    check_ui_link,
     check_wake_word,
     collect_logs,
     hint_for,
@@ -325,3 +326,49 @@ def test_hint_recognises_a_revoked_subscription_token():
 
     assert "claude" in advice
     assert "to'lov" in advice
+
+
+# --- Interfeys ↔ yadro ulanishi -----------------------------------------------
+#
+# Bu bo'lim haqiqiy nosozlikdan keyin yozildi. `ui.token` qo'yilgan edi va
+# yadro tokensiz WebSocket ulanishini rad etardi; orb va HUD esa tokenni
+# hech qayerdan olmasdi. Natijada chaqiruv ishlardi, yadro holatini
+# o'zgartirardi, lekin ekranda hech nima yonmasdi — tashqaridan bu
+# "uyg'otish ishlamayapti" bo'lib ko'rinardi.
+
+
+def _ui_cfg(token: str = "", host: str = "127.0.0.1") -> Config:
+    return Config(data={"ui": {"token": token, "host": host, "port": 8765}})
+
+
+def test_ui_link_without_token_is_fine(monkeypatch):
+    monkeypatch.delenv("JARVIS_WS_URL", raising=False)
+    result = check_ui_link(_ui_cfg())
+
+    assert result.ok
+
+
+def test_ui_link_warns_when_token_is_set_but_not_passed(monkeypatch):
+    """Aynan o'sha nosozlik: token bor, lekin interfeysga uzatilmagan."""
+    monkeypatch.delenv("JARVIS_WS_URL", raising=False)
+    result = check_ui_link(_ui_cfg(token="abc123", host="0.0.0.0"))
+
+    assert "run.sh" in result.detail, "qanday tuzatishni aytishi kerak"
+    assert "yonmaydi" in result.detail, "oqibatini aytishi kerak"
+
+
+def test_ui_link_is_quiet_when_the_url_carries_the_token(monkeypatch):
+    monkeypatch.setenv("JARVIS_WS_URL", "ws://127.0.0.1:8765?t=abc123")
+    result = check_ui_link(_ui_cfg(token="abc123", host="0.0.0.0"))
+
+    assert result.ok
+    assert "run.sh" not in result.detail
+
+
+def test_ui_link_fails_when_open_to_network_without_token(monkeypatch):
+    """Tokensiz tarmoqqa ochilsa yadro umuman ishga tushmaydi — buni oldindan aytamiz."""
+    monkeypatch.delenv("JARVIS_WS_URL", raising=False)
+    result = check_ui_link(_ui_cfg(token="", host="0.0.0.0"))
+
+    assert not result.ok
+    assert "openssl" in result.detail

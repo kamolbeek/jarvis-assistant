@@ -213,6 +213,52 @@ def check_storage(cfg: Config) -> Result:
     return Result(True, "\n".join(notes))
 
 
+def check_ui_link(cfg: Config) -> Result:
+    """Orb va HUD yadroga ulana oladimi?
+
+    Bu tekshiruv haqiqiy nosozlikdan keyin qo'shildi. `ui.token` qo'yilgan
+    edi (telefonni ulash uchun), yadro esa tokensiz ulanishni rad etadi.
+    Orb va HUD tokenni hech qayerdan olmasdi — natijada chaqiruv ishlardi,
+    yadro holatini o'zgartirardi, lekin ekranda hech nima yonmasdi.
+
+    Tashqaridan bu "uyg'otish ishlamayapti" bo'lib ko'rinadi, aslida esa
+    uyg'otish ishlaydi — ko'rsatuvchi tomon uzilgan.
+    """
+    token = str(cfg.get("ui.token") or "")
+    port = int(cfg.get("ui.port", 8765))
+    host = str(cfg.get("ui.host", "127.0.0.1"))
+    supplied = os.environ.get("JARVIS_WS_URL", "")
+
+    notes = [f"Yadro manzili: ws://127.0.0.1:{port}"]
+
+    if not token:
+        notes.append("Token qo'yilmagan — orb va HUD to'g'ridan-to'g'ri ulanadi.")
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            return Result(
+                False,
+                f"`ui.host` = {host} (tarmoqqa ochiq), lekin `ui.token` bo'sh.\n"
+                "Bu holatda yadro umuman ishga tushmaydi.\n"
+                "Token yarating:  openssl rand -hex 16",
+            )
+        return Result(True, "\n".join(notes))
+
+    notes.append("Token qo'yilgan — orb va HUD uni `JARVIS_WS_URL` orqali oladi.")
+
+    if supplied and f"t={token}" in supplied:
+        notes.append("JARVIS_WS_URL to'g'ri o'rnatilgan.")
+        return Result(True, "\n".join(notes))
+
+    # Bu odatiy hol: `doctor` ni qo'lda ishga tushirganda o'zgaruvchi yo'q.
+    # Shuning uchun xato emas, lekin aytib qo'yish shart.
+    notes.append(
+        "Orbni ALBATTA `./scripts/run.sh` orqali ishga tushiring — u tokenni\n"
+        "sozlamadan o'qib, interfeysga uzatadi. `cd ui && npm start` bilan\n"
+        "qo'lda ishga tushirilsa, yadro ulanishni rad etadi va ekranda\n"
+        "hech nima yonmaydi (orbda «Yadro tokenni qabul qilmadi» chiqadi)."
+    )
+    return Result(True, "\n".join(notes))
+
+
 def check_env(cfg: Config) -> Result:
     """Kalitlar joyidami?
 
@@ -649,6 +695,7 @@ async def run_doctor() -> int:
     _header("Sozlamalar")
     report("Kalitlar (.env)", check_env(cfg))
     report("macOS ruxsatlari", check_permissions())
+    report("Interfeys ↔ yadro", check_ui_link(cfg))
 
     if stop:
         print(f"\n{RED}Kalitlar yo'q — qolgan tekshiruvlar o'tkazib yuborildi.{RESET}")

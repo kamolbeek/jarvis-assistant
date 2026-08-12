@@ -372,6 +372,11 @@ function connect() {
         break;
       case "state":
         if (data.state === "wake" && state !== "wake") flash = 1;
+        // Chaqirilgan — demak yonadi. Ilgari yonish uchun GAPIRISH talab
+        // qilinardi: qarsak yoki tugma sahnani ochardi-yu, ko'zlar o'chgan
+        // qolardi. Tashqaridan bu "ishlamayapti" bo'lib ko'rinadi —
+        // chaqiruvga javob ko'rinmasa, chaqiruv yetib bormagandek.
+        if (data.state === "wake" || data.state === "listening") engage(t);
         state = data.state;
         break;
       case "level":
@@ -384,7 +389,13 @@ function connect() {
     }
   });
 
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
+    // 4401 = yadro tokenni qabul qilmadi. Buni «aloqa yo'q» deb ko'rsatish
+    // noto'g'ri yo'lga boshlaydi: yadro ishlab turibdi, faqat bizni
+    // kiritmayapti. Sabab aynan aytilsa, tuzatish bir daqiqalik ish.
+    offline.textContent = event.code === 4401
+      ? "TOKEN QABUL QILINMADI — ./scripts/run.sh ORQALI ISHGA TUSHIRING"
+      : "YADRO BILAN ALOQA YO'Q";
     offline.classList.add("on");
     state = "idle"; level = 0;
     systems = systems.map((s) => ({ ...s, status: "unknown", heat: 0 }));
