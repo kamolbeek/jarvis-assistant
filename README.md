@@ -140,6 +140,26 @@ Hammasi yashil bo'lgach:
 
 Kichik orb ekranning o'ng pastida paydo bo'ladi. «Hey Jarvis» deb ko'ring.
 
+### Chaqirsangiz javob bermasa
+
+`doctor` mikrofon va kalitlarni tekshiradi, ya'ni Jarvis **ishlab turganda**
+foydali. Agar u umuman ko'tarilmagan bo'lsa — chaqiruvni eshitadigan hech kim
+yo'q va `doctor` buni aytmaydi, chunki u boshqa savolga javob beradi. Shuning
+uchun alohida skript bor:
+
+```bash
+./scripts/diagnose.sh
+```
+
+Bir ekranda: jarayon tirikmi, launchd plist yuklanganmi va oxirgi chiqish kodi
+nima, `.venv` va `npm` joyidami, qaysi kalitlar to'ldirilgan, birlashgan
+sozlamada chegara va iboralar qanday, hamda jurnalning oxirgi 30 qatori.
+Odatda javob birinchi qizil qatorda turadi.
+
+Natija `~/.jarvis/diagnose.txt` ga ham yoziladi. Kalitlarning **qiymati
+yozilmaydi** — faqat «bor / yo'q» va uzunligi, shuning uchun bu faylni yordam
+so'rab yuborish xavfsiz.
+
 ### Avtomatik ishga tushirish
 
 Terminal ochib yurish shart bo'lmasin — bir marta yoqib qo'ying:
@@ -636,6 +656,8 @@ python -m jarvis                     # ishga tushirish
 python -m jarvis doctor              # har bir qismni alohida tekshirish
 python -m jarvis wake-test           # chaqiruv ballini o'lchash
 python -m jarvis wake-set 0.33 0.25  # chegarani sozlamaga yozish
+
+./scripts/diagnose.sh                # javob bermasa: nima uchun ko'tarilmagan
 ```
 
 `wake-set` sozlama faylini o'zi tahrirlaydi va izohlarni saqlaydi. Qo'lda
