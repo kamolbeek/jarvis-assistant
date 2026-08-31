@@ -58,6 +58,30 @@ HINTS: list[tuple[tuple[str, ...], str]] = [
         "yangi kalit yarating va o'sha paytdagi `sk_...` qiymatini nusxalang.",
     ),
     (
+        ("quota_exceeded", "credits remaining", "quota of"),
+        "ElevenLabs kreditlari tugagan (hisobda 0 kredit qolgan).\n"
+        "Kalit to'g'ri — muammo balansda. Ikki yo'l bor:\n"
+        "  1) elevenlabs.io > Subscription — tarifni to'ldiring;\n"
+        "  2) BEPUL lokal ovozga o'ting — kalit ham, internet ham kerak emas.\n"
+        "     config/jarvis.yaml ga shuni yozing:\n"
+        "         voice:\n"
+        "           stt:\n"
+        "             provider: \"whisper_local\"\n"
+        "           tts:\n"
+        "             provider: \"macos\"\n"
+        "     va lokal STT'ni o'rnating:\n"
+        "         pip install -e \".[local-stt]\"\n"
+        "     (birinchi ishga tushirishda model ~1.5 GB yuklab olinadi)",
+    ),
+    (
+        ("returned an error result",),
+        "Claude Code javob qaytarmadi. Terminalda o'zini tekshiring:\n"
+        "    claude -p \"salom\"\n"
+        "Kirish so'ralsa yoki xato chiqsa — `claude` deb yozib obunangiz\n"
+        "bilan kiring. Obuna limiti tugagan bo'lsa, limit tiklanishini\n"
+        "kutish kerak (yoki .env ga ANTHROPIC_API_KEY qo'yish).",
+    ),
+    (
         ("401",),
         "Kalit qabul qilinmadi — .env dagi qiymatni qaytadan tekshiring.",
     ),
