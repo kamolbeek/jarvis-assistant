@@ -129,7 +129,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{GREEN}Eng tozasi: {index}. {name}{RESET}")
         print(f"{DIM}Sozlamaga yozish — config/jarvis.yaml:{RESET}")
         print("    audio:")
-        print(f"      input_device: {index}")
+        print(f'      input_device: "{name}"')
+        # Raqam qulayroq, lekin u qurilmalar ulanganda siljib ketadi
+        # (masalan iPhone yaqin kelsa) — shuning uchun nom ustun turadi.
+        print(f'{DIM}      # yoki raqami bilan: input_device: {index}{RESET}')
         print(f"\n{DIM}Keyin gapirib sinang:{RESET}  python -m jarvis mic-test {index}")
     else:
         print(f"{RED}Hamma qurilmada signal buzuq ko'rinyapti.{RESET}")
