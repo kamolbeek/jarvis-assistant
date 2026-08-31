@@ -83,10 +83,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- Bitta qurilmani gapirib sinash ---
     if argv:
+        from .audio.devices import resolve_input_device
+
         try:
-            index = int(argv[0])
-        except ValueError:
-            print(f"Qurilma raqami kutilgandi, «{argv[0]}» keldi")
+            index = resolve_input_device(argv[0])
+        except ValueError as exc:
+            print(exc)
             return 1
         name = next((d["name"] for i, d in inputs if i == index), None)
         if name is None:

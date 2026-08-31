@@ -368,8 +368,20 @@ class Speaker:
 
         self._stop.clear()
         self._speaking = True
+
+        # Sozlamada dinamik nomi turgan bo'lishi mumkin — indeksga aylantiramiz.
+        # Topilmasa jim qolgandan ko'ra standart chiqishdan gapirgani yaxshi.
+        from ..audio.devices import resolve_output_device
+
+        device = self._device
+        try:
+            device = resolve_output_device(self._device)
+        except ValueError as exc:
+            log.warning("%s\nTizim standart chiqishi bilan davom etamiz.", exc)
+            device = None
+
         stream = sd.OutputStream(
-            samplerate=sample_rate, channels=1, dtype="int16", device=self._device
+            samplerate=sample_rate, channels=1, dtype="int16", device=device
         )
         stream.start()
         completed = True

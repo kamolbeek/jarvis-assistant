@@ -76,12 +76,25 @@ class MicStream:
             if self._loop is not None and not self._loop.is_closed():
                 self._loop.call_soon_threadsafe(self._push, frame)
 
+        # Sozlamadagi qurilma nomini indeksga aylantiramiz. Topilmasa — ish
+        # to'xtamasin: tizim standarti bilan davom etamiz va sababini aytamiz.
+        # Mikrofonsiz Jarvis umuman ishlamaydi, noto'g'ri nom esa tuzatiladigan
+        # mayda xato — shuning uchun butun ishni yiqitmaydi.
+        from .devices import resolve_input_device
+
+        device = self.device
+        try:
+            device = resolve_input_device(self.device)
+        except ValueError as exc:
+            log.warning("%s\nTizim standart mikrofoni bilan davom etamiz.", exc)
+            device = None
+
         self._stream = sd.InputStream(
             samplerate=self.sample_rate,
             blocksize=self.frame_samples,
             channels=1,
             dtype="int16",
-            device=self.device,
+            device=device,
             callback=callback,
         )
         self._stream.start()
