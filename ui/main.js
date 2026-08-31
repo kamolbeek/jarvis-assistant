@@ -176,8 +176,33 @@ function createDesktopWindow() {
     },
   });
 
-  deskWin.loadFile(path.join(__dirname, "renderer", "desktop.html"));
+  const page = path.join(__dirname, "renderer", "desktop.html");
+  deskWin.loadFile(page);
   deskWin.on("closed", () => { deskWin = null; });
+
+  // Sahifadagi xato terminalda ko'rinsin. Aks holda HUD "yarim ishlagan"
+  // holatda qoladi va sababini faqat DevTools bilan topsa bo'ladi.
+  console.log(`Ish stoli sahifasi: ${page}`);
+  deskWin.webContents.on("console-message", (...args) => {
+    // Electron 33 da imzo (event, level, message, line, source),
+    // yangiroq versiyalarda (event, details) — ikkalasini ham qo'llaymiz.
+    const d = args[1] && typeof args[1] === "object" ? args[1] : null;
+    const level = d ? d.level : args[1];
+    const message = d ? d.message : args[2];
+    if (level === 3 || level === "error" || level === "warning") {
+      console.warn(`[HUD] ${message}`);
+    }
+  });
+  deskWin.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error(`[HUD] sahifa yuklanmadi (${code}): ${desc} — ${url}`);
+  });
+  deskWin.webContents.on("render-process-gone", (_e, details) => {
+    console.error(`[HUD] renderer to'xtadi: ${details.reason}`);
+  });
+
+  if (process.argv.includes("--dev")) {
+    deskWin.webContents.openDevTools({ mode: "detach" });
+  }
 
   if (DESK_AMBIENT) {
     deskWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });

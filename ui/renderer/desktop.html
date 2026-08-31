@@ -141,6 +141,25 @@
 
   /* Chiqish yo'li doim ko'rinib turishi kerak. Oyna butun ekranni egallaydi
      va foydalanuvchi qamalib qolgandek his qilmasligi shart. */
+  /* Xato yuz bersa — jim qolmasin, ekranda ayting */
+  #boom {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    max-width: 720px; padding: 14px 18px; border-radius: 10px;
+    background: rgba(40, 6, 6, 0.94); border: 1px solid rgba(255, 68, 58, 0.6);
+    color: #ffd9d6; font: 500 12.5px var(--mono); line-height: 1.5;
+    white-space: pre-wrap; display: none; z-index: 9;
+  }
+  #boom.on { display: block; }
+  #boom b { color: #ff9a92; display: block; margin-bottom: 6px; letter-spacing: 0.14em; }
+
+  /* Ishga tushganda qisqa diagnostika */
+  #diag {
+    left: 18px; bottom: 14px;
+    font: 500 10.5px var(--mono); color: rgba(236, 253, 255, 0.45);
+    letter-spacing: 0.06em; pointer-events: none;
+    transition: opacity 600ms ease;
+  }
+
   #escape-hint {
     top: 14px; right: 18px;
     padding: 6px 14px; border-radius: 8px;
@@ -218,6 +237,8 @@
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
   <div class="blk" id="offline">YADRO BILAN ALOQA YO'Q</div>
   <div class="blk" id="escape-hint">ESC — YOPISH</div>
+  <div class="blk" id="diag"></div>
+  <div class="blk" id="boom"><b>SAHIFADA XATO</b><span></span></div>
 </div>
 
 <script src="palette.js"></script>
@@ -228,6 +249,22 @@
 <script>
 // Ish stoli boshqaruvchisi: yadro (WebSocket) + Electron (IPC) ma'lumotlarini
 // DESK sahnasiga uzatadi.
+
+// Sahifa xatosi jim o'tib ketmasligi kerak: bir marta xato bo'lsa, HUD
+// "yarim ishlagan" holatda qoladi va sababi faqat DevTools'da ko'rinadi.
+// Shuning uchun uni ekranning o'ziga chiqaramiz.
+function showBoom(text) {
+  const box = document.getElementById("boom");
+  if (!box) return;
+  box.querySelector("span").textContent = text;
+  box.classList.add("on");
+}
+window.addEventListener("error", (e) => {
+  showBoom(`${e.message}\n${(e.filename || "").split("/").pop()}:${e.lineno}`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  showBoom(String((e.reason && e.reason.message) || e.reason));
+});
 
 // Electron ko'prigi. Oddiy brauzerda ochilsa (chizmani tekshirish uchun)
 // ko'prik bo'lmaydi — o'sha holatda sahna baribir chizilishi kerak, shuning
@@ -554,12 +591,24 @@ figureImg.addEventListener("click", (e) => {
 
 let bundled = false; // o'rnatilgan wallpaper rejimi
 
+// Ishga tushganda qisqa xabar: qaysi rejim yoqilgani ko'rinib tursin.
+let diagTimer = null;
+function diag(text, keep) {
+  const el = document.getElementById("diag");
+  if (!el) return;
+  el.textContent = text;
+  el.style.opacity = "1";
+  clearTimeout(diagTimer);
+  if (!keep) diagTimer = setTimeout(() => { el.style.opacity = "0"; }, 6000);
+}
+
 // Rasm yuklanmasa, sahna "yozuvlargina qolgan" holatga tushmasligi kerak —
 // har bir bosqichda keyingisiga o'tamiz: saqlangan rasm -> o'rnatilgan
 // wallpaper -> vektor chizma (u rasmsiz ham to'liq HUD chizadi).
 function loadBundled() {
   figureImg.src = "assets/markaz.jpg";
   figureImg.onload = () => {
+    diag("wallpaper: jonli qatlam yoqildi");
     figureOn = true;
     bundled = true;
     figureCal = DESK.BUNDLED.cal;
@@ -567,6 +616,7 @@ function loadBundled() {
     document.body.classList.add("wallpaper");
   };
   figureImg.onerror = () => {
+    diag("XATO: assets/markaz.jpg yuklanmadi — vektor sahnaga o'tildi", true);
     console.error("O'rnatilgan wallpaper yuklanmadi — vektor sahnaga o'tildi");
     figureOn = false;
     bundled = false;
@@ -585,6 +635,7 @@ async function loadFigure() {
     // Foydalanuvchi o'z rasmini qo'ygan — o'sha ustun
     figureImg.src = "file://" + saved + "?v=" + Math.random();
     figureImg.onload = () => {
+      diag("o'zingiz qo'ygan rasm ishlatilyapti — Backspace: o'rnatilganiga qaytish", true);
       figureOn = true;
       bundled = false;
       figureImg.classList.add("on");
@@ -667,8 +718,15 @@ window.addEventListener("drop", async (e) => {
 // --- Oynani yopish va qaytadan ochish ---
 
 // Esc — oynani yashiradi. Qarsak, «hey jarvis» yoki ⌘⇧J bilan qaytadi.
-window.addEventListener("keydown", (e) => {
+window.addEventListener("keydown", async (e) => {
   if (e.key === "Escape") desk.hide();
+  // O'zingiz qo'ygan rasmni olib tashlash — o'rnatilgan wallpaper qaytadi
+  if (e.key === "Backspace" && !bundled) {
+    await desk.clearFigure();
+    localStorage.removeItem("figure-cal");
+    figureCal = null;
+    loadBundled();
+  }
 });
 
 // Oyna har ochilganda noldan yonadi: bu "yoqilish" harakatini ko'rsatadi
