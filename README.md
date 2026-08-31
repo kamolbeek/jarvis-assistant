@@ -227,9 +227,10 @@ hali gapirilgani emas.
 Gapirganingizda yonadi — ko'zlar chaqnaydi, reaktor kuchayadi, panellar
 yorishadi. Jim qolsangiz, sekin qaytadan uyquga ketadi.
 
-Sahnaning hech bir qismi rasm emas: hammasi kadr-bakadr chiziladi. Shuning
-uchun ko'z «yonishi» haqiqiy — rasm ustidagi yorqinlik emas, balki o'sha
-kadrda boshqacha chizilgan nur.
+Ko'zlar bilan bitta nozik joy bor: ular fon rasmining **o'zida** yoniq holda
+chizilgan. Shuning uchun uyquda ularning ustiga qorayituvchi niqob qo'yiladi va
+nur qaytadan chiziladi — natijada yonish haqiqatan yonishga o'xshaydi,
+shunchaki yorqinlik oshishiga emas.
 
 ### Oynadan chiqish — to'rt yo'l
 
@@ -273,47 +274,54 @@ JARVIS_DESKTOP=ambient ./scripts/run.sh
 
 Butunlay o'chirish: `JARVIS_DESKTOP=0`. Kichik burchak-vidjet har doim qoladi.
 
-### Sahnadagi har bir detal — jonli
+### Wallpaperning o'zi jonli
 
-Bu sahna wallpaper emas. Rainmeter uslubidagi butun ish stoli **koddan
-chiziladi** (`ui/renderer/shell.js`), shuning uchun undagi har bir raqam
-kompyuteringizning ayni damdagi holati, har bir tugma esa haqiqatan bosiladi:
+Ekranda o'sha SHIELD OS wallpaperi turadi — **dizayn bir zarra ham
+o'zgarmagan**: o'sha panellar, o'sha yozuvlar, o'sha ranglar. Farqi shundaki,
+rasmdagi raqamlar endi qotib qolgan emas.
 
-| Sahnadagi joy | Nimani ko'rsatadi / nima qiladi |
+Ishlashi oddiy (`ui/renderer/live.js`): eski qiymat rasmning **o'zidan**
+olingan toza ustun bilan yopiladi — fon naqshi ham, gradienti ham aynan mos
+tushadi — so'ng o'sha joyga, o'sha o'lchamda yangi qiymat chiziladi. Shrift
+har kompyuterda turlicha bo'lgani uchun har bir yozuv rasmdagi harf
+balandligiga moslab cho'ziladi.
+
+Nimalar jonlandi:
+
+| Rasmdagi joy | Endi nimani ko'rsatadi |
 |---|---|
-| Markazdagi zirh | «Hey Jarvis» deganda ko'zlari yonadi, reaktori aylanadi; reaktorga bosilsa Jarvis uyg'onadi |
-| Katta soat (pastda va o'ngda) | haqiqiy vaqt — soat, daqiqa, sekund; ikki nuqta har sekundda miltillaydi |
-| Analog siferblat | uchta strelka bilan o'sha vaqt |
-| Sana bloki, taqvim | bugungi sana; haftaning bugungi kuni yoritilgan |
-| `SYSTEM` paneli | CPU, RAM, SWAP — har 2 soniyada yangilanadi |
-| `RAM USAGE` | band va bo'sh xotira, gigabaytda |
-| `DRIVE` / `FILESYSTEMS` | haqiqiy disklar: nomi, band/umumiy hajmi, foizi |
-| `TARMOQ` | yuklab olish va yuklash tezligi (hisoblagichlar farqidan) |
-| `YUK TARIXI` | CPU va RAM ning oxirgi bir necha daqiqasi — jonli grafik |
-| Batareya | zaryad foizi, quvvatga ulanganmi |
-| Ovoz ustuni (o'ngda) | tizim ovozi; bosgan joyingiz yangi daraja bo'ladi |
-| `MIC` ustuni (chapda) | mikrofon darajasi — gapirganda ko'tariladi |
-| Media paneli | ochiq Spotify/Music'dagi qo'shiq nomi; ⏮ ⏯ ⏭ tugmalari ishlaydi |
-| Ilova tugmalari va yuqoridagi dok | Finder, Safari, Terminal… — bosilsa ochiladi |
-| `WEB` ro'yxati va radial menyu | saytlar — brauzerda ochiladi |
-| Papkalar | Yuklamalar, Hujjatlar, Rasmlar… — Finder'da ochiladi |
-| Axlat qutisi | ichidagi fayllar soni; bosilsa ochiladi |
-| Ob-havo | bugun/ertaga (open-meteo, kalitsiz; `JARVIS_LAT`/`JARVIS_LON`) |
-| Globus | qurilmaning mahalliy IP manzili va shahar (`JARVIS_CITY`) |
-| Chap pastdagi JARVIS doirasi | bosilsa bo'g'in siferblatlari paneli ochiladi |
-| Zirh siluetlari, shesternyalar, olti burchaklar | bezak — lekin ular ham to'xtamaydi, skanerlanadi va aylanadi |
+| Pastdagi katta soat (aksi bilan), o'ngdagi `23:52`, `TIME/DATE` paneli, radial menyu yonidagi soat | haqiqiy vaqt — soat, daqiqa; sekundlar alohida katakda |
+| `21 AUGUST WEDNESDAY` bloki, `Tuesday / August 20, 2013`, `20-Aug., Tuesday` | bugungi sana va hafta kuni |
+| Taqvim qatori (`Su Mo Tu …` va sonlar) | shu hafta; bugungi ustun rasmdagidek yoritiladi |
+| `SYSTEM`: CPU / RAM / SWAP foizlari va zargaldoq chiziqlari | haqiqiy yuk, har 2 soniyada |
+| `RAM USAGE 50%`, `Used:` / `Free:` | haqiqiy xotira, gigabaytda |
+| `DISK` paneli (`C:\`, `D:\`), `FILESYSTEMS` qatorlari, `DRIVE` (HD C / HD D) | haqiqiy disklar: band/umumiy hajm va foiz |
+| `Speed:` / `Total:`, `UPLOAD` / `DOWNLOAD`, chapdagi `653.5 GIB - 50.0 B/S` | tarmoq tezligi va umumiy hajm |
+| `28°C` | ob-havo (open-meteo; `JARVIS_LAT`/`JARVIS_LON`) |
+| `Recycle Bin` (`23 items 2.57 GB`) | axlat qutisidagi fayllar soni va hajmi |
+| `BATTERY 100% / no battery` va `Currently power level is at 100 percent` | batareya zaryadi va quvvat holati |
+| O'ng chetdagi zargaldoq ustun | tizim ovozi — bosgan joyingiz yangi daraja bo'ladi |
+| Pleyer `0:00` va ijro chizig'i | ochiq Spotify/Music'dagi qo'shiq vaqti |
+| Rasmdagi dumaloq siferblatlar | sekin aylanib turadi |
+| Ko'zlar va reaktor | «Hey Jarvis» deganda yonadi |
 
-macOS'ga xos ko'rsatkichlar (batareya, ovoz, ijro, SWAP) Linux'da ham
-o'qiladigan joyidan olinadi; o'qib bo'lmasa o'sha katak «—» bo'lib turadi,
-qolgani ishlayveradi.
+Bosiladigan joylar ham rasmning o'zida:
 
-**O'z rasmingizni qo'yish.** Istalgan rasmni HUD ustiga sudrab tashlang —
-markazdagi zirh o'rniga o'sha rasm turadi, atrofdagi jonli panellar joyida
-qoladi. Uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor), shundan keyin
-rasmning ham ko'zlari yonadi. `Backspace` — rasmni olib tashlaydi.
-Eski SHIELD OS wallpaperi ham shu yerda turibdi
-(`ui/renderer/assets/markaz.jpg`) — o'shani sudrab tashlasangiz, markazda
-aynan o'sha rasm bo'ladi.
+- chapdagi Chrome / Control Panel / VLC / Firefox / uTorrent / Skype tugmalari
+  va yuqoridagi dok — mos ilovalarni ochadi;
+- `GOOGLE / GMAIL / FACEBOOK / YOUTUBE / IMDB / YAHOO / WIKIPEDIA` ro'yxati va
+  o'ngdagi radial menyu (Mail, Google, Youtube, Twitter, Facebook) — brauzerda;
+- `Downloads / Documents / Dropbox / Pictures / Music / Videos` — Finder'da;
+- Recycle Bin — axlat qutisi; pleyer tugmalari — ochiq pleyerga;
+- ko'kragidagi reaktor — Jarvis'ni chaqiradi; chap pastdagi JARVIS doirasi —
+  bo'g'in siferblatlari paneli.
+
+Sichqonchani olib borsangiz, bosiladigan joy siyon ramka bilan belgilanadi.
+
+**O'z rasmingizni qo'yish.** Boshqa rasmni HUD ustiga sudrab tashlang —
+saqlanadi va uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor). Shundan
+keyin o'sha rasmning ko'zlari yonadi. `Backspace` — o'rnatilgan wallpaperga
+qaytaradi.
 
 ### HUD nimani ko'rsatadi
 
@@ -652,9 +660,8 @@ ui/
     ├── palette.js  ranglar — yagona manba
     ├── hud.js      bo'g'in siferblatlari
     ├── suit.js     zirh chizmasi (ko'zlar, reaktor)
-    ├── shell.js    butun ish stoli sahnasi — har bir vidjet shu yerda
-    ├── deskapp.js  sahnani yurituvchi qatlam (kadrlar, bosishlar, uyqu)
-    ├── figure.js   o'z rasmingiz ustidagi jonli nur
+    ├── desktop.js  ish stoli sahnasi va rasm ustidagi nur effektlari
+    ├── live.js     wallpaperdagi raqamlarni jonlantiruvchi qatlam
     ├── orb.js      yadro bilan aloqa va kadrlar sikli
     └── phone.html  telefon sahifasi (bitta faylda)
 ```

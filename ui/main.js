@@ -389,6 +389,8 @@ async function batteryInfo() {
 // bermaydi, ikkitasining farqi esa aynan tezlik.
 
 let prevNet = null;
+let netTotal = 0; // ishga tushgandan beri qabul qilingan baytlar
+let netTotalUp = 0;
 
 async function netRates() {
   let rx = 0, tx = 0;
@@ -419,13 +421,13 @@ async function netRates() {
   let rates = { down: 0, up: 0 };
   if (prevNet && now > prevNet.at) {
     const dt = (now - prevNet.at) / 1000;
-    rates = {
-      down: Math.max(0, (rx - prevNet.rx) / dt),
-      up: Math.max(0, (tx - prevNet.tx) / dt),
-    };
+    const dRx = Math.max(0, rx - prevNet.rx);
+    rates = { down: dRx / dt, up: Math.max(0, (tx - prevNet.tx) / dt) };
+    netTotal += dRx;
+    netTotalUp += Math.max(0, tx - prevNet.tx);
   }
   prevNet = { rx, tx, at: now };
-  return rates;
+  return { ...rates, totalGb: netTotal / 1e9, upTotalGb: netTotalUp / 1e9 };
 }
 
 // --- Ovoz balandligi ---
@@ -451,12 +453,20 @@ function trashPath() {
     : path.join(os.homedir(), ".local", "share", "Trash", "files");
 }
 
-function trashCount() {
+// Axlat qutisi: nechta fayl va qancha joy egallaydi. Hajmni `du` aytadi —
+// u ruxsat bermasa, faqat sonini ko'rsatamiz.
+async function trashInfo() {
+  let count = null;
   try {
-    return fs.readdirSync(trashPath()).filter((n) => !n.startsWith(".")).length;
+    count = fs.readdirSync(trashPath()).filter((n) => !n.startsWith(".")).length;
   } catch {
     return null;
   }
+  let sizeGb = null;
+  const out = await run("du", ["-sk", trashPath()], 5000);
+  const kb = Number((out.trim().split(/\s+/)[0] || "").replace(/[^0-9]/g, ""));
+  if (Number.isFinite(kb) && kb > 0) sizeGb = (kb * 1024) / 1e9;
+  return { count, sizeGb };
 }
 
 // --- Ijro etilayotgan musiqa ---
@@ -533,7 +543,7 @@ function every(ms, fn) {
 function startStats() {
   every(30_000, async () => { slow.disks = await diskList(); });
   every(15_000, async () => { slow.battery = await batteryInfo(); });
-  every(20_000, async () => { slow.trash = trashCount(); });
+  every(60_000, async () => { slow.trash = await trashInfo(); });
   every(10_000, async () => { slow.swap = await swapPercent(); });
   every(5_000, async () => { slow.volume = await outputVolume(); });
   every(8_000, async () => { slow.media = await nowPlaying(); });
