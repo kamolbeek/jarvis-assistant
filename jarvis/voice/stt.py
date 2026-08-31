@@ -174,6 +174,8 @@ class WhisperCppStt(SttProvider):
 
     # Model odatda shu joylarda yotadi (RubaiSTT Dictation ham shu yerlarga qo'yadi)
     MODEL_DIRS = (
+        "~/rubai-stt/models",
+        "~/rubai-stt",
         "~/Library/Application Support/uzbek-dictation",
         "~/Library/Application Support/RubaiSTT Dictation",
         "~/Library/Application Support/RubaiSTT",
