@@ -241,6 +241,24 @@
   <div class="blk" id="boom"><b>SAHIFADA XATO</b><span></span></div>
 </div>
 
+<script>
+// Xato ushlagich ALOHIDA blokda: quyidagi bloklarda sintaksis xatosi bo'lsa,
+// o'sha blok butunlay ishlamaydi va HUD sababsiz "yarim ishlagan" holatda
+// qoladi. Bu blok esa ishlab turadi va sababni ekranga chiqaradi.
+window.addEventListener("error", (e) => {
+  const box = document.getElementById("boom");
+  if (!box) return;
+  box.querySelector("span").textContent =
+    `${e.message}\n${(e.filename || "").split("/").pop()}:${e.lineno}`;
+  box.classList.add("on");
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const box = document.getElementById("boom");
+  if (!box) return;
+  box.querySelector("span").textContent = String((e.reason && e.reason.message) || e.reason);
+  box.classList.add("on");
+});
+</script>
 <script src="palette.js"></script>
 <script src="suit.js"></script>
 <script src="hud.js"></script>
@@ -250,26 +268,17 @@
 // Ish stoli boshqaruvchisi: yadro (WebSocket) + Electron (IPC) ma'lumotlarini
 // DESK sahnasiga uzatadi.
 
-// Sahifa xatosi jim o'tib ketmasligi kerak: bir marta xato bo'lsa, HUD
-// "yarim ishlagan" holatda qoladi va sababi faqat DevTools'da ko'rinadi.
-// Shuning uchun uni ekranning o'ziga chiqaramiz.
-function showBoom(text) {
-  const box = document.getElementById("boom");
-  if (!box) return;
-  box.querySelector("span").textContent = text;
-  box.classList.add("on");
-}
-window.addEventListener("error", (e) => {
-  showBoom(`${e.message}\n${(e.filename || "").split("/").pop()}:${e.lineno}`);
-});
-window.addEventListener("unhandledrejection", (e) => {
-  showBoom(String((e.reason && e.reason.message) || e.reason));
-});
 
 // Electron ko'prigi. Oddiy brauzerda ochilsa (chizmani tekshirish uchun)
 // ko'prik bo'lmaydi — o'sha holatda sahna baribir chizilishi kerak, shuning
 // uchun bo'sh o'rindoshlar qo'yamiz.
-const desk = window.desk || {
+//
+// DIQQAT: nomi `desk` BO'LMASLIGI kerak. contextBridge `window.desk` ni
+// o'zgarmas (non-configurable) xossa qilib qo'yadi, global `const desk` esa
+// u bilan to'qnashadi va butun sahifa skripti
+// «Identifier 'desk' has already been declared» xatosi bilan yiqiladi —
+// natijada HUD yarim ishlagan holatda qolardi.
+const bridge = window.desk || {
   onStats: () => {}, onWeather: () => {}, onMedia: () => {}, onVisible: () => {},
   openApp: () => {}, openFolder: () => {}, openUrl: () => {}, openTrash: () => {},
   setVolume: () => {}, media: () => {},
@@ -408,7 +417,7 @@ function caption(who, text) {
 let socket = null;
 
 function connect() {
-  socket = new WebSocket(desk.coreUrl);
+  socket = new WebSocket(bridge.coreUrl);
 
   socket.addEventListener("open", () => offline.classList.remove("on"));
 
@@ -419,8 +428,8 @@ function connect() {
     switch (data.type) {
       // Yadro aniq buyruq yuboradi — holatdan taxmin qilmaymiz.
       case "hud":
-        if (data.action === "show") desk.show();
-        else if (data.action === "hide") desk.hide();
+        if (data.action === "show") bridge.show();
+        else if (data.action === "hide") bridge.hide();
         break;
       case "state":
         if (data.state === "wake" && state !== "wake") flash = 1;
@@ -479,7 +488,7 @@ setInterval(tickClock, 5000); tickClock();
   }
 })();
 
-desk.onStats((s) => {
+bridge.onStats((s) => {
   stats.cpu = s.cpu; stats.ram = s.ram; stats.disk = s.disk;
   Object.assign(live, {
     cpu: s.cpu, ram: s.ram, swap: s.swap || 0,
@@ -513,7 +522,7 @@ function weatherText(code) {
   return text;
 }
 
-desk.onWeather((w) => {
+bridge.onWeather((w) => {
   if (!w) return;
   live.weather = w;
   document.getElementById("w-today").textContent = `${w.today.max}° / ${w.today.min}°`;
@@ -522,16 +531,16 @@ desk.onWeather((w) => {
   document.getElementById("w-tomorrow-d").textContent = weatherText(w.tomorrow.code);
 });
 
-desk.onMedia((m) => { live.media = m; });
+bridge.onMedia((m) => { live.media = m; });
 
 // --- Ochish buyruqlari ---
 
 document.querySelectorAll(".chip[data-app]").forEach((c) =>
-  c.addEventListener("click", () => desk.openApp(c.dataset.app)));
+  c.addEventListener("click", () => bridge.openApp(c.dataset.app)));
 document.querySelectorAll(".chip[data-folder]").forEach((c) =>
-  c.addEventListener("click", () => desk.openFolder(c.dataset.folder)));
+  c.addEventListener("click", () => bridge.openFolder(c.dataset.folder)));
 document.querySelectorAll(".link").forEach((l) =>
-  l.addEventListener("click", () => desk.openUrl(l.dataset.url)));
+  l.addEventListener("click", () => bridge.openUrl(l.dataset.url)));
 
 // --- Markaziy rasm: tashlash, kalibrlash, jonli effektlar ---
 //
@@ -628,7 +637,7 @@ function loadBundled() {
 async function loadFigure() {
   let saved = null;
   try {
-    saved = await desk.getFigure();
+    saved = await bridge.getFigure();
   } catch { /* ko'prik javob bermadi — o'rnatilgan rasm bilan davom etamiz */ }
 
   if (saved) {
@@ -677,16 +686,16 @@ document.addEventListener("click", (e) => {
   if (!zone) return;
   if (zone.dials) { dialPanel.classList.toggle("on"); return; }
   if (zone.activate) { send({ type: "activate" }); return; }
-  if (zone.url) { desk.openUrl(zone.url); return; }
-  if (zone.app) { desk.openApp(zone.app); return; }
-  if (zone.folder) { desk.openFolder(zone.folder); return; }
-  if (zone.trash) { desk.openTrash(); return; }
-  if (zone.media) { desk.media(zone.media); return; }
+  if (zone.url) { bridge.openUrl(zone.url); return; }
+  if (zone.app) { bridge.openApp(zone.app); return; }
+  if (zone.folder) { bridge.openFolder(zone.folder); return; }
+  if (zone.trash) { bridge.openTrash(); return; }
+  if (zone.media) { bridge.media(zone.media); return; }
   if (zone.volume) {
     const rect = figureRect();
     const value = LIVE.volumeAt((e.clientY - rect.y) / rect.h);
     live.volume = value;
-    desk.setVolume(value);
+    bridge.setVolume(value);
   }
 });
 
@@ -701,7 +710,7 @@ window.addEventListener("drop", async (e) => {
   const file = e.dataTransfer.files && e.dataTransfer.files[0];
   if (!file || !file.type.startsWith("image/")) return;
   const buffer = await file.arrayBuffer();
-  const saved = await desk.saveFigure(new Uint8Array(buffer));
+  const saved = await bridge.saveFigure(new Uint8Array(buffer));
   if (!saved) return;
   localStorage.removeItem("figure-cal");
   figureCal = null;
@@ -719,10 +728,10 @@ window.addEventListener("drop", async (e) => {
 
 // Esc — oynani yashiradi. Qarsak, «hey jarvis» yoki ⌘⇧J bilan qaytadi.
 window.addEventListener("keydown", async (e) => {
-  if (e.key === "Escape") desk.hide();
+  if (e.key === "Escape") bridge.hide();
   // O'zingiz qo'ygan rasmni olib tashlash — o'rnatilgan wallpaper qaytadi
   if (e.key === "Backspace" && !bundled) {
-    await desk.clearFigure();
+    await bridge.clearFigure();
     localStorage.removeItem("figure-cal");
     figureCal = null;
     loadBundled();
@@ -731,7 +740,7 @@ window.addEventListener("keydown", async (e) => {
 
 // Oyna har ochilganda noldan yonadi: bu "yoqilish" harakatini ko'rsatadi
 // va uyqu holatini aniq qiladi.
-desk.onVisible(() => {
+bridge.onVisible(() => {
   boot = 0;
   awakeUntil = 0;
 });
