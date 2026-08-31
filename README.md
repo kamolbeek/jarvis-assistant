@@ -112,6 +112,29 @@ voice:
 Kamchiligi — o'zbekcha aniqligi ElevenLabs'dan pastroq va birinchi ishga
 tushirishda model yuklab olinadi (~1.5 GB). Lekin hech qanday to'lov yo'q.
 
+**Eng yaxshi o'zbekcha — rubaiSTT (ham lokal, ham bepul).** Bu model aynan
+o'zbek tiliga o'rgatilgan va whisper.cpp orqali ishlaydi:
+
+```bash
+brew install whisper-cpp
+```
+
+```yaml
+voice:
+  stt:
+    provider: "rubai"             # = whisper_cpp
+    # model ko'rsatilmasa, odatdagi joylardan o'zi qidiradi
+    model: "~/Library/Application Support/uzbek-dictation/ggml-rubaistt_v2_medium-q8_0.bin"
+```
+
+Agar Mac'ingizda [RubaiSTT Dictation](https://github.com/MuhammadMirrr/uzbek-dictation)
+ilovasi bo'lsa, model allaqachon yuklangan — Jarvis o'sha faylni ishlatadi,
+ilovaning o'zini ochish shart emas. Modelni topish:
+
+```bash
+find ~ /Applications -iname "*.bin" -size +100M 2>/dev/null | head
+```
+
 macOS ruxsatlarini bering — **Tizim sozlamalari → Maxfiylik va xavfsizlik**:
 
 | Ruxsat | Nima uchun |

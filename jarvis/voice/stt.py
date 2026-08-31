@@ -5,7 +5,11 @@ provayderdan provayderga sezilarli farq qiladi:
 
   * elevenlabs   — Scribe modeli, o'zbek tilini qo'llaydi, umumiy sifat yaxshi;
   * mohir        — Mohir.ai / UzbekVoice, aynan o'zbek tiliga o'rgatilgan;
-  * whisper_local— internetsiz ishlaydi, Apple Silicon'da MLX orqali tez.
+  * whisper_local— internetsiz ishlaydi, Apple Silicon'da MLX orqali tez;
+  * whisper_cpp  — internetsiz, whisper.cpp orqali GGML modeli. Aynan shu yo'l
+                   bilan o'zbekchaga o'rgatilgan **rubaiSTT** modelini ulash
+                   mumkin (RubaiSTT Dictation ilovasi ham shu modelni shu
+                   dvigatel bilan ishlatadi).
 
 Sifatni o'z ovozingizda o'lchab, birini tanlang: `voice.stt.provider`.
 """
@@ -15,8 +19,12 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
+import shutil
+import tempfile
 import wave
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import httpx
 import numpy as np
@@ -149,6 +157,133 @@ class WhisperLocalStt(SttProvider):
         return await asyncio.to_thread(run)
 
 
+class WhisperCppStt(SttProvider):
+    """whisper.cpp orqali lokal GGML modeli — internetsiz, kalitsiz, bepul.
+
+    Asosiy foydasi: o'zbek tiliga aynan o'rgatilgan **rubaiSTT** modelini
+    ishlatish mumkin. RubaiSTT Dictation ilovasi ham xuddi shu modelni xuddi
+    shu dvigatel bilan yuritadi — ya'ni ilovani "boshqarish" shart emas,
+    modelning o'ziga murojaat qilamiz va sifat bir xil bo'ladi.
+
+    Model ham, buyruq ham config'da ko'rsatilishi mumkin; ko'rsatilmasa,
+    odatdagi joylardan qidiriladi.
+    """
+
+    # whisper.cpp buyrug'i turli nomlar bilan keladi (brew: whisper-cli)
+    BINARIES = ("whisper-cli", "whisper-cpp", "whisper", "main")
+
+    # Model odatda shu joylarda yotadi (RubaiSTT Dictation ham shu yerlarga qo'yadi)
+    MODEL_DIRS = (
+        "~/Library/Application Support/uzbek-dictation",
+        "~/Library/Application Support/RubaiSTT Dictation",
+        "~/Library/Application Support/RubaiSTT",
+        "~/.cache/uzbek-dictation",
+        "~/.cache/whisper.cpp",
+        "~/Library/Application Support/jarvis/models",
+        "/Applications/RubaiSTT Dictation.app/Contents/Resources",
+        "/opt/homebrew/share/whisper-cpp",
+    )
+
+    def __init__(self, model: str = "", binary: str = "", language: str = "uz",
+                 threads: int = 0) -> None:
+        self._model = model
+        self._binary = binary
+        self._language = language
+        self._threads = threads
+        self._resolved: tuple[str, str] | None = None
+
+    # --- topish ---
+
+    def _find_binary(self) -> str:
+        if self._binary:
+            if shutil.which(self._binary) or Path(self._binary).exists():
+                return self._binary
+            raise RuntimeError(
+                f"whisper.cpp buyrug'i topilmadi: {self._binary}\n"
+                f"O'rnatish: brew install whisper-cpp"
+            )
+        for name in self.BINARIES:
+            found = shutil.which(name)
+            if found:
+                return found
+        raise RuntimeError(
+            "whisper.cpp topilmadi. O'rnating:\n"
+            "    brew install whisper-cpp\n"
+            "yoki config'da to'liq yo'lni ko'rsating: voice.stt.binary"
+        )
+
+    def _find_model(self) -> str:
+        if self._model:
+            path = Path(self._model).expanduser()
+            if path.exists():
+                return str(path)
+            raise RuntimeError(f"Model fayli topilmadi: {path}")
+
+        # Nomida "rubai" bo'lgani ustun — u o'zbekchaga o'rgatilgan
+        candidates: list[Path] = []
+        for folder in self.MODEL_DIRS:
+            base = Path(folder).expanduser()
+            if not base.is_dir():
+                continue
+            candidates.extend(sorted(base.rglob("*.bin")))
+        for path in candidates:
+            if "rubai" in path.name.lower():
+                return str(path)
+        if candidates:
+            return str(candidates[0])
+        raise RuntimeError(
+            "GGML modeli topilmadi. Qaralgan joylar:\n  "
+            + "\n  ".join(self.MODEL_DIRS)
+            + "\nModelni topib, config'da ko'rsating: voice.stt.model\n"
+              "    find ~ /Applications -iname '*.bin' -size +100M 2>/dev/null | head"
+        )
+
+    def _resolve(self) -> tuple[str, str]:
+        if self._resolved is None:
+            self._resolved = (self._find_binary(), self._find_model())
+            log.info("whisper.cpp: %s\n            model: %s", *self._resolved)
+        return self._resolved
+
+    # --- tanish ---
+
+    async def transcribe(self, audio: np.ndarray, sample_rate: int) -> str:
+        if sample_rate != 16000:
+            raise ValueError(f"whisper.cpp uchun 16 kHz kerak, {sample_rate} Hz berildi")
+        binary, model = self._resolve()
+
+        # whisper.cpp fayl kutadi — vaqtinchalik WAV yozamiz va keyin o'chiramiz
+        handle, wav_path = tempfile.mkstemp(prefix="jarvis-", suffix=".wav")
+        try:
+            with os.fdopen(handle, "wb") as file:
+                file.write(to_wav_bytes(audio, sample_rate))
+
+            args = [binary, "-m", model, "-f", wav_path,
+                    "-l", self._language, "-nt", "-np"]
+            if self._threads:
+                args += ["-t", str(self._threads)]
+
+            process = await asyncio.create_subprocess_exec(
+                *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+            except asyncio.TimeoutError:
+                process.kill()
+                raise RuntimeError("whisper.cpp javob bermadi (120 s)")
+
+            if process.returncode != 0:
+                message = stderr.decode("utf-8", "replace").strip().splitlines()
+                raise RuntimeError(
+                    "whisper.cpp xatosi: " + (message[-1] if message else "noma'lum")
+                )
+            return stdout.decode("utf-8", "replace").strip()
+        finally:
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
+
+
 def build_stt(cfg: dict) -> SttProvider:
     provider = str(cfg.get("provider", "elevenlabs")).lower()
     language = str(cfg.get("language", "uz"))
@@ -161,6 +296,14 @@ def build_stt(cfg: dict) -> SttProvider:
         return WhisperLocalStt(
             model=str(cfg.get("model", "mlx-community/whisper-large-v3-turbo")),
             language=language,
+        )
+    # "rubai" — o'sha modelning nomi bilan chaqirish qulay bo'lsin
+    if provider in ("whisper_cpp", "rubai", "rubaistt"):
+        return WhisperCppStt(
+            model=str(cfg.get("model", "")),
+            binary=str(cfg.get("binary", "")),
+            language=language,
+            threads=int(cfg.get("threads", 0) or 0),
         )
     raise ValueError(f"Noma'lum STT provayderi: {provider}")
 

@@ -101,10 +101,20 @@ conversation:
 # ElevenLabs ovozi tabiiyroq, lekin inglizcha aksent bilan gapiradi.
 voice:
   stt:
-    provider: "elevenlabs"         # elevenlabs | mohir | whisper_local
+    provider: "elevenlabs"         # elevenlabs | mohir | whisper_local | whisper_cpp
     language: "uz"
     # whisper_local uchun:
     model: "mlx-community/whisper-large-v3-turbo"
+
+    # whisper_cpp (yoki "rubai") — internetsiz, kalitsiz, bepul. Aynan
+    # o'zbekchaga o'rgatilgan rubaiSTT modelini shu yo'l bilan ulash mumkin
+    # (RubaiSTT Dictation ilovasi ham xuddi shu modelni ishlatadi):
+    #   brew install whisper-cpp
+    #   provider: "rubai"
+    #   model: "~/Library/Application Support/uzbek-dictation/ggml-rubaistt_v2_medium-q8_0.bin"
+    # `model` ko'rsatilmasa, odatdagi joylardan o'zi qidiradi.
+    # binary: "whisper-cli"        # boshqa nom bilan o'rnatilgan bo'lsa
+    # threads: 0                   # 0 — whisper.cpp o'zi tanlaydi
 
   tts:
     provider: "elevenlabs"         # elevenlabs | azure | mohir | macos
