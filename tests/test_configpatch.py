@@ -156,3 +156,35 @@ def test_trust_rejects_a_bad_mode(tmp_path, monkeypatch):
     monkeypatch.setattr("jarvis.config.CONFIG_PATH", tmp_path / "jarvis.yaml")
 
     assert trust.apply("maybe") == 2
+
+
+def test_nested_block_is_found_by_path():
+    """«activation.wake_word» — ichma-ich yozilgan bo'lim ham topiladi."""
+    out = set_in_block(SAMPLE, "activation.wake_word", {"threshold": 0.42})
+    assert yaml.safe_load(out)["activation"]["wake_word"]["threshold"] == 0.42
+
+
+def test_missing_block_is_created_when_asked():
+    """Qisqartirilgan sozlamada bo'lim bo'lmasligi mumkin — yaratiladi.
+
+    Aynan shu holat foydalanuvchida bo'ldi: `jarvis wake-set` faqat
+    `audio:` va `voice:` yozilgan faylda «bloki topilmadi» deb yiqilardi.
+    """
+    text = 'audio:\n  input_device: "Mikrofon"\n\nvoice:\n  tts:\n    provider: "macos"\n'
+    out = set_in_block(text, "activation.wake_word",
+                       {"threshold": 0.3, "candidate_threshold": 0.08}, create=True)
+    data = yaml.safe_load(out)
+    assert data["activation"]["wake_word"] == {"threshold": 0.3, "candidate_threshold": 0.08}
+    # Boshqa bo'limlar tegilmagan
+    assert data["audio"]["input_device"] == "Mikrofon"
+    assert data["voice"]["tts"]["provider"] == "macos"
+
+
+def test_existing_parent_gets_the_new_child_block():
+    """`activation:` bor, `wake_word:` yo'q — bola blok o'sha yerga qo'shiladi."""
+    text = "activation:\n  clap:\n    enabled: true\n\naudio:\n  input_gain: 1.0\n"
+    out = set_in_block(text, "activation.wake_word", {"threshold": 0.3}, create=True)
+    data = yaml.safe_load(out)
+    assert data["activation"]["wake_word"]["threshold"] == 0.3
+    assert data["activation"]["clap"]["enabled"] is True
+    assert data["audio"]["input_gain"] == 1.0

@@ -243,8 +243,11 @@ def apply_thresholds(values: list[str]) -> int:
         return 1
 
     try:
-        patch_file(path, "wake_word",
-                   {"threshold": threshold, "candidate_threshold": candidate})
+        # Sozlama fayli qisqartirilgan bo'lishi mumkin — bo'lim bo'lmasa,
+        # uni yaratamiz (`create=True`), aks holda buyruq bekorga yiqiladi.
+        patch_file(path, "activation.wake_word",
+                   {"threshold": threshold, "candidate_threshold": candidate},
+                   create=True)
     except Exception as exc:  # noqa: BLE001 — sabab foydalanuvchiga kerak
         print(f"{RED}{type(exc).__name__}: {exc}{RESET}", file=sys.stderr)
         return 1
