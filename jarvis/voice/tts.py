@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import subprocess
+import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 
@@ -292,12 +294,25 @@ class MacosSayTts(TtsProvider):
         voice = await asyncio.to_thread(self._resolve_voice)
 
         def run() -> bytes:
-            args = ["say"]
-            if voice:
-                args += ["-v", voice]
-            args += ["-r", str(self._rate), "--data-format=LEI16@22050", "-o", "-", text]
-            result = subprocess.run(args, capture_output=True, check=True)
-            return result.stdout
+            # `say -o -` (stdout'ga yozish) ba'zi macOS versiyalarida ishlamaydi
+            # va butun gapirish yiqiladi. Vaqtinchalik fayl har joyda ishlaydi.
+            handle, path = tempfile.mkstemp(prefix="jarvis-say-", suffix=".wav")
+            os.close(handle)
+            try:
+                args = ["say"]
+                if voice:
+                    args += ["-v", voice]
+                args += ["-r", str(self._rate),
+                         "--data-format=LEI16@22050", "--file-format=WAVE",
+                         "-o", path, text]
+                subprocess.run(args, capture_output=True, check=True)
+                with open(path, "rb") as file:
+                    return file.read()
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
         yield _pcm_from_wav(await asyncio.to_thread(run))
 

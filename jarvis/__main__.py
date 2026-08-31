@@ -18,6 +18,7 @@ Misollar:
   jarvis            Jarvis'ni ishga tushirish
   jarvis doctor     Har bir qismni alohida tekshirish (birinchi ishga tushirishdan oldin)
   jarvis wake-test  Chaqiruv ballini o'lchash va chegarani sozlash
+  jarvis mic-test   Mikrofonlarni yonma-yon o'lchash (qaysi biri toza signal beradi)
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
@@ -47,9 +48,10 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set", "trust"],
+        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
+             "mic-test — mikrofonlarni o'lchash; "
              "trust on|off — tasdiq so'rashni o'chirish/yoqish",
     )
     parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
@@ -78,6 +80,12 @@ def main() -> int:
         from .waketune import main as wake_main
 
         return wake_main()
+
+    if args.command == "mic-test":
+        logging.basicConfig(level=logging.ERROR)
+        from .mictest import main as mic_main
+
+        return mic_main(args.values)
 
     configure_logging(args.verbose)
 
