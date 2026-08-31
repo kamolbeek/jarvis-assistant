@@ -227,10 +227,9 @@ hali gapirilgani emas.
 Gapirganingizda yonadi — ko'zlar chaqnaydi, reaktor kuchayadi, panellar
 yorishadi. Jim qolsangiz, sekin qaytadan uyquga ketadi.
 
-Ko'zlar bilan bitta nozik joy bor: ular fon rasmining **o'zida** yoniq holda
-chizilgan. Shuning uchun uyquda ularning ustiga qorayituvchi niqob qo'yiladi va
-nur qaytadan chiziladi — natijada yonish haqiqatan yonishga o'xshaydi,
-shunchaki yorqinlik oshishiga emas.
+Sahnaning hech bir qismi rasm emas: hammasi kadr-bakadr chiziladi. Shuning
+uchun ko'z «yonishi» haqiqiy — rasm ustidagi yorqinlik emas, balki o'sha
+kadrda boshqacha chizilgan nur.
 
 ### Oynadan chiqish — to'rt yo'l
 
@@ -253,6 +252,18 @@ menyu panelini ham bekitgan va chiqish faqat sahifaning JS'iga bog'liq
 bo'lgan. Sahifa esa qora ekran bo'lib qolgan va foydalanuvchi kompyuterni
 qayta yoqishga majbur bo'lgan.
 
+**Ochilmayaptimi?** Avval oynaning o'zini tekshiring — u chaqiruv zanjiridan
+(mikrofon → yadro → WebSocket) mustaqil ochiladi:
+
+```bash
+cd ui && npm start -- --desk    # HUD darhol ochiladi
+```
+
+Ochilsa, muammo chaqiruvda; ochilmasa — oynada. `⌘⇧J` ni boshqa ilova
+egallab olgan bo'lishi mumkin: shu holda `⌘⌥J`, so'ng `⌘⇧F12` sinaladi va
+ishlagan kombinatsiya ishga tushirish jurnaliga yoziladi. O'zingiznikini
+tanlash: `JARVIS_HOTKEY="Control+Alt+J"`.
+
 **Jonli fon rejimi.** Oyna emas, doimiy fon sifatida kerak bo'lsa (oynalar
 ORQASIDA turadigan Rainmeter uslubi):
 
@@ -262,32 +273,47 @@ JARVIS_DESKTOP=ambient ./scripts/run.sh
 
 Butunlay o'chirish: `JARVIS_DESKTOP=0`. Kichik burchak-vidjet har doim qoladi.
 
-Sahnada nima bor:
+### Sahnadagi har bir detal — jonli
 
-- **Markazda zirh chizmasi** — «Hey Jarvis» deganingizda ko'zlari yonadi,
-  reaktori kuchayadi, orqasidagi halqalar tezlashadi.
-- **Chapda ilovalar paneli** — Finder, Safari, Terminal va boshqalar; bosilsa ochiladi.
-- **Tizim bloki** — ish vaqti, CPU, xotira, disk (jonli, har 2 soniyada).
-- **O'ngda sariq ovoz datchigi** — gapirganingizda ustunlar ko'tarilib tushadi.
-- **Dumaloq o'lchagich** — CPU/RAM/disk yoylari.
-- **Ob-havo** — bugun/ertaga (open-meteo, kalitsiz; `JARVIS_LAT`/`JARVIS_LON`).
-- **Soat, sana, hafta kunlari, papkalar, tezkor havolalar** — hammasi jonli.
-- **Chap pastda dumaloq JARVIS** — bosilsa bo'g'in siferblatlari paneli ochiladi.
+Bu sahna wallpaper emas. Rainmeter uslubidagi butun ish stoli **koddan
+chiziladi** (`ui/renderer/shell.js`), shuning uchun undagi har bir raqam
+kompyuteringizning ayni damdagi holati, har bir tugma esa haqiqatan bosiladi:
 
-**Standart fon — SHIELD OS wallpaperi.** Mashhur Iron Man HUD wallpaperi
-(`ui/renderer/assets/markaz.jpg`, MIT litsenziyali ochiq repodan) o'rnatilgan
-holda keladi va butun ekranni egallaydi. Uning ustida hammasi jonli:
+| Sahnadagi joy | Nimani ko'rsatadi / nima qiladi |
+|---|---|
+| Markazdagi zirh | «Hey Jarvis» deganda ko'zlari yonadi, reaktori aylanadi; reaktorga bosilsa Jarvis uyg'onadi |
+| Katta soat (pastda va o'ngda) | haqiqiy vaqt — soat, daqiqa, sekund; ikki nuqta har sekundda miltillaydi |
+| Analog siferblat | uchta strelka bilan o'sha vaqt |
+| Sana bloki, taqvim | bugungi sana; haftaning bugungi kuni yoritilgan |
+| `SYSTEM` paneli | CPU, RAM, SWAP — har 2 soniyada yangilanadi |
+| `RAM USAGE` | band va bo'sh xotira, gigabaytda |
+| `DRIVE` / `FILESYSTEMS` | haqiqiy disklar: nomi, band/umumiy hajmi, foizi |
+| `TARMOQ` | yuklab olish va yuklash tezligi (hisoblagichlar farqidan) |
+| `YUK TARIXI` | CPU va RAM ning oxirgi bir necha daqiqasi — jonli grafik |
+| Batareya | zaryad foizi, quvvatga ulanganmi |
+| Ovoz ustuni (o'ngda) | tizim ovozi; bosgan joyingiz yangi daraja bo'ladi |
+| `MIC` ustuni (chapda) | mikrofon darajasi — gapirganda ko'tariladi |
+| Media paneli | ochiq Spotify/Music'dagi qo'shiq nomi; ⏮ ⏯ ⏭ tugmalari ishlaydi |
+| Ilova tugmalari va yuqoridagi dok | Finder, Safari, Terminal… — bosilsa ochiladi |
+| `WEB` ro'yxati va radial menyu | saytlar — brauzerda ochiladi |
+| Papkalar | Yuklamalar, Hujjatlar, Rasmlar… — Finder'da ochiladi |
+| Axlat qutisi | ichidagi fayllar soni; bosilsa ochiladi |
+| Ob-havo | bugun/ertaga (open-meteo, kalitsiz; `JARVIS_LAT`/`JARVIS_LON`) |
+| Globus | qurilmaning mahalliy IP manzili va shahar (`JARVIS_CITY`) |
+| Chap pastdagi JARVIS doirasi | bosilsa bo'g'in siferblatlari paneli ochiladi |
+| Zirh siluetlari, shesternyalar, olti burchaklar | bezak — lekin ular ham to'xtamaydi, skanerlanadi va aylanadi |
 
-- «Hey Jarvis» deganingizda **Iron Man'ning ko'zlari yonadi**, ko'kragidagi
-  reaktor kuchayib aylanadi;
-- rasmdagi ilova tugmalari, saytlar ro'yxati va papkalar **haqiqatan bosiladi**
-  (Safari, Sozlamalar, YouTube, Yuklamalar...);
-- reaktorga bossangiz — Jarvis uyg'onadi;
-- chap pastdagi JARVIS doirasiga bossangiz — bo'g'in siferblatlari ochiladi;
-- o'ng chetda sariq ovoz datchigi, pastda jonli soat va CPU/RAM/disk.
+macOS'ga xos ko'rsatkichlar (batareya, ovoz, ijro, SWAP) Linux'da ham
+o'qiladigan joyidan olinadi; o'qib bo'lmasa o'sha katak «—» bo'lib turadi,
+qolgani ishlayveradi.
 
-**Boshqa rasm qo'yish.** Istalgan rasmni HUD ustiga sudrab tashlang — saqlanadi
-va uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor).
+**O'z rasmingizni qo'yish.** Istalgan rasmni HUD ustiga sudrab tashlang —
+markazdagi zirh o'rniga o'sha rasm turadi, atrofdagi jonli panellar joyida
+qoladi. Uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor), shundan keyin
+rasmning ham ko'zlari yonadi. `Backspace` — rasmni olib tashlaydi.
+Eski SHIELD OS wallpaperi ham shu yerda turibdi
+(`ui/renderer/assets/markaz.jpg`) — o'shani sudrab tashlasangiz, markazda
+aynan o'sha rasm bo'ladi.
 
 ### HUD nimani ko'rsatadi
 
@@ -621,10 +647,14 @@ jarvis/
 └── __main__.py     asosiy sikl
 
 ui/
-├── main.js         Electron oynasi
+├── main.js         Electron oynalari + tizim ko'rsatkichlari (CPU, disk, batareya…)
 └── renderer/
     ├── palette.js  ranglar — yagona manba
-    ├── hud.js      HUD chizuvchisi (siferblatlar, yadro, yozuv)
+    ├── hud.js      bo'g'in siferblatlari
+    ├── suit.js     zirh chizmasi (ko'zlar, reaktor)
+    ├── shell.js    butun ish stoli sahnasi — har bir vidjet shu yerda
+    ├── deskapp.js  sahnani yurituvchi qatlam (kadrlar, bosishlar, uyqu)
+    ├── figure.js   o'z rasmingiz ustidagi jonli nur
     ├── orb.js      yadro bilan aloqa va kadrlar sikli
     └── phone.html  telefon sahifasi (bitta faylda)
 ```

@@ -2,191 +2,51 @@
 <title>Jarvis — ish stoli HUD</title>
 
 <style>
+  /* Sahna butunlay canvas'da chiziladi (shell.js — ui/renderer/ dan aynan
+     o'zi). Bu yerda faqat uning ustidagi matnli qatlamlar va demo tugmalari. */
   :root {
     --cyan: #22e3ff;
     --white: #ecfdff;
-    --amber: #ffb23e;
-    --red: #ff443a;
-    --slate: #607e8c;
-    --steel: #2a3540;
-    --ink: rgba(6, 14, 20, 0.78);
+    --ink: rgba(6, 14, 20, 0.82);
     --edge: rgba(34, 227, 255, 0.22);
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
-
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
   html, body { height: 100%; }
-
   body {
-    background: #030a0f;
+    background: #01060a;
     color: var(--white);
     font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
     overflow: hidden;
-    -webkit-font-smoothing: antialiased;
     user-select: none;
+    -webkit-font-smoothing: antialiased;
   }
-
   #scene { position: fixed; inset: 0; }
   #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #figure { position: absolute; inset: 0; width: 100%; height: 100%; display: none; object-fit: contain; pointer-events: none; }
-  #figure.on { display: block; }
   #fx-canvas { pointer-events: none; }
+  #figure {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    display: none; object-fit: contain; pointer-events: none;
+  }
+  #figure.on { display: block; }
   body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
-  /* O'rnatilgan wallpaper rejimi: rasmning o'z vidjetlari bor, DOM'dagilar yashirinadi */
-  body.wallpaper #rail-left, body.wallpaper #sys-block, body.wallpaper #dates,
-  body.wallpaper #links, body.wallpaper #weather, body.wallpaper #disk,
-  body.wallpaper #clock, body.wallpaper #folders, body.wallpaper #vertical-tag { display: none; }
-  /* Jonli ma'lumotlar chizig'i — rasm ostidagi qatorda */
-  #live-pill {
-    left: 50%; bottom: 8px; transform: translateX(-50%);
-    padding: 5px 14px; border-radius: 8px;
-    background: rgba(3, 8, 12, 0.92); border: 1px solid var(--edge);
-    font: 600 11px var(--mono); letter-spacing: 0.1em; color: var(--cyan);
-    display: none; white-space: nowrap;
-  }
-  body.wallpaper #live-pill { display: block; }
 
-  /* ---------- umumiy HUD bloklari ---------- */
-
-  .blk {
-    position: absolute;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.06em;
-  }
-
-  .blk h3 {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.24em;
-    color: rgba(236, 253, 255, 0.4);
-    margin-bottom: 7px;
-  }
-
-  /* Burchakli ilova tugmasi — havoladagi chap paneldagidek */
-  .chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 150px;
-    padding: 7px 12px;
-    margin-bottom: 7px;
-    background: linear-gradient(90deg, rgba(42, 53, 64, 0.85), rgba(42, 53, 64, 0.35));
-    border-left: 3px solid var(--amber);
-    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
-    color: var(--white);
-    font: 600 11px var(--mono);
-    letter-spacing: 0.08em;
-    cursor: pointer;
-    transition: background 130ms ease, border-color 130ms ease;
-  }
-  .chip:hover { background: linear-gradient(90deg, rgba(34,227,255,0.22), rgba(42,53,64,0.4)); border-left-color: var(--cyan); }
-  .chip:active { filter: brightness(1.5); }
-  .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); flex: none; }
-
-  /* Tezkor havolalar ustuni */
-  .link {
-    display: block;
-    font: 600 10.5px var(--mono);
-    letter-spacing: 0.22em;
-    color: rgba(236, 253, 255, 0.6);
-    padding: 3.5px 0;
-    cursor: pointer;
-    text-align: center;
-    transition: color 120ms ease, text-shadow 120ms ease;
-  }
-  .link:hover { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
-
-  /* ---------- aniq bloklar ---------- */
-
-  #rail-left { left: 26px; top: 60px; }
-
-  #vertical-tag {
-    left: 8px; top: 50%;
-    transform: rotate(180deg);
-    writing-mode: vertical-rl;
-    font: 700 9px var(--mono);
-    letter-spacing: 0.5em;
-    color: rgba(236, 253, 255, 0.25);
-  }
-
-  #sys-block { left: 26px; top: 335px; width: 168px; }
-  #sys-block .row { display: flex; justify-content: space-between; padding: 2.5px 0; color: rgba(236,253,255,0.75); }
-  #sys-block .row b { color: var(--cyan); font-weight: 700; }
-  #sys-block .bar { height: 3px; background: rgba(34,227,255,0.12); margin: 1px 0 6px; }
-  #sys-block .bar i { display: block; height: 100%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); transition: width 600ms ease; }
-  #sys-block .bar.warm i { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-
-  #dates {
-    top: 22px; left: 50%;
-    transform: translateX(-50%);
-    display: flex; gap: 14px;
-    font: 600 12px var(--mono);
-    color: rgba(236,253,255,0.45);
-  }
-  #dates span.today {
-    color: var(--cyan);
-    text-shadow: 0 0 12px var(--cyan);
-    border: 1px solid var(--edge);
-    padding: 1px 7px; margin: -2px -8px;
-  }
-
-  #links { top: 64px; left: calc(50% - 300px); width: 120px; }
-
-  #weather { top: 70px; right: calc(50% - 330px); text-align: left; width: 150px; }
-  #weather .day { margin-bottom: 9px; }
-  #weather .day b { display: block; font-size: 11px; color: var(--cyan); letter-spacing: 0.18em; }
-  #weather .day span { font-size: 15px; color: var(--white); font-weight: 700; }
-  #weather .day small { display: block; font-size: 9.5px; color: rgba(236,253,255,0.5); }
-
-  #disk { top: 26px; right: 30px; text-align: right; color: rgba(236,253,255,0.7); }
-  #disk b { color: var(--cyan); }
-
-  #clock {
-    right: 205px; top: 47%;
-    display: flex; align-items: center; gap: 12px;
-    font: 700 30px var(--mono);
-    color: var(--white);
-    text-shadow: 0 0 16px rgba(34, 227, 255, 0.6);
-  }
-  #clock::after {
-    content: "";
-    width: 90px; height: 1px;
-    background: linear-gradient(90deg, var(--cyan), transparent);
-  }
-  #clock small { font-size: 10px; letter-spacing: 0.2em; color: rgba(236,253,255,0.5); align-self: flex-end; margin-bottom: 6px; }
-
-  #folders { right: 30px; bottom: 26px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 560px; }
-  #folders .chip { width: auto; margin: 0; border-left-color: var(--steel); background: linear-gradient(90deg, rgba(42,53,64,0.7), rgba(42,53,64,0.25)); }
-  #folders .chip:hover { border-left-color: var(--cyan); }
+  .blk { position: absolute; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
 
   #caption {
-    left: 50%; bottom: 30px;
-    transform: translateX(-50%);
-    max-width: 520px;
-    padding: 10px 16px;
-    background: var(--ink);
-    border: 1px solid var(--edge);
-    border-radius: 10px;
-    font-family: inherit;
-    font-size: 13.5px;
-    letter-spacing: 0;
-    text-align: center;
-    opacity: 0;
-    transition: opacity 200ms ease;
+    left: 50%; bottom: 112px; transform: translateX(-50%);
+    max-width: 560px; padding: 10px 16px;
+    background: var(--ink); border: 1px solid var(--edge); border-radius: 10px;
+    font-family: inherit; font-size: 13.5px; letter-spacing: 0; text-align: center;
+    opacity: 0; transition: opacity 200ms ease;
   }
   #caption.on { opacity: 1; }
   #caption b { color: var(--cyan); font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; margin-right: 8px; }
 
-  /* Emblema bosilganda ochiladigan siferblat paneli */
   #dial-panel {
-    left: 30px; bottom: 210px;
-    width: 330px; height: 330px;
-    background: rgba(4, 11, 16, 0.9);
-    border: 1px solid var(--edge);
-    border-radius: 16px;
-    padding: 8px;
+    left: 30px; bottom: 30px; width: 330px; height: 330px;
+    background: rgba(4, 11, 16, 0.94);
+    border: 1px solid var(--edge); border-radius: 16px; padding: 8px;
     display: none;
   }
   #dial-panel.on { display: block; }
@@ -194,137 +54,41 @@
 
   /* ---------- demo boshqaruvi (haqiqiy ish stolida yo'q) ---------- */
 
-  #drawer {
-    right: 26px; top: 26px;
-    z-index: 5;
-  }
+  #drawer { right: 22px; top: 168px; z-index: 5; }
   #drawer summary {
-    list-style: none;
-    cursor: pointer;
-    font: 700 10px var(--mono);
-    letter-spacing: 0.2em;
-    color: var(--cyan);
-    border: 1px solid var(--edge);
-    padding: 6px 12px;
-    background: var(--ink);
-    border-radius: 8px;
-    text-align: center;
+    list-style: none; cursor: pointer;
+    font: 700 10px var(--mono); letter-spacing: 0.2em; color: var(--cyan);
+    border: 1px solid var(--edge); padding: 6px 12px;
+    background: var(--ink); border-radius: 8px; text-align: center;
   }
   #drawer[open] summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
   #drawer .body {
-    background: var(--ink);
-    border: 1px solid var(--edge);
-    border-top: 0;
-    border-radius: 0 0 10px 10px;
-    padding: 10px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    width: 250px;
+    background: var(--ink); border: 1px solid var(--edge); border-top: 0;
+    border-radius: 0 0 10px 10px; padding: 10px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 250px;
   }
   #drawer button {
-    font: 600 11px var(--mono);
-    color: var(--white);
+    font: 600 11px var(--mono); color: var(--white);
     background: rgba(34, 227, 255, 0.06);
     border: 1px solid rgba(34, 227, 255, 0.24);
-    border-radius: 7px;
-    padding: 7px 4px;
-    cursor: pointer;
+    border-radius: 7px; padding: 7px 4px; cursor: pointer;
   }
   #drawer button:hover { background: rgba(34, 227, 255, 0.16); }
   #drawer button.on { border-color: var(--cyan); color: var(--cyan); }
-  #drawer button.wide { grid-column: 1 / -1; background: rgba(34,227,255,0.14); }
-
-  @media (max-width: 1100px) {
-    #links, #vertical-tag { display: none; }
-    #weather { right: 190px; }
-  }
-  @media (max-width: 860px) {
-    #weather, #clock, #disk { display: none; }
-    #rail-left { top: 40px; }
-  }
+  #drawer button.wide { grid-column: 1 / -1; background: rgba(34, 227, 255, 0.14); }
+  #drawer p { grid-column: 1 / -1; font: 500 10px var(--mono); color: rgba(236,253,255,0.45); line-height: 1.5; }
 </style>
 
 <div id="scene">
-  <!-- O'z rasmingiz — eng pastki qatlam, butun ekran -->
+  <!-- O'z rasmingiz — ixtiyoriy, markazdagi zirh o'rniga -->
   <img id="figure" alt="" draggable="false" />
   <canvas id="hud-canvas"></canvas>
   <canvas id="fx-canvas"></canvas>
 
-  <!-- Chap panel: ilovalar (havoladagi Control Panel/Steam ustuni o'rnida) -->
-  <div class="blk" id="rail-left">
-    <h3>ILOVALAR</h3>
-    <div class="chip" data-app="Finder"><span class="dot"></span>Finder</div>
-    <div class="chip" data-app="Safari"><span class="dot"></span>Safari</div>
-    <div class="chip" data-app="Terminal"><span class="dot"></span>Terminal</div>
-    <div class="chip" data-app="Notes"><span class="dot"></span>Eslatmalar</div>
-    <div class="chip" data-app="Music"><span class="dot"></span>Musiqa</div>
-    <div class="chip" data-app="System Settings"><span class="dot"></span>Sozlamalar</div>
-  </div>
-
-  <div class="blk" id="vertical-tag">JARVIS · BOSHQARUV</div>
-
-  <!-- Tizim bloki: UpTime/CPU/RAM (havoladagidek chap o'rtada) -->
-  <div class="blk" id="sys-block">
-    <h3>TIZIM</h3>
-    <div class="row"><span>Ish vaqti</span><b id="uptime">—</b></div>
-    <div class="row"><span>CPU</span><b id="cpu-txt">—</b></div>
-    <div class="bar"><i id="cpu-bar" style="width:0%"></i></div>
-    <div class="row"><span>Xotira</span><b id="ram-txt">—</b></div>
-    <div class="bar warm"><i id="ram-bar" style="width:0%"></i></div>
-    <div class="row"><span>Disk</span><b id="disk-txt">—</b></div>
-    <div class="bar"><i id="disk-bar" style="width:0%"></i></div>
-  </div>
-
-  <!-- Hafta kunlari (havoladagi 12..18 qatori) -->
-  <div class="blk" id="dates"></div>
-
-  <!-- Tezkor havolalar (havoladagi FACEBOOK/YOUTUBE ustuni) -->
-  <div class="blk" id="links">
-    <h3 style="text-align:center">TEZKOR</h3>
-    <span class="link" data-url="https://youtube.com">YOUTUBE</span>
-    <span class="link" data-url="https://gmail.com">GMAIL</span>
-    <span class="link" data-url="https://github.com">GITHUB</span>
-    <span class="link" data-url="https://t.me">TELEGRAM</span>
-    <span class="link" data-url="https://wikipedia.org">WIKIPEDIA</span>
-    <span class="link" data-url="https://claude.ai">CLAUDE</span>
-  </div>
-
-  <!-- Ob-havo (havoladagi Today/Tomorrow bloki) -->
-  <div class="blk" id="weather">
-    <div class="day"><b>BUGUN</b><span id="w-today">—</span><small id="w-today-d"></small></div>
-    <div class="day"><b>ERTAGA</b><span id="w-tomorrow">—</span><small id="w-tomorrow-d"></small></div>
-  </div>
-
-  <!-- Disk (havoladagi o'ng yuqori DISK bloki) -->
-  <div class="blk" id="disk">
-    <h3 style="text-align:right">DISK</h3>
-    <div><b id="disk-used">—</b> band</div>
-    <div><b id="disk-free">—</b> bo'sh</div>
-  </div>
-
-  <!-- Soat (havoladagi 11:33 chizig'i) -->
-  <div class="blk" id="clock"><span id="time">--:--</span><small id="date"></small></div>
-
-  <!-- Papkalar (havoladagi Downloads/Documents qatori) -->
-  <div class="blk" id="folders">
-    <div class="chip" data-folder="downloads">Yuklamalar</div>
-    <div class="chip" data-folder="documents">Hujjatlar</div>
-    <div class="chip" data-folder="pictures">Rasmlar</div>
-    <div class="chip" data-folder="music">Musiqa</div>
-    <div class="chip" data-folder="videos">Videolar</div>
-    <div class="chip" data-folder="desktop">Ish stoli</div>
-  </div>
-
-  <!-- Suhbat matni -->
-  <div class="blk" id="live-pill"></div>
   <div class="blk" id="caption"><b></b><span></span></div>
-
-  <!-- Emblema bosilganda: bo'g'in siferblatlari -->
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
 
-  <!-- Demo boshqaruvi -->
-  <details class="blk" id="drawer" open>
+  <details class="blk" id="drawer">
     <summary>DEMO BOSHQARUVI</summary>
     <div class="body">
       <button class="wide" id="play">▶ Suhbat: qarsakdan javobgacha</button>
@@ -336,6 +100,9 @@
       <button data-state="error">Xato</button>
       <button class="wide" id="break">NUTQ bo'g'inini buzish / tuzatish</button>
       <button class="wide" id="drop-hint">🖼 O'z rasmingizni shu yerga tashlang</button>
+      <p>Bu demoda ko'rsatkichlar taqlid qilinadi. Haqiqiy ish stolida
+         soat, CPU, RAM, disk, batareya, tarmoq va ovoz — kompyuteringizdan;
+         tugmalar esa haqiqiy ilova va papkalarni ochadi.</p>
     </div>
   </details>
 </div>
@@ -344,168 +111,127 @@
 /* --- ui/renderer/ dan aynan ko'chirilgan modullar --- */
 /*INJECT*/
 
-/* --- Demo boshqaruvi: haqiqiy ish stolida bu ma'lumotlar yadrodan keladi --- */
+/* --- Demo manbasi: haqiqiy ilovada bu ma'lumotlar Electron va yadrodan keladi --- */
 
-const canvas = document.getElementById("hud-canvas");
-const ctx = canvas.getContext("2d");
 const dialPanel = document.getElementById("dial-panel");
-const dialCanvas = document.getElementById("dial-canvas");
-const dialCtx = dialCanvas.getContext("2d");
-const captionBox = document.getElementById("caption");
-
-let W = 0, H = 0;
-let state = "idle";
-let level = 0, smoothLevel = 0, flash = 0;
-let emblemHover = false;
-
-// Tizim ko'rsatkichlari — demo uchun jonli taqlid
-const stats = { cpu: 18, ram: 58, disk: 62 };
 
 // Bo'g'inlar — siferblat paneli uchun
-const LABELS = { mic:"MIKROFON", wake:"UYG'OTISH", stt:"NUTQ", brain:"MIYA", tts:"OVOZ",
-                 memory:"XOTIRA", agenda:"REJA", tools:"ASBOB", net:"TARMOQ" };
+const LABELS = { mic: "MIKROFON", wake: "UYG'OTISH", stt: "NUTQ", brain: "MIYA", tts: "OVOZ",
+                 memory: "XOTIRA", agenda: "REJA", tools: "ASBOB", net: "TARMOQ" };
 const systems = Object.entries(LABELS).map(([id, label]) => ({ id, label, status: "ready", detail: "", heat: 0 }));
 const heatUntil = {};
 const heat = (id, s = 1.4) => { heatUntil[id] = performance.now() / 1000 + s; };
 
-function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  W = innerWidth; H = innerHeight;
-  canvas.width = Math.round(W * dpr);
-  canvas.height = Math.round(H * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const ds = dialPanel.clientWidth || 330;
-  dialCanvas.width = dialCanvas.height = Math.round(ds * dpr);
-  dialCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+const app = DESKAPP.start({
+  figureRect,  // funksiya quyida e'lon qilingan — hoisting bilan ishlaydi
+  actions: {
+    openApp: (name) => app.caption("Demo", `Haqiqiy ish stolida «${name}» ilovasi ochiladi`),
+    openFolder: (key) => app.caption("Demo", `Haqiqiy ish stolida «${key}» papkasi ochiladi`),
+    openUrl: (url) => window.open(url, "_blank"),
+    openTrash: () => app.caption("Demo", "Haqiqiy ish stolida axlat qutisi ochiladi"),
+    setVolume: (v) => { sim.volume = v; app.caption("Demo", `Tizim ovozi ${v}% ga qo'yildi`); },
+    media: (action) => app.caption("Demo", `Media: ${action} — haqiqiy pleyerga uzatiladi`),
+    activate: () => document.getElementById("play").click(),
+  },
+});
+
+app.setSystems(systems);
+
+// --- Taqlid qilingan ko'rsatkichlar ---
+
+const sim = {
+  cpu: 18, ram: 58, swap: 12, volume: 45,
+  uptimeSec: 3600 * 5 + 60 * 14,
+  net: { down: 1.2e6, up: 240e3 },
+};
+
+function tick() {
+  sim.cpu = Math.max(4, Math.min(96, sim.cpu + (Math.random() - 0.5) * 16));
+  sim.ram = Math.max(35, Math.min(88, sim.ram + (Math.random() - 0.5) * 5));
+  sim.swap = Math.max(0, Math.min(60, sim.swap + (Math.random() - 0.5) * 4));
+  sim.uptimeSec += 2;
+  sim.net = {
+    down: Math.max(0, sim.net.down + (Math.random() - 0.5) * 1.6e6),
+    up: Math.max(0, sim.net.up + (Math.random() - 0.5) * 300e3),
+  };
+  app.setStats({
+    cpu: sim.cpu,
+    ram: sim.ram,
+    swap: sim.swap,
+    ramUsedGb: 16 * (sim.ram / 100),
+    ramTotalGb: 16,
+    uptimeSec: sim.uptimeSec,
+    volume: sim.volume,
+    user: "stark",
+    host: "jarvis-mac",
+    ip: "192.168.1.24",
+    city: "TOSHKENT",
+    trash: 23,
+    battery: { percent: 78, charging: false },
+    net: sim.net,
+    disks: [
+      { name: "Macintosh HD", percent: 62, usedGb: 280.7, totalGb: 916.7 },
+      { name: "Data", percent: 89, usedGb: 13.2, totalGb: 14.7 },
+      { name: "Backup", percent: 41, usedGb: 820, totalGb: 2000 },
+    ],
+  });
 }
+tick();
+setInterval(tick, 2000);
+
+app.setWeather({ today: { max: 31, min: 19, code: 0 }, tomorrow: { max: 29, min: 18, code: 2 } });
+app.setMedia({ title: "Back In Black", artist: "AC/DC", playing: true, position: 74, duration: 255 });
+
+// Ovoz darajasi — holatga qarab taqlid qilinadi
+setInterval(() => {
+  const t = performance.now() / 1000;
+  const s = app.state.state;
+  const level =
+    s === "listening" ? 0.35 + Math.abs(Math.sin(t * 2.7) * Math.sin(t * 1.3)) * 0.55 :
+    s === "speaking" ? 0.30 + Math.abs(Math.sin(t * 4.4)) * 0.45 : 0.03;
+  app.setLevel(level);
+  // Bo'g'inlar qizishi — siferblat panelida ko'rinadi
+  for (const sys of systems) {
+    const until = heatUntil[sys.id] || 0;
+    sys.heat = sys.status === "down" ? 0 : Math.max(0, Math.min(1, (until - t) / 1.4));
+  }
+}, 60);
+
+/* --- Demo tugmalari --- */
 
 function setState(next) {
-  if (next === "wake" && state !== "wake") flash = 1;
-  state = next;
+  app.setState(next);
+  app.engage();
   document.querySelectorAll("#drawer [data-state]").forEach((b) =>
     b.classList.toggle("on", b.dataset.state === next));
 }
 
-function caption(who, text) {
-  captionBox.querySelector("b").textContent = who || "";
-  captionBox.querySelector("span").textContent = text || "";
-  captionBox.classList.toggle("on", Boolean(text));
-}
-
-function frame(now) {
-  const t = now / 1000;
-
-  // Ovoz darajasi: tinglash/gapirishda jonlanadi
-  const target =
-    state === "listening" ? 0.35 + Math.abs(Math.sin(t * 2.7) * Math.sin(t * 1.3)) * 0.55 :
-    state === "speaking" ? 0.30 + Math.abs(Math.sin(t * 4.4)) * 0.45 : 0.03;
-  level = target;
-  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
-  flash *= 0.93; if (flash < 0.01) flash = 0;
-
-  DESK.draw(ctx, { width: W, height: H, t, state, level: smoothLevel, flash, stats, emblemHover });
-
-  if (dialPanel.classList.contains("on")) {
-    for (const s of systems) {
-      const until = heatUntil[s.id] || 0;
-      s.heat = s.status === "down" ? 0 : Math.max(0, Math.min(1, (until - t) / 1.4));
-    }
-    const size = dialCanvas.clientWidth || 314;
-    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
-  }
-  requestAnimationFrame(frame);
-}
-
-/* --- Emblema: bosilsa siferblat paneli --- */
-
-canvas.style.pointerEvents = "auto";
-canvas.addEventListener("mousemove", (e) => { emblemHover = DESK.hit(W, H, e.clientX, e.clientY) === "emblem"; canvas.style.cursor = emblemHover ? "pointer" : "default"; });
-canvas.addEventListener("click", (e) => {
-  if (DESK.hit(W, H, e.clientX, e.clientY) === "emblem") dialPanel.classList.toggle("on");
-});
-
-/* --- Jonli ma'lumotlar --- */
-
-// Soat va sana — haqiqiy
-function tickClock() {
-  const d = new Date();
-  document.getElementById("time").textContent =
-    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const days = ["Yak", "Du", "Se", "Chor", "Pay", "Ju", "Shan"];
-  document.getElementById("date").textContent = `${days[d.getDay()]} · ${d.getDate()}`;
-}
-setInterval(tickClock, 5000); tickClock();
-
-// Hafta kunlari qatori — bugungi kun belgilangan
-(function renderDates() {
-  const box = document.getElementById("dates");
-  const today = new Date();
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date(today); d.setDate(today.getDate() + i);
-    const el = document.createElement("span");
-    el.textContent = d.getDate();
-    if (i === 0) el.className = "today";
-    box.append(el);
-  }
-})();
-
-// Tizim ko'rsatkichlari — demo taqlidi (haqiqiy ilovada Electron beradi)
-let up = 3600 * 5 + 60 * 14;
-setInterval(() => {
-  stats.cpu = Math.max(4, Math.min(96, stats.cpu + (Math.random() - 0.5) * 14));
-  stats.ram = Math.max(35, Math.min(88, stats.ram + (Math.random() - 0.5) * 4));
-  up += 2;
-  const h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60);
-  document.getElementById("uptime").textContent = `${h}s ${m}d`;
-  document.getElementById("cpu-txt").textContent = `${Math.round(stats.cpu)}%`;
-  document.getElementById("ram-txt").textContent = `${Math.round(stats.ram)}%`;
-  document.getElementById("disk-txt").textContent = `${Math.round(stats.disk)}%`;
-  document.getElementById("cpu-bar").style.width = `${stats.cpu}%`;
-  document.getElementById("ram-bar").style.width = `${stats.ram}%`;
-  document.getElementById("disk-bar").style.width = `${stats.disk}%`;
-}, 2000);
-
-// Ob-havo — demo namunasi (haqiqiy ilovada open-meteo dan olinadi)
-document.getElementById("w-today").textContent = "31° / 19°";
-document.getElementById("w-today-d").textContent = "Ochiq";
-document.getElementById("w-tomorrow").textContent = "29° / 18°";
-document.getElementById("w-tomorrow-d").textContent = "Yengil bulutli";
-document.getElementById("disk-used").textContent = "212 GB";
-document.getElementById("disk-free").textContent = "116 GB";
-
-/* --- Tugmalar --- */
-
 document.querySelectorAll("#drawer [data-state]").forEach((b) =>
-  b.addEventListener("click", () => { setState(b.dataset.state); caption("", ""); }));
+  b.addEventListener("click", () => { setState(b.dataset.state); app.caption("", ""); }));
 
-document.querySelectorAll(".chip[data-app]").forEach((c) =>
-  c.addEventListener("click", () => caption("Demo", `Haqiqiy ish stolida «${c.textContent.trim()}» ochiladi`)));
-document.querySelectorAll(".chip[data-folder]").forEach((c) =>
-  c.addEventListener("click", () => caption("Demo", `Haqiqiy ish stolida «${c.textContent.trim()}» papkasi ochiladi`)));
-document.querySelectorAll(".link").forEach((l) =>
-  l.addEventListener("click", () => window.open(l.dataset.url, "_blank")));
-
-// NUTQ bo'g'inini buzish — siferblat panelida qizarib to'xtaydi
 document.getElementById("break").addEventListener("click", () => {
   const stt = systems.find((s) => s.id === "stt");
   stt.status = stt.status === "down" ? "ready" : "down";
   stt.detail = stt.status === "down" ? "sinov uchun o'chirildi" : "";
   dialPanel.classList.add("on");
-  caption("Tizim", stt.status === "down" ? "NUTQ bo'g'ini uzildi — siferblat qizardi" : "NUTQ bo'g'ini tiklandi");
+  app.caption("Tizim", stt.status === "down"
+    ? "NUTQ bo'g'ini uzildi — siferblat qizardi"
+    : "NUTQ bo'g'ini tiklandi");
 });
 
-/* --- Suhbat oqimi --- */
+document.getElementById("drop-hint").addEventListener("click", () =>
+  app.caption("Rasm", "Kompyuterdagi rasm faylini sichqoncha bilan shu oynaga sudrab tashlang"));
 
 const SCRIPT = [
-  [0,     () => { setState("idle"); caption("", ""); }],
-  [700,   () => { heat("mic"); heat("wake"); setState("wake"); caption("Qarsak", "· ·"); }],
-  [1500,  () => { setState("listening"); caption("Jarvis", "Buyrug'ingizni kutyapman."); }],
-  [3200,  () => { heat("mic", 2); caption("Siz", "iLevel loyihasi qaysi bosqichda?"); }],
+  [0,     () => { setState("idle"); app.caption("", ""); }],
+  [700,   () => { heat("mic"); heat("wake"); setState("wake"); app.caption("Qarsak", "· ·"); }],
+  [1500,  () => { setState("listening"); app.caption("Jarvis", "Buyrug'ingizni kutyapman."); }],
+  [3200,  () => { heat("mic", 2); app.caption("Siz", "iLevel loyihasi qaysi bosqichda?"); }],
   [5000,  () => { heat("stt", 1.4); setState("thinking"); }],
   [5600,  () => { heat("brain", 3); heat("memory", 1.6); heat("agenda", 1.6); }],
   [7400,  () => { heat("tts", 3); setState("speaking");
-                  caption("Jarvis", "iLevel test bosqichida. Keyingi qadam — deploy, muddati juma."); }],
-  [11000, () => { setState("idle"); caption("", ""); }],
+                  app.caption("Jarvis", "iLevel test bosqichida. Keyingi qadam — deploy, muddati juma."); }],
+  [11000, () => { setState("idle"); app.caption("", ""); }],
 ];
 let timers = [];
 document.getElementById("play").addEventListener("click", () => {
@@ -514,85 +240,10 @@ document.getElementById("play").addEventListener("click", () => {
 });
 
 /* --- O'z rasmingiz: sahifaga tashlang, uch marta bosib sozlang --- */
-/* Haqiqiy ish stolida rasm diskka saqlanadi va doim qoladi.          */
 
 const figureImg = document.getElementById("figure");
-const fxCanvas = document.getElementById("fx-canvas");
-const fxCtx = fxCanvas.getContext("2d");
-
-let figureOn = false;
 let figureCal = null;
 let calSteps = [];
-let lastFx = { eyes: 0.3, surge: 0.3 };
-
-let bundled = false; // o'rnatilgan wallpaper rejimi (bosiladigan maydonlar bilan)
-
-try { figureCal = JSON.parse(localStorage.getItem("figure-cal") || "null"); } catch { figureCal = null; }
-
-// O'rnatilgan wallpaper — yig'ish vaqtida shu yerga joylanadi
-const FIGURE_B64 = "/*FIGURE_B64*/";
-if (FIGURE_B64 && !FIGURE_B64.startsWith("/*")) {
-  figureImg.src = "data:image/jpeg;base64," + FIGURE_B64;
-  figureImg.onload = () => {
-    figureOn = true;
-    bundled = true;
-    figureCal = DESK.BUNDLED.cal;
-    figureImg.classList.add("on");
-    document.body.classList.add("wallpaper");
-  };
-}
-
-// Bosiladigan maydonlar: rasmga nisbatan koordinatada qidiramiz
-function hotspotAt(clientX, clientY) {
-  if (!bundled) return null;
-  const rect = figureRect();
-  if (!rect) return null;
-  const nx = (clientX - rect.x) / rect.w;
-  const ny = (clientY - rect.y) / rect.h;
-  const e = DESK.BUNDLED.emblem;
-  if (Math.hypot(nx - e.c[0], ny - e.c[1]) <= e.r * 0.6) return { emblem: true, title: "Bo'g'inlar paneli" };
-  for (const h of DESK.BUNDLED.hotspots) {
-    if (h.circle) {
-      if (Math.hypot(nx - h.circle[0], ny - h.circle[1]) <= h.circle[2]) return h;
-    } else if (h.rect) {
-      const [x, y, w, hh] = h.rect;
-      if (nx >= x && nx <= x + w && ny >= y && ny <= y + hh) return h;
-    }
-  }
-  return null;
-}
-
-document.addEventListener("mousemove", (e) => {
-  const h = hotspotAt(e.clientX, e.clientY);
-  document.body.style.cursor = h ? "pointer" : "";
-});
-
-document.addEventListener("click", (e) => {
-  if (e.target.closest("#drawer") || e.target.closest("#dial-panel")) return;
-  const h = hotspotAt(e.clientX, e.clientY);
-  if (!h) return;
-  if (h.emblem) { dialPanel.classList.toggle("on"); return; }
-  if (h.activate) { setState("wake"); setTimeout(() => setState("listening"), 900); caption("Jarvis", "Buyrug'ingizni kutyapman."); return; }
-  if (h.url) { window.open(h.url, "_blank"); return; }
-  if (h.app) caption("Demo", `Haqiqiy ish stolida «${h.title}» ochiladi`);
-  if (h.folder) caption("Demo", `Haqiqiy ish stolida «${h.title}» papkasi ochiladi`);
-});
-
-// Jonli qator: soat + CPU/RAM/disk — rasm ostida
-setInterval(() => {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  document.getElementById("live-pill").textContent =
-    `${hh}:${mm}  ·  CPU ${Math.round(stats.cpu)}%  ·  RAM ${Math.round(stats.ram)}%  ·  DISK ${Math.round(stats.disk)}%`;
-}, 1000);
-
-function fxResize() {
-  const dpr = window.devicePixelRatio || 1;
-  fxCanvas.width = Math.round(innerWidth * dpr);
-  fxCanvas.height = Math.round(innerHeight * dpr);
-  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
 
 function figureRect() {
   const box = figureImg.getBoundingClientRect();
@@ -603,12 +254,6 @@ function figureRect() {
   return { x: box.left + (box.width - w) / 2, y: box.top + (box.height - h) / 2, w, h };
 }
 
-function startCalibration() {
-  calSteps = ["eyeL", "eyeR", "core"];
-  document.body.classList.add("calibrating");
-  caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
-}
-
 figureImg.addEventListener("click", (e) => {
   if (!calSteps.length) return;
   const rect = figureRect();
@@ -616,12 +261,12 @@ figureImg.addEventListener("click", (e) => {
   const key = calSteps.shift();
   figureCal = figureCal || {};
   figureCal[key] = [(e.clientX - rect.x) / rect.w, (e.clientY - rect.y) / rect.h];
-  if (calSteps.length === 2) caption("Sozlash", "Endi O'NG ko'zga bosing");
-  else if (calSteps.length === 1) caption("Sozlash", "Endi REAKTORGA bosing");
+  app.setFigure(true, figureCal);
+  if (calSteps.length === 2) app.caption("Sozlash", "Endi O'NG ko'zga bosing");
+  else if (calSteps.length === 1) app.caption("Sozlash", "Endi REAKTORGA bosing");
   else {
-    localStorage.setItem("figure-cal", JSON.stringify(figureCal));
     document.body.classList.remove("calibrating");
-    caption("Sozlash", "Tayyor! «Uyg'onish»ni bosing — ko'zlar yonadi.");
+    app.caption("Sozlash", "Tayyor! «Gapirish» tugmasida ko'zlar yonadi.");
   }
 });
 
@@ -632,55 +277,12 @@ window.addEventListener("drop", (e) => {
   if (!file || !file.type.startsWith("image/")) return;
   figureImg.src = URL.createObjectURL(file);
   figureImg.onload = () => {
-    figureOn = true;
-    bundled = false;
-    document.body.classList.remove("wallpaper");
     figureImg.classList.add("on");
-    localStorage.removeItem("figure-cal");
     figureCal = null;
-    startCalibration();
+    calSteps = ["eyeL", "eyeR", "core"];
+    app.setFigure(true, null);
+    document.body.classList.add("calibrating");
+    app.caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
   };
 });
-
-document.getElementById("drop-hint").addEventListener("click", () =>
-  caption("Rasm", "Kompyuterdagi rasm faylini sichqoncha bilan shu oynaga sudrab tashlang"));
-
-/* Kadr siklini rasm rejimini hisobga olib qayta yozamiz */
-frame = function patchedFrame(now) {
-  const t = now / 1000;
-
-  const target =
-    state === "listening" ? 0.35 + Math.abs(Math.sin(t * 2.7) * Math.sin(t * 1.3)) * 0.55 :
-    state === "speaking" ? 0.30 + Math.abs(Math.sin(t * 4.4)) * 0.45 : 0.03;
-  level = target;
-  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
-  flash *= 0.93; if (flash < 0.01) flash = 0;
-
-  const rect = figureOn ? figureRect() : null;
-  lastFx = DESK.draw(ctx, {
-    width: W, height: H, t, state, level: smoothLevel, flash, stats,
-    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
-  }) || lastFx;
-
-  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
-  if (figureOn && figureCal && rect) {
-    DESK.drawFigureFx(fxCtx, rect, figureCal, t, lastFx.eyes, lastFx.surge);
-    if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, lastFx.eyes);
-  }
-
-  if (dialPanel.classList.contains("on")) {
-    for (const s of systems) {
-      const until = heatUntil[s.id] || 0;
-      s.heat = s.status === "down" ? 0 : Math.max(0, Math.min(1, (until - t) / 1.4));
-    }
-    const size = dialCanvas.clientWidth || 314;
-    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
-  }
-  requestAnimationFrame(frame);
-};
-
-window.addEventListener("resize", () => { resize(); fxResize(); });
-resize();
-fxResize();
-requestAnimationFrame(frame);
 </script>

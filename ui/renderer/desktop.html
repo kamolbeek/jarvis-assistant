@@ -4,22 +4,20 @@
 <meta charset="utf-8" />
 <title>Jarvis — ish stoli</title>
 <style>
-  /* Ish stoli HUD — demo bilan bir xil ko'rinish, lekin jonli ma'lumotlar:
-     holat va ovoz yadrodan (WebSocket), CPU/RAM/ob-havo Electron'dan (IPC). */
+  /* Sahna butunlay canvas'da chiziladi (shell.js). Bu yerda faqat uning
+     ustidagi bir nechta matnli qatlam: suhbat izohi, bo'g'inlar paneli,
+     ogohlantirishlar va chiqish yo'li. */
   :root {
     --cyan: #22e3ff;
     --white: #ecfdff;
-    --amber: #ffb23e;
-    --red: #ff443a;
-    --steel: #2a3540;
-    --ink: rgba(6, 14, 20, 0.78);
+    --ink: rgba(6, 14, 20, 0.82);
     --edge: rgba(34, 227, 255, 0.22);
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
   body {
-    background: #030a0f;
+    background: #01060a;
     color: var(--white);
     font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
     overflow: hidden;
@@ -27,100 +25,19 @@
   }
   #scene { position: fixed; inset: 0; }
   #scene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #figure { position: absolute; inset: 0; width: 100%; height: 100%; display: none; object-fit: contain; pointer-events: none; }
-  #figure.on { display: block; }
   #fx-canvas { pointer-events: none; }
-  /* Uyqu holati: canvas pardasi fon rasmini xiralashtiradi, DOM panellari esa
-     o'z ustida turadi — ularni alohida so'ndiramiz. Sinf kadr sikli tomonidan
-     faqat chegara kesib o'tilganda almashtiriladi, har kadrda emas. */
-  /* Chiqish yo'li uyqu holatida ham to'liq ko'rinadi — u so'nmasligi kerak. */
-  body.dormant .blk:not(#escape-hint), body.dormant #live-pill { opacity: 0.4; }
-  .blk, #live-pill { transition: opacity 500ms ease; }
-  body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
-  body.wallpaper #rail-left, body.wallpaper #sys-block, body.wallpaper #dates,
-  body.wallpaper #links, body.wallpaper #weather, body.wallpaper #disk,
-  body.wallpaper #clock, body.wallpaper #folders, body.wallpaper #vertical-tag { display: none; }
-  #live-pill {
-    left: 50%; bottom: 8px; transform: translateX(-50%);
-    padding: 5px 14px; border-radius: 8px;
-    background: rgba(3, 8, 12, 0.92); border: 1px solid var(--edge);
-    font: 600 11px var(--mono); letter-spacing: 0.1em; color: var(--cyan);
-    display: none; white-space: nowrap;
+  #figure {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    display: none; object-fit: contain; pointer-events: none;
   }
-  body.wallpaper #live-pill { display: block; }
+  #figure.on { display: block; }
+  body.calibrating #figure { pointer-events: auto; cursor: crosshair; }
 
   .blk { position: absolute; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; }
-  .blk h3 { font-size: 9px; font-weight: 700; letter-spacing: 0.24em; color: rgba(236,253,255,0.4); margin-bottom: 7px; }
-
-  .chip {
-    display: flex; align-items: center; gap: 8px;
-    width: 150px; padding: 7px 12px; margin-bottom: 7px;
-    background: linear-gradient(90deg, rgba(42,53,64,0.85), rgba(42,53,64,0.35));
-    border-left: 3px solid var(--amber);
-    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
-    color: var(--white); font: 600 11px var(--mono); letter-spacing: 0.08em;
-    cursor: pointer;
-    transition: background 130ms ease, border-color 130ms ease;
-  }
-  .chip:hover { background: linear-gradient(90deg, rgba(34,227,255,0.22), rgba(42,53,64,0.4)); border-left-color: var(--cyan); }
-  .chip:active { filter: brightness(1.5); }
-  .chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); flex: none; }
-
-  .link {
-    display: block; font: 600 10.5px var(--mono); letter-spacing: 0.22em;
-    color: rgba(236,253,255,0.6); padding: 3.5px 0; cursor: pointer; text-align: center;
-    transition: color 120ms ease, text-shadow 120ms ease;
-  }
-  .link:hover { color: var(--cyan); text-shadow: 0 0 10px var(--cyan); }
-
-  #rail-left { left: 26px; top: 60px; }
-  #vertical-tag {
-    left: 8px; top: 50%; transform: rotate(180deg); writing-mode: vertical-rl;
-    font: 700 9px var(--mono); letter-spacing: 0.5em; color: rgba(236,253,255,0.25);
-  }
-  #sys-block { left: 26px; top: 335px; width: 168px; }
-  #sys-block .row { display: flex; justify-content: space-between; padding: 2.5px 0; color: rgba(236,253,255,0.75); }
-  #sys-block .row b { color: var(--cyan); font-weight: 700; }
-  #sys-block .bar { height: 3px; background: rgba(34,227,255,0.12); margin: 1px 0 6px; }
-  #sys-block .bar i { display: block; height: 100%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); transition: width 600ms ease; }
-  #sys-block .bar.warm i { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-
-  #dates {
-    top: 22px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 14px; font: 600 12px var(--mono); color: rgba(236,253,255,0.45);
-  }
-  #dates span.today {
-    color: var(--cyan); text-shadow: 0 0 12px var(--cyan);
-    border: 1px solid var(--edge); padding: 1px 7px; margin: -2px -8px;
-  }
-
-  #links { top: 64px; left: calc(50% - 300px); width: 120px; }
-
-  #weather { top: 70px; right: calc(50% - 330px); width: 150px; }
-  #weather .day { margin-bottom: 9px; }
-  #weather .day b { display: block; font-size: 11px; color: var(--cyan); letter-spacing: 0.18em; }
-  #weather .day span { font-size: 15px; color: var(--white); font-weight: 700; }
-  #weather .day small { display: block; font-size: 9.5px; color: rgba(236,253,255,0.5); }
-
-  #disk { top: 26px; right: 30px; text-align: right; color: rgba(236,253,255,0.7); }
-  #disk b { color: var(--cyan); }
-
-  #clock {
-    right: 205px; top: 47%;
-    display: flex; align-items: center; gap: 12px;
-    font: 700 30px var(--mono); color: var(--white);
-    text-shadow: 0 0 16px rgba(34, 227, 255, 0.6);
-  }
-  #clock::after { content: ""; width: 90px; height: 1px; background: linear-gradient(90deg, var(--cyan), transparent); }
-  #clock small { font-size: 10px; letter-spacing: 0.2em; color: rgba(236,253,255,0.5); align-self: flex-end; margin-bottom: 6px; }
-
-  #folders { right: 30px; bottom: 26px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 560px; }
-  #folders .chip { width: auto; margin: 0; border-left-color: var(--steel); background: linear-gradient(90deg, rgba(42,53,64,0.7), rgba(42,53,64,0.25)); }
-  #folders .chip:hover { border-left-color: var(--cyan); }
 
   #caption {
-    left: 50%; bottom: 30px; transform: translateX(-50%);
-    max-width: 520px; padding: 10px 16px;
+    left: 50%; bottom: 112px; transform: translateX(-50%);
+    max-width: 560px; padding: 10px 16px;
     background: var(--ink); border: 1px solid var(--edge); border-radius: 10px;
     font-family: inherit; font-size: 13.5px; letter-spacing: 0; text-align: center;
     opacity: 0; transition: opacity 200ms ease;
@@ -129,17 +46,16 @@
   #caption b { color: var(--cyan); font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; margin-right: 8px; }
 
   #dial-panel {
-    left: 30px; bottom: 210px; width: 330px; height: 330px;
-    background: rgba(4, 11, 16, 0.9);
+    left: 30px; bottom: 30px; width: 330px; height: 330px;
+    background: rgba(4, 11, 16, 0.94);
     border: 1px solid var(--edge); border-radius: 16px; padding: 8px;
     display: none;
   }
   #dial-panel.on { display: block; }
   #dial-panel canvas { width: 100%; height: 100%; }
 
-  /* Yadro o'chiq bo'lsa — chekkada bildirish */
   #offline {
-    left: 50%; top: 20px; transform: translateX(-50%);
+    left: 50%; top: 46px; transform: translateX(-50%);
     padding: 5px 14px; border-radius: 8px;
     background: rgba(255, 68, 58, 0.12); border: 1px solid rgba(255, 68, 58, 0.4);
     color: #ffd9d6; font: 600 10.5px var(--mono); letter-spacing: 0.1em;
@@ -147,10 +63,10 @@
   }
   #offline.on { display: block; }
 
-  /* Chiqish yo'li doim ko'rinib turishi kerak. Oyna butun ekranni egallaydi
-     va foydalanuvchi qamalib qolgandek his qilmasligi shart. */
+  /* Chiqish yo'li doim ko'rinib turadi: oyna butun ekranni egallaydi va
+     foydalanuvchi qamalib qolgandek his qilmasligi kerak. */
   #escape-hint {
-    top: 14px; right: 18px;
+    top: 14px; left: 50%; transform: translateX(-50%);
     padding: 6px 14px; border-radius: 8px;
     background: rgba(3, 8, 12, 0.86); border: 1px solid var(--edge);
     font: 600 11px var(--mono); letter-spacing: 0.12em; color: var(--cyan);
@@ -160,69 +76,10 @@
 </head>
 <body>
 <div id="scene">
-  <!-- Foydalanuvchi rasmi — eng pastki qatlam, butun ekran -->
   <img id="figure" alt="" draggable="false" />
   <canvas id="hud-canvas"></canvas>
   <canvas id="fx-canvas"></canvas>
 
-  <div class="blk" id="rail-left">
-    <h3>ILOVALAR</h3>
-    <div class="chip" data-app="Finder"><span class="dot"></span>Finder</div>
-    <div class="chip" data-app="Safari"><span class="dot"></span>Safari</div>
-    <div class="chip" data-app="Terminal"><span class="dot"></span>Terminal</div>
-    <div class="chip" data-app="Notes"><span class="dot"></span>Eslatmalar</div>
-    <div class="chip" data-app="Music"><span class="dot"></span>Musiqa</div>
-    <div class="chip" data-app="System Settings"><span class="dot"></span>Sozlamalar</div>
-  </div>
-
-  <div class="blk" id="vertical-tag">JARVIS · BOSHQARUV</div>
-
-  <div class="blk" id="sys-block">
-    <h3>TIZIM</h3>
-    <div class="row"><span>Ish vaqti</span><b id="uptime">—</b></div>
-    <div class="row"><span>CPU</span><b id="cpu-txt">—</b></div>
-    <div class="bar"><i id="cpu-bar" style="width:0%"></i></div>
-    <div class="row"><span>Xotira</span><b id="ram-txt">—</b></div>
-    <div class="bar warm"><i id="ram-bar" style="width:0%"></i></div>
-    <div class="row"><span>Disk</span><b id="disk-txt">—</b></div>
-    <div class="bar"><i id="disk-bar" style="width:0%"></i></div>
-  </div>
-
-  <div class="blk" id="dates"></div>
-
-  <div class="blk" id="links">
-    <h3 style="text-align:center">TEZKOR</h3>
-    <span class="link" data-url="https://youtube.com">YOUTUBE</span>
-    <span class="link" data-url="https://gmail.com">GMAIL</span>
-    <span class="link" data-url="https://github.com">GITHUB</span>
-    <span class="link" data-url="https://t.me">TELEGRAM</span>
-    <span class="link" data-url="https://wikipedia.org">WIKIPEDIA</span>
-    <span class="link" data-url="https://claude.ai">CLAUDE</span>
-  </div>
-
-  <div class="blk" id="weather">
-    <div class="day"><b>BUGUN</b><span id="w-today">—</span><small id="w-today-d"></small></div>
-    <div class="day"><b>ERTAGA</b><span id="w-tomorrow">—</span><small id="w-tomorrow-d"></small></div>
-  </div>
-
-  <div class="blk" id="disk">
-    <h3 style="text-align:right">DISK</h3>
-    <div><b id="disk-used">—</b> band</div>
-    <div><b id="disk-free">—</b> bo'sh</div>
-  </div>
-
-  <div class="blk" id="clock"><span id="time">--:--</span><small id="date"></small></div>
-
-  <div class="blk" id="folders">
-    <div class="chip" data-folder="downloads">Yuklamalar</div>
-    <div class="chip" data-folder="documents">Hujjatlar</div>
-    <div class="chip" data-folder="pictures">Rasmlar</div>
-    <div class="chip" data-folder="music">Musiqa</div>
-    <div class="chip" data-folder="videos">Videolar</div>
-    <div class="chip" data-folder="desktop">Ish stoli</div>
-  </div>
-
-  <div class="blk" id="live-pill"></div>
   <div class="blk" id="caption"><b></b><span></span></div>
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
   <div class="blk" id="offline">YADRO BILAN ALOQA YO'Q</div>
@@ -232,124 +89,56 @@
 <script src="palette.js"></script>
 <script src="suit.js"></script>
 <script src="hud.js"></script>
-<script src="desktop.js"></script>
+<script src="figure.js"></script>
+<script src="shell.js"></script>
+<script src="deskapp.js"></script>
 <script>
-// Ish stoli boshqaruvchisi: yadro (WebSocket) + Electron (IPC) ma'lumotlarini
-// DESK sahnasiga uzatadi.
+// Ish stoli boshqaruvchisi: Electron (IPC) va yadro (WebSocket) ma'lumotlarini
+// SHELL sahnasiga uzatadi. Chizmaning o'zi shell.js ichida.
 
-// Electron ko'prigi. Oddiy brauzerda ochilsa (chizmani tekshirish uchun)
-// ko'prik bo'lmaydi — o'sha holatda sahna baribir chizilishi kerak, shuning
-// uchun bo'sh o'rindoshlar qo'yamiz.
+// Ko'prik bo'lmasa (sahifa oddiy brauzerda ochilsa) sahna baribir chizilsin.
 const desk = window.desk || {
-  onStats: () => {}, onWeather: () => {}, onVisible: () => {},
-  openApp: () => {}, openFolder: () => {}, openUrl: () => {},
-  show: () => {}, hide: () => {},
+  onStats: () => {}, onWeather: () => {}, onMedia: () => {}, onVisible: () => {},
+  openApp: () => {}, openFolder: () => {}, openUrl: () => {}, openTrash: () => {},
+  setVolume: () => {}, media: () => {}, show: () => {}, hide: () => {},
   getFigure: async () => null, saveFigure: async () => null, clearFigure: async () => null,
   coreUrl: "ws://127.0.0.1:8765",
 };
 
-const canvas = document.getElementById("hud-canvas");
-const ctx = canvas.getContext("2d");
-const dialPanel = document.getElementById("dial-panel");
-const dialCanvas = document.getElementById("dial-canvas");
-const dialCtx = dialCanvas.getContext("2d");
-const captionBox = document.getElementById("caption");
+const figureImg = document.getElementById("figure");
 const offline = document.getElementById("offline");
 
-let W = 0, H = 0;
-let state = "idle";
-let level = 0, smoothLevel = 0, flash = 0;
-let emblemHover = false;
-let systems = [];
-let captionTimer = null;
-
-// --- Uyqu va yoqilish ---
-//
-// Oyna ochilganda sahna ko'rinadi, lekin Jarvis hali uyquda: ko'zlar o'chgan,
-// yorug'lik pasaygan. Uyg'otuvchi so'zning o'zi yetarli emas — foydalanuvchi
-// GAPIRGANDA yonadi. Shu sababli `listening` holati "band" hisoblanmaydi:
-// unda Jarvis hali kutib turadi, xonada esa jimlik bo'lishi mumkin.
-const DORMANT = 0.2;          // uyqudagi yorug'lik
-const SPEAK_LEVEL = 0.08;     // shu darajadan baland ovoz — gapirish
-const AWAKE_SEC = 8;          // gapirgandan keyin shuncha vaqt yoniq turadi
-const BUSY = new Set(["thinking", "speaking", "confirm"]);
-
-let boot = 0;
-let awakeUntil = 0;
-
-function engage(t) {
-  awakeUntil = t + AWAKE_SEC;
+// Rasm ekranda haqiqatan egallagan joy (object-fit: contain hisobida)
+function figureRect() {
+  const box = figureImg.getBoundingClientRect();
+  const nw = figureImg.naturalWidth;
+  const nh = figureImg.naturalHeight;
+  if (!nw || !nh) return null;
+  const scale = Math.min(box.width / nw, box.height / nh);
+  const w = nw * scale;
+  const h = nh * scale;
+  return { x: box.left + (box.width - w) / 2, y: box.top + (box.height - h) / 2, w, h };
 }
 
-const stats = { cpu: 0, ram: 0, disk: 0 };
+const app = DESKAPP.start({
+  figureRect,
+  actions: {
+    openApp: (name) => desk.openApp(name),
+    openFolder: (key) => desk.openFolder(key),
+    openUrl: (url) => desk.openUrl(url),
+    openTrash: () => desk.openTrash(),
+    setVolume: (value) => desk.setVolume(value),
+    media: (action) => desk.media(action),
+    activate: () => send({ type: "activate" }),
+  },
+});
 
-function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  W = innerWidth; H = innerHeight;
-  canvas.width = Math.round(W * dpr);
-  canvas.height = Math.round(H * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const ds = dialPanel.clientWidth || 330;
-  dialCanvas.width = dialCanvas.height = Math.round(ds * dpr);
-  dialCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
+// --- Electron'dan keladigan jonli ma'lumot ---
 
-// Kadr siklini avlod raqami bilan yuritamiz. Oyna yashiringanda brauzer
-// requestAnimationFrame'ni to'xtatadi va u har doim ham o'zi tiklanmaydi —
-// natijada oyna ochilganda qop-qora ekran qoladi. Kuzatuvchi siklni qaytadan
-// yo'lga soladi, avlod raqami esa ikkita sikl bir vaqtda ishlab ketishining
-// oldini oladi.
-let generation = 0;
-let lastFrameAt = 0;
-
-function schedule() {
-  const mine = ++generation;
-  requestAnimationFrame((now) => {
-    if (mine === generation) frame(now);
-  });
-}
-
-function frame(now) {
-  lastFrameAt = now;
-  const t = now / 1000;
-  smoothLevel += (level - smoothLevel) * (level > smoothLevel ? 0.4 : 0.1);
-  flash *= 0.93; if (flash < 0.01) flash = 0;
-
-  // Yonish tez (~0.5 s), so'nish sekin — chaqnab o'chib turmasligi uchun.
-  const target = BUSY.has(state) || t < awakeUntil ? 1 : DORMANT;
-  boot += (target - boot) * (target > boot ? 0.08 : 0.015);
-  document.body.classList.toggle("dormant", boot < 0.6);
-
-  const rect = figureOn ? figureRect() : null;
-  const out = DESK.draw(ctx, {
-    width: W, height: H, t, state, level: smoothLevel, flash, stats, boot,
-    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
-  });
-
-  fxCtx.clearRect(0, 0, innerWidth, innerHeight);
-  if (figureOn && figureCal && rect) {
-    DESK.drawFigureFx(fxCtx, rect, figureCal, t, out.eyes, out.surge, boot);
-    if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, out.eyes);
-  }
-
-  if (dialPanel.classList.contains("on")) {
-    const size = dialCanvas.clientWidth || 314;
-    HUD.draw(dialCtx, { width: size, height: size, t, state, level: smoothLevel, flash, systems });
-  }
-  schedule();
-}
-
-setInterval(() => {
-  if (performance.now() - lastFrameAt > 1200) schedule();
-}, 600);
-
-function caption(who, text) {
-  captionBox.querySelector("b").textContent = who || "";
-  captionBox.querySelector("span").textContent = text || "";
-  captionBox.classList.toggle("on", Boolean(text));
-  clearTimeout(captionTimer);
-  if (text) captionTimer = setTimeout(() => captionBox.classList.remove("on"), 9000);
-}
+desk.onStats((s) => app.setStats(s));
+desk.onWeather((w) => app.setWeather(w));
+desk.onMedia((m) => app.setMedia(m));
+desk.onVisible(() => app.sleep());
 
 // --- Yadro bilan aloqa ---
 
@@ -363,153 +152,50 @@ function connect() {
   socket.addEventListener("message", (event) => {
     let data;
     try { data = JSON.parse(event.data); } catch { return; }
-    const t = performance.now() / 1000;
     switch (data.type) {
       // Yadro aniq buyruq yuboradi — holatdan taxmin qilmaymiz.
       case "hud":
         if (data.action === "show") desk.show();
         else if (data.action === "hide") desk.hide();
         break;
-      case "state":
-        if (data.state === "wake" && state !== "wake") flash = 1;
-        state = data.state;
-        break;
-      case "level":
-        level = data.value;
-        if (state === "listening" && level > SPEAK_LEVEL) engage(t);
-        break;
-      case "health": systems = data.systems || []; break;
-      case "transcript": caption("Siz", data.text); engage(t); break;
-      case "say": caption("Jarvis", data.text); break;
+      case "state": app.setState(data.state); break;
+      case "level": app.setLevel(data.value); break;
+      case "health": app.setSystems(data.systems || []); break;
+      case "transcript": app.caption("Siz", data.text); app.engage(); break;
+      case "say": app.caption("Jarvis", data.text); break;
     }
   });
 
   socket.addEventListener("close", () => {
     offline.classList.add("on");
-    state = "idle"; level = 0;
-    systems = systems.map((s) => ({ ...s, status: "unknown", heat: 0 }));
+    app.setState("idle");
+    app.setLevel(0);
     setTimeout(connect, 1500);
   });
 
   socket.addEventListener("error", () => socket.close());
 }
 
-// --- Emblema: siferblat paneli ---
-
-canvas.addEventListener("mousemove", (e) => {
-  emblemHover = DESK.hit(W, H, e.clientX, e.clientY) === "emblem";
-  canvas.style.cursor = emblemHover ? "pointer" : "default";
-});
-canvas.addEventListener("click", (e) => {
-  if (DESK.hit(W, H, e.clientX, e.clientY) === "emblem") dialPanel.classList.toggle("on");
-});
-
-// --- Jonli bloklar ---
-
-function tickClock() {
-  const d = new Date();
-  document.getElementById("time").textContent =
-    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const days = ["Yak", "Du", "Se", "Chor", "Pay", "Ju", "Shan"];
-  document.getElementById("date").textContent = `${days[d.getDay()]} · ${d.getDate()}`;
-}
-setInterval(tickClock, 5000); tickClock();
-
-(function renderDates() {
-  const box = document.getElementById("dates");
-  const today = new Date();
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date(today); d.setDate(today.getDate() + i);
-    const el = document.createElement("span");
-    el.textContent = d.getDate();
-    if (i === 0) el.className = "today";
-    box.append(el);
-  }
-})();
-
-desk.onStats((s) => {
-  stats.cpu = s.cpu; stats.ram = s.ram; stats.disk = s.disk;
-  const h = Math.floor(s.uptimeSec / 3600), m = Math.floor((s.uptimeSec % 3600) / 60);
-  document.getElementById("uptime").textContent = `${h}s ${m}d`;
-  document.getElementById("cpu-txt").textContent = `${Math.round(s.cpu)}%`;
-  document.getElementById("ram-txt").textContent = `${Math.round(s.ram)}%`;
-  document.getElementById("disk-txt").textContent = `${Math.round(s.disk)}%`;
-  document.getElementById("cpu-bar").style.width = `${s.cpu}%`;
-  document.getElementById("ram-bar").style.width = `${s.ram}%`;
-  document.getElementById("disk-bar").style.width = `${s.disk}%`;
-  if (s.diskUsedGb != null) {
-    document.getElementById("disk-used").textContent = `${Math.round(s.diskUsedGb)} GB`;
-    document.getElementById("disk-free").textContent = `${Math.round(s.diskFreeGb)} GB`;
-  }
-});
-
-// Ob-havo kodi -> qisqa tavsif (WMO jadvalidan asosiylari)
-const WEATHER_TEXT = [
-  [0, "Ochiq"], [1, "Asosan ochiq"], [2, "Yengil bulutli"], [3, "Bulutli"],
-  [45, "Tuman"], [51, "Yengil yomg'ir"], [61, "Yomg'ir"], [71, "Qor"],
-  [80, "Jala"], [95, "Momaqaldiroq"],
-];
-function weatherText(code) {
-  let text = "—";
-  for (const [c, label] of WEATHER_TEXT) if (code >= c) text = label;
-  return text;
+function send(message) {
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
 }
 
-desk.onWeather((w) => {
-  if (!w) return;
-  document.getElementById("w-today").textContent = `${w.today.max}° / ${w.today.min}°`;
-  document.getElementById("w-today-d").textContent = weatherText(w.today.code);
-  document.getElementById("w-tomorrow").textContent = `${w.tomorrow.max}° / ${w.tomorrow.min}°`;
-  document.getElementById("w-tomorrow-d").textContent = weatherText(w.tomorrow.code);
-});
-
-// --- Ochish buyruqlari ---
-
-document.querySelectorAll(".chip[data-app]").forEach((c) =>
-  c.addEventListener("click", () => desk.openApp(c.dataset.app)));
-document.querySelectorAll(".chip[data-folder]").forEach((c) =>
-  c.addEventListener("click", () => desk.openFolder(c.dataset.folder)));
-document.querySelectorAll(".link").forEach((l) =>
-  l.addEventListener("click", () => desk.openUrl(l.dataset.url)));
-
-// --- Markaziy rasm: tashlash, kalibrlash, jonli effektlar ---
+// --- Ixtiyoriy fon rasmi ---
 //
-// Foydalanuvchi o'z rasmini (masalan, Iron Man HUD wallpaperini) oynaga
-// tashlaydi — vektor zirh o'rniga aynan o'sha rasm ko'rsatiladi. Uch marta
-// bosib sozlanadi: chap ko'z, o'ng ko'z, reaktor. Shundan keyin «Hey Jarvis»
-// deganda rasmning ko'zlari yonadi, reaktori aylanadi.
+// Foydalanuvchi o'z rasmini (masalan, eski wallpaperini) oynaga tashlashi
+// mumkin. Shunda markazdagi vektor zirh o'rniga o'sha rasm turadi, atrofdagi
+// jonli panellar esa joyida qoladi. Uch marta bosib sozlanadi: chap ko'z,
+// o'ng ko'z, reaktor — shundan keyin rasmning ko'zlari ham yonadi.
 
-const figureImg = document.getElementById("figure");
-const fxCanvas = document.getElementById("fx-canvas");
-const fxCtx = fxCanvas.getContext("2d");
-
-let figureOn = false;
 let figureCal = null;
 let calSteps = [];
 
 try { figureCal = JSON.parse(localStorage.getItem("figure-cal") || "null"); } catch { figureCal = null; }
 
-function figureRect() {
-  // Rasmning ekranda haqiqatan egallagan joyi (object-fit: contain hisobida)
-  const box = figureImg.getBoundingClientRect();
-  const nw = figureImg.naturalWidth, nh = figureImg.naturalHeight;
-  if (!nw || !nh) return null;
-  const scale = Math.min(box.width / nw, box.height / nh);
-  const w = nw * scale, h = nh * scale;
-  return { x: box.left + (box.width - w) / 2, y: box.top + (box.height - h) / 2, w, h };
-}
-
-function placeFigure() {
-  const dpr = window.devicePixelRatio || 1;
-  fxCanvas.width = Math.round(innerWidth * dpr);
-  fxCanvas.height = Math.round(innerHeight * dpr);
-  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
 function startCalibration() {
   calSteps = ["eyeL", "eyeR", "core"];
   document.body.classList.add("calibrating");
-  caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
+  app.caption("Sozlash", "Rasmda CHAP ko'zga bosing (keyin o'ng ko'z, keyin reaktor)");
 }
 
 figureImg.addEventListener("click", (e) => {
@@ -519,116 +205,36 @@ figureImg.addEventListener("click", (e) => {
   const key = calSteps.shift();
   figureCal = figureCal || {};
   figureCal[key] = [(e.clientX - rect.x) / rect.w, (e.clientY - rect.y) / rect.h];
-  if (calSteps.length === 2) caption("Sozlash", "Endi O'NG ko'zga bosing");
-  else if (calSteps.length === 1) caption("Sozlash", "Endi REAKTORGA bosing");
+  app.setFigure(true, figureCal);
+  if (calSteps.length === 2) app.caption("Sozlash", "Endi O'NG ko'zga bosing");
+  else if (calSteps.length === 1) app.caption("Sozlash", "Endi REAKTORGA bosing");
   else {
     localStorage.setItem("figure-cal", JSON.stringify(figureCal));
     document.body.classList.remove("calibrating");
-    caption("Sozlash", "Tayyor! «Hey Jarvis» deganda ko'zlar yonadi.");
+    app.caption("Sozlash", "Tayyor! «Hey Jarvis» deganda ko'zlar yonadi.");
   }
 });
 
-let bundled = false; // o'rnatilgan wallpaper rejimi
-
-// Rasm yuklanmasa, sahna "yozuvlargina qolgan" holatga tushmasligi kerak —
-// har bir bosqichda keyingisiga o'tamiz: saqlangan rasm -> o'rnatilgan
-// wallpaper -> vektor chizma (u rasmsiz ham to'liq HUD chizadi).
-function loadBundled() {
-  figureImg.src = "assets/markaz.jpg";
+function showFigure(path, calibrate) {
+  figureImg.src = "file://" + path + "?v=" + Math.random();
   figureImg.onload = () => {
-    figureOn = true;
-    bundled = true;
-    figureCal = DESK.BUNDLED.cal;
     figureImg.classList.add("on");
-    document.body.classList.add("wallpaper");
+    app.setFigure(true, figureCal);
+    if (calibrate && !figureCal) startCalibration();
   };
   figureImg.onerror = () => {
-    console.error("O'rnatilgan wallpaper yuklanmadi — vektor sahnaga o'tildi");
-    figureOn = false;
-    bundled = false;
+    // Fayl o'chirilgan yoki buzilgan — vektor sahna o'zi to'liq ishlaydi
     figureImg.classList.remove("on");
-    document.body.classList.remove("wallpaper");
+    app.setFigure(false, null);
   };
 }
 
-async function loadFigure() {
+(async function loadFigure() {
   let saved = null;
-  try {
-    saved = await desk.getFigure();
-  } catch { /* ko'prik javob bermadi — o'rnatilgan rasm bilan davom etamiz */ }
+  try { saved = await desk.getFigure(); } catch { saved = null; }
+  if (saved) showFigure(saved, true);
+})();
 
-  if (saved) {
-    // Foydalanuvchi o'z rasmini qo'ygan — o'sha ustun
-    figureImg.src = "file://" + saved + "?v=" + Math.random();
-    figureImg.onload = () => {
-      figureOn = true;
-      bundled = false;
-      figureImg.classList.add("on");
-      if (!figureCal) startCalibration();
-    };
-    // Saqlangan fayl o'chirilgan/buzilgan bo'lishi mumkin — wallpaperga qaytamiz.
-    figureImg.onerror = () => {
-      console.warn("Saqlangan rasm yuklanmadi, o'rnatilgan wallpaperga o'tildi:", saved);
-      loadBundled();
-    };
-    return;
-  }
-  // Standart: o'rnatilgan SHIELD OS wallpaperi — kalibrlash shart emas,
-  // nuqtalar oldindan o'lchangan, statik elementlar bosiladigan qilingan.
-  loadBundled();
-}
-
-// Rasmdagi statik elementlar ustidagi bosiladigan maydonlar
-function hotspotAt(clientX, clientY) {
-  if (!bundled) return null;
-  const rect = figureRect();
-  if (!rect) return null;
-  const nx = (clientX - rect.x) / rect.w;
-  const ny = (clientY - rect.y) / rect.h;
-  const e = DESK.BUNDLED.emblem;
-  if (Math.hypot(nx - e.c[0], ny - e.c[1]) <= e.r * 0.6) return { emblem: true };
-  for (const h of DESK.BUNDLED.hotspots) {
-    if (h.circle) {
-      if (Math.hypot(nx - h.circle[0], ny - h.circle[1]) <= h.circle[2]) return h;
-    } else if (h.rect) {
-      const [x, y, w, hh] = h.rect;
-      if (nx >= x && nx <= x + w && ny >= y && ny <= y + hh) return h;
-    }
-  }
-  return null;
-}
-
-document.addEventListener("mousemove", (e) => {
-  const h = hotspotAt(e.clientX, e.clientY);
-  if (h) document.body.style.cursor = "pointer";
-  else if (bundled) document.body.style.cursor = "";
-});
-
-document.addEventListener("click", (e) => {
-  if (e.target.closest("#dial-panel")) return;
-  const h = hotspotAt(e.clientX, e.clientY);
-  if (!h) return;
-  if (h.emblem) { dialPanel.classList.toggle("on"); return; }
-  if (h.activate) { send({ type: "activate" }); return; }
-  if (h.url) { desk.openUrl(h.url); return; }
-  if (h.app) { desk.openApp(h.app); return; }
-  if (h.folder) { desk.openFolder(h.folder); return; }
-});
-
-function send(message) {
-  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
-}
-
-// Jonli qator: soat + haqiqiy CPU/RAM/disk — rasm ostida
-setInterval(() => {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  document.getElementById("live-pill").textContent =
-    `${hh}:${mm}  ·  CPU ${Math.round(stats.cpu)}%  ·  RAM ${Math.round(stats.ram)}%  ·  DISK ${Math.round(stats.disk)}%`;
-}, 1000);
-
-// Fayl tashlash — istalgan joyga
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", async (e) => {
   e.preventDefault();
@@ -639,36 +245,22 @@ window.addEventListener("drop", async (e) => {
   if (!saved) return;
   localStorage.removeItem("figure-cal");
   figureCal = null;
-  figureImg.src = "file://" + saved + "?v=" + Math.random();
-  figureImg.onload = () => {
-    figureOn = true;
-    bundled = false;
-    document.body.classList.remove("wallpaper");
-    figureImg.classList.add("on");
-    startCalibration();
-  };
+  showFigure(saved, true);
 });
-
-// --- Oynani yopish va qaytadan ochish ---
 
 // Esc — oynani yashiradi. Qarsak, «hey jarvis» yoki ⌘⇧J bilan qaytadi.
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") desk.hide();
+  // Fon rasmini olib tashlash: vektor sahnaga qaytadi
+  if (e.key === "Backspace" && figureImg.classList.contains("on")) {
+    desk.clearFigure();
+    figureImg.classList.remove("on");
+    app.setFigure(false, null);
+    app.caption("Sozlash", "Fon rasmi olib tashlandi");
+  }
 });
 
-// Oyna har ochilganda noldan yonadi: bu "yoqilish" harakatini ko'rsatadi
-// va uyqu holatini aniq qiladi.
-desk.onVisible(() => {
-  boot = 0;
-  awakeUntil = 0;
-});
-
-window.addEventListener("resize", () => { resize(); placeFigure(); });
-resize();
-placeFigure();
-loadFigure();
 connect();
-schedule();
 </script>
 </body>
 </html>
