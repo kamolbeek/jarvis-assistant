@@ -424,9 +424,17 @@ conversation:
 Har qanday muloqot hisobni qaytadan boshlaydi: ovozli chaqiruv, qarsak,
 tugma, telefondan yozilgan matn.
 
-**Kutmasdan sukutga o'tkazish:** «bekor qil» (yoki «cancel», «bo'ldi bas»,
-«keyin gaplashamiz») deng — Jarvis «Xo'p» deb sahnani darhol yopadi. Qaytarish
-uchun tugma kerak emas: «Hey Jarvis» yetadi.
+**Kutmasdan sukutga o'tkazish** — ikki yo'l, ikkalasi bir xil natija beradi:
+
+| Yo'l | Nima deysiz / bosasiz |
+|---|---|
+| Ovoz bilan | «bekor qil», «cancel», «bo'ldi bas», «keyin gaplashamiz» |
+| Tugma bilan | `Esc` · `⌘W` · `⌘⇧J` (ikkinchi marta) |
+
+Qaytarish uchun tugma kerak emas: «Hey Jarvis» yetadi.
+
+Boshqa ilovaga o'tganingizda oyna shunchaki yashirinadi — bu sukut emas,
+suhbat davom etishi mumkin. Sukutga faqat **ataylab yopganingizda** o'tadi.
 
 ### Salomlashuv: bir so'z
 

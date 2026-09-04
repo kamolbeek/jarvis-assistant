@@ -227,7 +227,7 @@ function createDesktopWindow() {
       const quit = input.key === "Escape" || (input.meta && input.key.toLowerCase() === "w");
       if (quit) {
         event.preventDefault();
-        hideDesktop();
+        dismissDesktop();
       }
     });
   }
@@ -242,7 +242,7 @@ let escapeBound = false;
 
 function bindEscape() {
   if (escapeBound) return;
-  escapeBound = globalShortcut.register("Escape", hideDesktop);
+  escapeBound = globalShortcut.register("Escape", dismissDesktop);
   if (!escapeBound) console.warn("Esc ro'yxatdan o'tmadi — oynani ⌘⇧J bilan yoping");
 }
 
@@ -283,8 +283,20 @@ function hideDesktop() {
 
 function toggleDesktop() {
   if (!deskWin || DESK_AMBIENT) return;
-  if (deskWin.isVisible()) hideDesktop();
+  if (deskWin.isVisible()) dismissDesktop();
   else showDesktop();
+}
+
+// Oynani yopishning ikki xili bor va ular bir xil emas:
+//
+//   hideDesktop  — oyna ko'rinmay qoldi (masalan boshqa ilovaga o'tildi).
+//                  Jarvis suhbatni davom ettirishga tayyor turaveradi.
+//   dismissDesktop — foydalanuvchi ATAYLAB yopdi (Esc, ⌘W, ⌘⇧J). Bu
+//                  ovozdagi «bekor qil» bilan bir xil ma'no: yadro sukut
+//                  holatiga o'tadi. Renderer buni yadroga yetkazadi.
+function dismissDesktop() {
+  hideDesktop();
+  if (deskWin && !deskWin.isDestroyed()) deskWin.webContents.send("desk-dismissed");
 }
 
 ipcMain.on("desk-show", showDesktop);

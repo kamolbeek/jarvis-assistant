@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld("desk", {
   hide: () => ipcRenderer.send("desk-hide"),
   onVisible: (callback) => ipcRenderer.on("desk-visible", () => callback()),
 
+  // Foydalanuvchi oynani ataylab yopdi (Esc / ⌘W / ⌘⇧J) — renderer buni
+  // yadroga aytadi, yadro sukut holatiga o'tadi.
+  onDismissed: (callback) => ipcRenderer.on("desk-dismissed", () => callback()),
+
   // Markaziy rasm: olish / saqlash / o'chirish.
   getFigure: () => ipcRenderer.invoke("figure-get"),
   saveFigure: (buffer) => ipcRenderer.invoke("figure-save", buffer),

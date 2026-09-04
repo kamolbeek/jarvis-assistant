@@ -280,6 +280,7 @@ window.addEventListener("unhandledrejection", (e) => {
 // natijada HUD yarim ishlagan holatda qolardi.
 const bridge = window.desk || {
   onStats: () => {}, onWeather: () => {}, onMedia: () => {}, onVisible: () => {},
+  onDismissed: () => {},
   openApp: () => {}, openFolder: () => {}, openUrl: () => {}, openTrash: () => {},
   setVolume: () => {}, media: () => {},
   show: () => {}, hide: () => {},
@@ -726,9 +727,15 @@ window.addEventListener("drop", async (e) => {
 
 // --- Oynani yopish va qaytadan ochish ---
 
+// Oyna ataylab yopilganda (Esc / ⌘W / ⌘⇧J) yadroga aytamiz: bu ovozdagi
+// «bekor qil» bilan bir xil ma'no — Jarvis sukutga o'tadi, lekin tinglashda
+// qoladi. Buyruq main jarayonidan keladi, chunki Esc global tugma sifatida
+// ushlanadi va sahifagacha yetib kelmasligi mumkin.
+bridge.onDismissed(() => send({ type: "standby" }));
+
 // Esc — oynani yashiradi. Qarsak, «hey jarvis» yoki ⌘⇧J bilan qaytadi.
 window.addEventListener("keydown", async (e) => {
-  if (e.key === "Escape") bridge.hide();
+  if (e.key === "Escape") { bridge.hide(); send({ type: "standby" }); }
   // O'zingiz qo'ygan rasmni olib tashlash — o'rnatilgan wallpaper qaytadi
   if (e.key === "Backspace" && !bundled) {
     await bridge.clearFigure();

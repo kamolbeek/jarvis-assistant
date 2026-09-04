@@ -48,7 +48,19 @@ remove() {
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
   rm -f "$PLIST"
   echo "Avtomatik ishga tushirish o'chirildi."
-  echo "Hozir ishlab turgan Jarvis to'xtatilmadi — kerak bo'lsa terminalda Ctrl+C."
+
+  # `bootout` launchd ko'targan nusxani to'xtatadi, lekin qo'lda ishga
+  # tushirilgani qolaveradi. "To'xtatdim" deb aytib, aslida ishlab turishi
+  # eng yomon variant — shuning uchun haqiqiy holatni tekshiramiz.
+  sleep 1
+  if pgrep -f "python -m jarvis" >/dev/null 2>&1; then
+    echo
+    echo "DIQQAT: yadro hali ishlayapti — u qo'lda ishga tushirilgan."
+    echo "To'xtatish: o'sha terminalda Ctrl+C, yoki:"
+    echo "  pkill -f 'python -m jarvis'"
+  else
+    echo "Jarvis to'xtatildi."
+  fi
 }
 
 install() {

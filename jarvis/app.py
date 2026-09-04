@@ -184,6 +184,7 @@ class Jarvis:
 
         self.ui.on("activate", self._on_activate)
         self.ui.on("stop", self._on_stop)
+        self.ui.on("standby", self._on_standby)
         self.ui.on("text", self._on_text_input)
         self.ui.on("audio", self._on_phone_audio)
 
@@ -335,6 +336,17 @@ class Jarvis:
         """Foydalanuvchi to'xtatdi."""
         self.speaker.stop()
         await self.brain.interrupt()
+        await self.bus.set_state(State.IDLE)
+
+    async def _on_standby(self, message: dict[str, Any]) -> None:
+        """Oyna tugma bilan yopildi (Esc / ⌘W / ⌘⇧J).
+
+        Ovozdagi «bekor qil» bilan bir xil ma'no: sahna yopiladi, orb
+        xiralashadi, lekin tinglash to'xtamaydi — «Hey Jarvis» hammasini
+        qaytaradi.
+        """
+        self.speaker.stop()
+        await self._enter_standby("tugma bilan yopildi")
         await self.bus.set_state(State.IDLE)
 
     async def _on_text_input(self, message: dict[str, Any]) -> None:
