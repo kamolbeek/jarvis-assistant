@@ -237,3 +237,78 @@ async def test_phone_rejected_by_telegram_is_asked_again(wired):
 
     assert await wired["login"]() == 0
     assert client.phones == ["+998900000000", "+998935991333"]
+
+
+# --- api_id / api_hash -------------------------------------------------------
+
+
+def _answers(monkeypatch, values: list[str]) -> list[str]:
+    from jarvis import telegramlogin
+
+    asked: list[str] = []
+    replies = iter(values)
+
+    def ask(prompt: str, secret: bool = False) -> str:
+        asked.append(prompt)
+        return next(replies)
+
+    monkeypatch.setattr(telegramlogin, "_ask", ask)
+    return asked
+
+
+def test_api_id_ignores_spaces(monkeypatch):
+    from jarvis.telegramlogin import _ask_api_id
+
+    _answers(monkeypatch, ["3478 7018"])
+    assert _ask_api_id() == 34787018
+
+
+def test_api_id_is_asked_again_when_wrong(monkeypatch):
+    from jarvis.telegramlogin import _ask_api_id
+
+    asked = _answers(monkeypatch, ["salom", "34787018"])
+    assert _ask_api_id() == 34787018
+    assert len(asked) == 2
+
+
+def test_api_hash_accepts_32_hex(monkeypatch):
+    from jarvis.telegramlogin import _ask_api_hash
+
+    value = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    _answers(monkeypatch, [value])
+    assert _ask_api_hash() == value
+
+
+def test_empty_api_hash_is_asked_again(monkeypatch):
+    """Cmd+V ishlamay qolsa, buyruq to'xtab qolmasin."""
+    from jarvis.telegramlogin import _ask_api_hash
+
+    value = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    asked = _answers(monkeypatch, ["", value])
+    assert _ask_api_hash() == value
+    assert len(asked) == 2
+
+
+def test_api_hash_gives_up_after_three_tries(monkeypatch):
+    from jarvis.telegramlogin import _ask_api_hash
+
+    _answers(monkeypatch, ["", "", "qisqa"])
+    assert _ask_api_hash() is None
+
+
+async def test_keys_are_saved_before_the_phone_step(monkeypatch, wired):
+    """Raqam yoki kod xato ketsa ham, kalitlarni qaytadan yozish shart emas."""
+    from jarvis.tools import telegram_user as tg
+
+    monkeypatch.delenv("TELEGRAM_API_ID", raising=False)
+    monkeypatch.delenv("TELEGRAM_API_HASH", raising=False)
+
+    api_hash = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    client = _FakeTelegramClient(codes={}, bad_phones=("+998900000000",))
+    # Kalitlar to'g'ri, lekin raqam uch marta rad etiladi.
+    wired["wire"](client, ["34787018", api_hash,
+                           "+998900000000", "+998900000000", "+998900000000"])
+
+    assert await wired["login"]() == 1
+    assert tg.CREDENTIALS_PATH.exists()
+    assert tg.load_credentials() == (34787018, api_hash)

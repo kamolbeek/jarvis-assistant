@@ -604,6 +604,10 @@ Buyruq ketma-ket so'raydi: **api_id**, **api_hash** (ikkalasi
 telefon raqamingiz, Telegramdan kelgan **kod** va ikki bosqichli **parol**
 (agar yoqilgan bo'lsa).
 
+`api_id` va `api_hash` bir marta kiritilgach darhol saqlanadi — keyingi
+qadamlardan biri to'xtab qolsa ham (raqam xato, kod kelmadi) ularni qaytadan
+yozib o'tirmaysiz.
+
 Ikki joyda ko'p adashiladi, shuning uchun buyruq ularni o'zi to'g'rilaydi:
 
 * **Raqam mamlakat kodi bilan bo'lishi kerak** — `+998935991333`. `935991333`,

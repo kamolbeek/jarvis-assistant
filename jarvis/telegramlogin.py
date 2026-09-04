@@ -37,9 +37,13 @@ ga kirib, {BOLD}api_id{RESET} va {BOLD}api_hash{RESET} ni oling.
 {DIM}Quyidagilarni faqat siz kiritasiz. Ular modelga ko'rinmaydi.{RESET}
 """
 
-# Kod va raqam necha marta so'raladi.
+# Kod, raqam va kalitlar necha marta so'raladi.
 CODE_ATTEMPTS = 3
 PHONE_ATTEMPTS = 3
+KEY_ATTEMPTS = 3
+
+# api_hash — 32 ta o'n oltilik belgi.
+API_HASH_RE = re.compile(r"[0-9a-fA-F]{32}")
 
 # O'zbekiston mobil raqami mamlakat kodisiz shuncha raqamdan iborat.
 UZ_LOCAL_DIGITS = 9
@@ -77,6 +81,42 @@ def phone_looks_valid(phone: str) -> bool:
     return bool(re.fullmatch(r"\+\d{10,15}", phone))
 
 
+def _ask_api_id() -> int | None:
+    """api_id — 7–8 xonali raqam. Xato kiritilsa, qaytadan so'raydi."""
+    for attempt in range(1, KEY_ATTEMPTS + 1):
+        raw = re.sub(r"\s", "", _ask("api_id (raqam): "))
+        if raw.isdigit():
+            return int(raw)
+        print(f"{YELLOW}api_id faqat raqamlardan iborat (masalan 34787018). "
+              f"Bu api_hash emas.{RESET}")
+        if attempt == KEY_ATTEMPTS:
+            print(f"{RED}api_id to'g'ri kiritilmadi.{RESET}", file=sys.stderr)
+    return None
+
+
+def _ask_api_hash() -> str | None:
+    """api_hash — 32 ta harf-raqam.
+
+    Ataylab ochiq ko'rinadi. Yashirin kiritishda ekranda hech narsa
+    ko'rinmaydi va Cmd+V ishlamaganini bilib bo'lmaydi — aynan shu yerda
+    ko'p to'xtab qolinadi. Bu o'z terminalingiz, qiymat esa my.telegram.org
+    sahifasida ham ochiq turibdi.
+    """
+    for attempt in range(1, KEY_ATTEMPTS + 1):
+        raw = re.sub(r"\s", "", _ask("api_hash (32 ta belgi, Cmd+V bilan qo'ying): "))
+        if API_HASH_RE.fullmatch(raw):
+            return raw
+        if not raw:
+            print(f"{YELLOW}Hech narsa kiritilmadi. Cmd+V bosgach Enter bosing.{RESET}")
+        else:
+            print(f"{YELLOW}api_hash 32 ta harf-raqamdan iborat bo'ladi "
+                  f"(siznikida {len(raw)} ta). my.telegram.org dagi "
+                  f"«App api_hash» qatorini nusxalang.{RESET}")
+        if attempt == KEY_ATTEMPTS:
+            print(f"{RED}api_hash to'g'ri kiritilmadi.{RESET}", file=sys.stderr)
+    return None
+
+
 def _ask(prompt: str, secret: bool = False) -> str:
     try:
         value = getpass(prompt) if secret else input(prompt)
@@ -103,15 +143,16 @@ async def _login() -> int:
         api_id, api_hash = tg.load_credentials()
         print(f"{DIM}api_id / api_hash tayyor (avval saqlangan).{RESET}")
     except tg.TelegramUserError:
-        api_id_raw = _ask("api_id (raqam): ")
-        if not api_id_raw.isdigit():
-            print(f"{RED}api_id faqat raqamlardan iborat bo'lishi kerak.{RESET}", file=sys.stderr)
+        api_id = _ask_api_id()
+        if api_id is None:
             return 1
-        api_hash = _ask("api_hash: ", secret=True)
-        if not api_hash:
-            print(f"{RED}api_hash bo'sh.{RESET}", file=sys.stderr)
+        api_hash = _ask_api_hash()
+        if api_hash is None:
             return 1
-        api_id = int(api_id_raw)
+        # Darhol saqlaymiz: keyingi qadamlarning birortasi to'xtab qolsa ham
+        # (raqam xato, kod kelmadi) bularni qaytadan yozib o'tirmaysiz.
+        tg.save_credentials(api_id, api_hash)
+        print(f"{DIM}Saqlandi: {tg.CREDENTIALS_PATH}{RESET}")
 
     try:
         client = tg.new_client(api_id, api_hash)
