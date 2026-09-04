@@ -405,6 +405,25 @@ Agar Jarvis o'z ovozidan bo'linib ketsa (dinamik juda baland), `barge_in_margin`
 ni 3.0 ga ko'taring. Aksincha, sizni eshitmasa — 1.5 ga tushiring yoki
 quloqchin ishlating.
 
+### Sukut holati: 5 daqiqadan keyin o'zini bosadi
+
+Suhbat jimlik bilan tugaganda sahna ataylab ochiq qoladi — davom ettirishingiz
+mumkin va oyna har safar ochilib-yopilib turmasligi kerak. Lekin hech kim
+qaytmasa, u shu holida soatlab turmaydi: belgilangan vaqtdan keyin sahna
+yopiladi va orb xiralashadi.
+
+Bu **o'chish emas**. Mikrofon ishlashda davom etadi, chaqiruv eshitilaveradi —
+«Hey Jarvis» deyilishi bilan hammasi qaytadi (orbni bosish ham yetadi).
+
+```yaml
+# config/jarvis.yaml
+conversation:
+  standby_after_sec: 300   # 5 daqiqa. 0 — hech qachon so'nmasin
+```
+
+Har qanday muloqot hisobni qaytadan boshlaydi: ovozli chaqiruv, qarsak,
+tugma, telefondan yozilgan matn.
+
 ## Telefonda ishlatish
 
 Boshidan aniq aytish kerak: **iPhone'da fon rejimida «Hey Jarvis» deb uyg'otish
@@ -751,6 +770,7 @@ jarvis/
 │   └── telegram_user.py  shaxsiy Telegram akkaunt (MTProto)
 ├── ui/             orb va telefon uchun HTTP + WebSocket server
 ├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
+├── idle.py         sukut holati taymeri
 ├── bus.py          hodisa shinasi
 ├── health.py       bo'g'inlar tirikligi — HUD siferblatlari shundan
 ├── doctor.py       diagnostika (`jarvis doctor`)

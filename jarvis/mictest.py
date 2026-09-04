@@ -12,8 +12,6 @@ yonma-yon qo'yadi va qaysi birini sozlamaga yozishni aytadi:
 
 from __future__ import annotations
 
-import sys
-
 SECONDS = 2.5
 RATE = 16000
 

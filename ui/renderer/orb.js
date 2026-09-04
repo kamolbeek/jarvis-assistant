@@ -139,6 +139,7 @@ function connect() {
     offlinePanel.classList.remove("hidden");
     setState("idle");
     level = 0;
+    document.body.classList.remove("standby");
     // Aloqa yo'q — bo'g'inlar holati endi ishonchsiz, siferblatlar so'nsin.
     systems = systems.map((s) => ({ ...s, status: "unknown", heat: 0 }));
     // Yadro qayta ishga tushsa, o'zi ulanib olsin.
@@ -176,6 +177,11 @@ function handleEvent(data) {
       if (data.level === "error" || data.level === "warn") {
         showCaption("Tizim", data.text);
       }
+      break;
+    // Sukut holati: yadro baribir tinglab turadi, faqat orb so'nadi.
+    // Bosish yoki chaqirish bilan darhol qaytadi.
+    case "standby":
+      document.body.classList.toggle("standby", !!data.on);
       break;
   }
 }

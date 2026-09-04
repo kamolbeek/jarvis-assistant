@@ -16,6 +16,7 @@ import logging
 import random
 import signal
 import sys
+import time
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
@@ -42,6 +43,7 @@ from .bus import EventBus, State
 from .config import Config, load_config
 from .doctor import hint_for
 from .health import Health, Status, System
+from .idle import StandbyWatch
 from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
 from .ui.server import UiServer, base64_to_pcm
@@ -165,6 +167,10 @@ class Jarvis:
         self._vc_attempts = int(vc.get("attempts", 2))
         self._confirm_task: asyncio.Task[None] | None = None
 
+        # Uzoq jimlikdan keyin sahna yopiladi, orb xiralashadi. Chaqiruv
+        # ishlashda davom etadi — bu "o'chish" emas, "o'zini bosish".
+        self._standby = StandbyWatch(float(self._talk.get("standby_after_sec", 300)))
+
         self._activate = asyncio.Event()
         self._shutdown = asyncio.Event()
         self._greeted = False
@@ -192,6 +198,7 @@ class Jarvis:
         await self._check_mic_delivers_audio()
         await self._mark_ready()
         self._heartbeat = asyncio.create_task(self.health.heartbeat())
+        self._standby.touch(time.monotonic())
         await self.bus.set_state(State.IDLE)
 
         stats = self.memory.stats()
@@ -394,6 +401,11 @@ class Jarvis:
             if frame_count % 10 == 0 and frame_level(frame) > 0.04:
                 await self.health.ping(System.MIC)
 
+            # Muloqotsiz uzoq vaqt o'tgan bo'lsa, sahnani yopamiz. Sekundiga
+            # bir marta tekshiramiz — bu kadr sikliga sezilarli yuk bermaydi.
+            if frame_count % 50 == 0 and self.bus.state is State.IDLE:
+                await self._maybe_standby()
+
             # Rejalashtiruvchidan kelgan eslatmalar — faqat bo'sh vaqtda,
             # foydalanuvchining gapini bo'lmasdan.
             if not self.proactive.empty() and self.bus.state is State.IDLE:
@@ -541,8 +553,24 @@ class Jarvis:
 
         await self.bus.set_state(State.IDLE)
 
+    async def _maybe_standby(self) -> None:
+        """Vaqti kelgan bo'lsa, sukut holatiga o'tadi."""
+        if not self._standby.due(time.monotonic()):
+            return
+        log.info("Sukut holati: %.0f daqiqa muloqot bo'lmadi",
+                 self._standby.after_sec / 60)
+        await self.bus.hud("hide")
+        await self.bus.standby(True)
+
+    async def _wake_from_standby(self) -> None:
+        """Har qanday muloqot — sukutdan chiqish uchun sabab."""
+        if self._standby.touch(time.monotonic()):
+            log.info("Sukut holatidan qaytdi")
+            await self.bus.standby(False)
+
     async def _session(self, source: str = "so'z") -> None:
         """Uyg'onish: signal, salomlashish, so'ng suhbat."""
+        await self._wake_from_standby()
         await self.bus.set_state(State.WAKE)
         # To'liq ekranli sahnani aniq buyruq bilan ochamiz — chaqiruv qanday
         # kelganidan qat'i nazar (so'z, qarsak yoki tugma).
@@ -725,6 +753,9 @@ class Jarvis:
         `remote` berilgan bo'lsa, javob o'sha mijozga (telefonga) yuboriladi,
         kompyuter dinamigidan chiqmaydi.
         """
+        # Telefondan yoki matn orqali kelgan murojaat ham muloqot — sukut
+        # taymeri shundan ham qaytadan boshlanadi.
+        await self._wake_from_standby()
         await self.bus.set_state(State.THINKING)
         spoke_anything = False
         answer = self.brain.ask(text)

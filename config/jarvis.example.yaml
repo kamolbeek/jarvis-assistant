@@ -88,6 +88,15 @@ conversation:
   follow_up_sec: 8                 # javobdan keyingi tinglash oynasi
   max_turns: 12                    # bitta suhbatdagi eng ko'p navbat
 
+  # Sukut holati. Suhbat jimlik bilan tugasa, sahna ataylab ochiq qoladi —
+  # foydalanuvchi davom ettirishi mumkin. Lekin hech kim qaytmasa, u shu
+  # holida soatlab turmasligi kerak: shuncha soniyadan keyin sahna yopiladi
+  # va orb xiralashadi.
+  #
+  # Bu "o'chish" emas: mikrofon ishlashda davom etadi va «Hey Jarvis»
+  # deyilishi bilan hammasi qaytadi. 0 — hech qachon so'nmasin.
+  standby_after_sec: 300           # 5 daqiqa
+
   # Jarvis gapirayotganda uni bo'lish. Chegara o'zi moslashadi: quloqchinda
   # sezgir, baland dinamikda esa o'z ovozidan bo'linib ketmaydi.
   barge_in: true

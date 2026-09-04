@@ -98,6 +98,16 @@ class EventBus:
         log.info("HUD: %s", action)
         await self.emit({"type": "hud", "action": action})
 
+    async def standby(self, on: bool) -> None:
+        """Sukut holati yoqildi/o'chirildi.
+
+        Bu holat emas, ustidagi qatlam: yadro baribir IDLE da tinglab
+        turadi, faqat ko'rinish so'nadi. Shuning uchun `State` ga yangi
+        qiymat qo'shilmaydi — eski UI'lar buni e'tiborsiz qoldiradi va
+        hech narsa buzilmaydi.
+        """
+        await self.emit({"type": "standby", "on": bool(on)})
+
     # --- Tasdiq oqimi ---
 
     async def request_confirm(self, action: str, detail: str, timeout: float = 60.0) -> bool:
