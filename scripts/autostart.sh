@@ -5,33 +5,59 @@
 #   ./scripts/autostart.sh off      o'chirish
 #   ./scripts/autostart.sh status   holatini ko'rish
 #
-# macOS'da bu LaunchAgent orqali qilinadi: tizim login paytida bizning
-# plist'imizni o'qib, run.sh ni ishga tushiradi. Jarvis yiqilsa, launchd
-# uni o'zi qayta ko'taradi (KeepAlive).
+# Ikkita LaunchAgent yoziladi va bu ataylab shunday:
+#
+#   com.jarvis.assistant — yadro. Bevosita venv ichidagi `python` ishga
+#       tushiriladi, oraliqda bash yo'q. Sababi macOS'ning mikrofon
+#       ruxsatida: TCC ruxsatni "javobgar jarayon" bo'yicha beradi, ya'ni
+#       launchd ko'targan birinchi dastur bo'yicha. Agar u `/bin/bash`
+#       bo'lsa, ruxsat bashga tegishli bo'lib qoladi — tizim binarysiga esa
+#       mikrofon berib bo'lmaydi va macOS so'ramaydi ham: oqim ochiladi,
+#       ichida faqat nol keladi. Aynan shu sabab Jarvis "ishlab turib"
+#       hech nima eshitmasligi mumkin edi.
+#
+#   com.jarvis.orb — HUD (Electron). U alohida, chunki uning yiqilishi
+#       yadroni yiqitmasligi kerak: mikrofon va miya ishlayotgan bo'lsa,
+#       ekranda oyna yo'qligi sababli hamma narsani to'xtatish yaramaydi.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
 LABEL="com.jarvis.assistant"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+ORB_LABEL="com.jarvis.orb"
+AGENTS="$HOME/Library/LaunchAgents"
+PLIST="$AGENTS/$LABEL.plist"
+ORB_PLIST="$AGENTS/$ORB_LABEL.plist"
 LOG_DIR="$HOME/.jarvis/logs"
+PYTHON="$REPO/.venv/bin/python"
 
 if [ "$(uname)" != "Darwin" ]; then
   echo "Bu skript faqat macOS uchun."
   exit 1
 fi
 
+loaded() {
+  launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1
+}
+
 status() {
-  if [ -f "$PLIST" ] && launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+  if [ -f "$PLIST" ] && loaded "$LABEL"; then
     echo "Yoqilgan — Jarvis login paytida o'zi ishga tushadi."
 
     # Ro'yxatda turishi hali ishlayotganini bildirmaydi: yiqilib, qayta
     # ko'tarilib turgan bo'lishi mumkin. Haqiqiy holatni jarayon ko'rsatadi.
-    if pgrep -f "python -m jarvis" >/dev/null 2>&1; then
+    if pgrep -f "$PYTHON -m jarvis" >/dev/null 2>&1; then
       echo "Yadro ishlayapti — «Hey Jarvis» deb chaqirsangiz bo'ladi."
     else
       echo "DIQQAT: yadro hozir ishlamayapti — yiqilgan bo'lishi mumkin."
+    fi
+
+    if [ -f "$ORB_PLIST" ]; then
+      loaded "$ORB_LABEL" && echo "HUD (orb) ham yoqilgan." \
+        || echo "DIQQAT: HUD yuklanmagan."
+    else
+      echo "HUD o'chirilgan (npm yoki ui/node_modules topilmagan)."
     fi
 
     echo
@@ -45,8 +71,9 @@ status() {
 }
 
 remove() {
+  launchctl bootout "gui/$(id -u)/$ORB_LABEL" 2>/dev/null || true
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-  rm -f "$PLIST"
+  rm -f "$PLIST" "$ORB_PLIST"
   echo "Avtomatik ishga tushirish o'chirildi."
 
   # `bootout` launchd ko'targan nusxani to'xtatadi, lekin qo'lda ishga
@@ -63,9 +90,23 @@ remove() {
   fi
 }
 
+# Eski jarayon to'liq yopilmaguncha launchd "Input/output error" beradi.
+# Bir necha marta urinib ko'ramiz — bu kutilgan hol, xato emas.
+load() {
+  local label="$1" plist="$2"
+  launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+  for attempt in 1 2 3 4 5; do
+    if launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null; then
+      return 0
+    fi
+    [ "$attempt" = 5 ] && return 1
+    sleep 2
+  done
+}
+
 install() {
-  if [ ! -d .venv ]; then
-    echo "Muhit topilmadi. Avval ./scripts/install.sh ni ishga tushiring."
+  if [ ! -x "$PYTHON" ]; then
+    echo "Muhit topilmadi ($PYTHON). Avval ./scripts/install.sh ni ishga tushiring."
     exit 1
   fi
 
@@ -83,19 +124,13 @@ install() {
     exit 1
   fi
 
-  mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
+  mkdir -p "$LOG_DIR" "$AGENTS"
 
-  # launchd'ning PATH'i juda qisqa va `bash -l` zsh'ning .zprofile'ini
-  # o'qimaydi. Taxmin qilingan yo'llar ham yetarli emas: node nvm yoki
-  # boshqa joyda bo'lishi mumkin. Shuning uchun HOZIRGI seansning PATH'ini
-  # o'zini yozib qo'yamiz — u yerda hammasi ishlayotgani tekshirilgan.
-  if ! command -v npm >/dev/null 2>&1; then
-    echo 'Ogohlantirish: npm shu seansda ham topilmadi — orb (HUD) ko'\''rinmaydi.'
-    echo "Yadro baribir ishlaydi. Node.js o'rnatsangiz, shu skriptni qayta ishga tushiring."
-  fi
   if ! command -v claude >/dev/null 2>&1; then
     echo 'Eslatma: claude topilmadi — miya API kaliti orqali ishlaydi.'
   fi
+
+  # --- Yadro ---------------------------------------------------------------
   cat > "$PLIST" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -105,15 +140,27 @@ install() {
   <key>Label</key>
   <string>$LABEL</string>
 
+  <!-- Bevosita venv python. Oraliqda bash bo'lsa, mikrofon ruxsati bashga
+       tegishli bo'lib qoladi va macOS jimgina rad etadi. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/bash</string>
-    <string>-c</string>
-    <string>export PATH="$PATH"; exec "$REPO/scripts/run.sh"</string>
+    <string>$PYTHON</string>
+    <string>-m</string>
+    <string>jarvis</string>
   </array>
 
   <key>WorkingDirectory</key>
   <string>$REPO</string>
+
+  <!-- launchd'ning PATH'i juda qisqa. Hozirgi seansning PATH'ini yozamiz —
+       u yerda hammasi ishlayotgani tekshirilgan. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$PATH</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
 
   <key>RunAtLoad</key>
   <true/>
@@ -140,22 +187,64 @@ install() {
 </plist>
 PLIST_EOF
 
-  # Eski nusxasi yuklangan bo'lsa, avval chiqarib tashlaymiz — aks holda
-  # bootstrap "allaqachon yuklangan" deb xato beradi.
-  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  # --- HUD (orb) -----------------------------------------------------------
+  if command -v npm >/dev/null 2>&1 && [ -d "$REPO/ui/node_modules" ]; then
+    cat > "$ORB_PLIST" <<ORB_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$ORB_LABEL</string>
 
-  # Eski jarayon to'liq yopilmaguncha launchd "Input/output error" beradi.
-  # Bir necha marta urinib ko'ramiz — bu kutilgan hol, xato emas.
-  for attempt in 1 2 3 4 5; do
-    if launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null; then
-      break
-    fi
-    if [ "$attempt" = 5 ]; then
-      echo "launchd yuklay olmadi. Qaytadan urinib ko'ring: ./scripts/autostart.sh"
-      exit 1
-    fi
-    sleep 2
-  done
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>cd "$REPO/ui" &amp;&amp; exec npm start</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>$REPO/ui</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$PATH</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+
+  <key>StandardOutPath</key>
+  <string>$LOG_DIR/orb.log</string>
+  <key>StandardErrorPath</key>
+  <string>$LOG_DIR/orb.log</string>
+</dict>
+</plist>
+ORB_EOF
+  else
+    echo "Ogohlantirish: npm yoki ui/node_modules topilmadi — HUD ko'rinmaydi."
+    echo "Yadro baribir ishlaydi (ovoz bilan)."
+    rm -f "$ORB_PLIST"
+    launchctl bootout "gui/$(id -u)/$ORB_LABEL" 2>/dev/null || true
+  fi
+
+  load "$LABEL" "$PLIST" || {
+    echo "launchd yadroni yuklay olmadi. Qaytadan urinib ko'ring."
+    exit 1
+  }
+  [ -f "$ORB_PLIST" ] && { load "$ORB_LABEL" "$ORB_PLIST" || echo "HUD yuklanmadi."; }
 
   echo "Tayyor. Jarvis hozir ishga tushdi va endi har login'da o'zi ko'tariladi."
   echo
@@ -163,9 +252,10 @@ PLIST_EOF
   echo "  O'chirish: ./scripts/autostart.sh off"
   echo "  Jurnal:   tail -f $LOG_DIR/jarvis.log"
   echo
-  echo "Diqqat: birinchi avtomatik ishga tushishda macOS mikrofon uchun"
-  echo "qaytadan ruxsat so'rashi mumkin — bu safar so'rov python nomidan"
-  echo "keladi (terminal emas). «OK» deng, bir martalik."
+  echo "DIQQAT: macOS hozir mikrofon uchun ruxsat so'rashi mumkin — so'rov"
+  echo "«Python» nomidan keladi. «Ruxsat berish» ni bosing, bu bir martalik."
+  echo "So'rov chiqmasa va Jarvis eshitmasa: Tizim sozlamalari > Maxfiylik va"
+  echo "xavfsizlik > Mikrofon ro'yxatida Python yoqilganini tekshiring."
 }
 
 case "${1:-on}" in

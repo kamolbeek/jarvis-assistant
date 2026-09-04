@@ -34,4 +34,8 @@ echo "── Jurnalning oxiri ────────────────�
 tail -n 25 ~/.jarvis/logs/jarvis.log 2>/dev/null || echo "(jurnal topilmadi)"
 
 echo
+echo "── HUD (orb) jurnali ─────────────────────────────"
+tail -n 8 ~/.jarvis/logs/orb.log 2>/dev/null || echo "(orb jurnali yo'q)"
+
+echo
 echo "Bu oynani yopsangiz bo'ladi."

@@ -18,7 +18,9 @@ if [ -d .venv ]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
   echo "==> Kutubxonalar tekshirilmoqda"
-  pip install -q -e . 2>&1 | tail -3 || true
+  # `setuptools` alohida aytilgan: u yo'q bo'lsa webrtcvad jimgina
+  # ishlamay qoladi va gapni tugatganini aniqlash sezilarli yomonlashadi.
+  pip install -q -e . setuptools 2>&1 | tail -3 || true
 fi
 
 echo "==> Jarvis qaytadan ishga tushirilmoqda"

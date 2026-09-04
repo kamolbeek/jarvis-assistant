@@ -196,12 +196,18 @@ Mikrofon bloklangan bo'lsa, orb **yashirilmaydi**: u ekranda qolib, qizil
 siferblat bilan sababni ko'rsatadi. Ekranda hech narsa yo'q va sabab ham
 yo'q degan holat bo'lmasligi kerak.
 
-**Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *ishga tushiruvchi
-dastur* bo'yicha beradi. Terminaldan ishga tushirsangiz javobgar Terminal
-bo'ladi va ruxsat ishlaydi; `launchd` ostida esa javobgar boshqa va macOS
-**so'ramaydi ham, xato ham bermaydi** — oqim ochiladi, ichida faqat nol
-keladi. Tashqaridan qaraganda Jarvis ishlab turadi, lekin hech nima
-eshitmaydi.
+**Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *javobgar jarayon*
+bo'yicha beradi, ya'ni `launchd` ko'targan birinchi dastur bo'yicha.
+Terminaldan ishga tushirsangiz javobgar Terminal bo'ladi va ruxsat ishlaydi.
+
+Shu sababli LaunchAgent bevosita `\.venv/bin/python` ni ishga tushiradi,
+oraliqda `bash` yo'q: aks holda ruxsat bashga tegishli bo'lib qolardi, tizim
+binarysiga esa mikrofon berib bo'lmaydi va macOS **so'ramaydi ham, xato ham
+bermaydi** — oqim ochiladi, ichida faqat nol keladi. Tashqaridan qaraganda
+Jarvis ishlab turadi, lekin hech nima eshitmaydi.
+
+Shu sababdan HUD ham alohida agent (`com.jarvis.orb`): uning yiqilishi
+yadroni yiqitmasligi kerak.
 
 Jarvis buni o'zi sezadi: ishga tushganda bir soniya tinglaydi va mutlaq nol
 kelsa, HUD'da mikrofon siferblati qizarib, jurnalga sabab yoziladi (haqiqiy
