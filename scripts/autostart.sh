@@ -57,6 +57,20 @@ install() {
     exit 1
   fi
 
+  # Terminalda qo'lda ishga tushirilgan nusxa turgan bo'lsa, avtomatik nusxa
+  # mikrofon va 8765-portni undan tortib ololmaydi: run.sh xato bilan
+  # chiqadi, launchd esa KeepAlive tufayli uni har 15 soniyada qayta
+  # ko'taraveradi. Tashqaridan bu "yoqdim, lekin ishlamayapti" bo'lib
+  # ko'rinadi — shuning uchun sababini oldindan aytamiz.
+  if pgrep -f "python -m jarvis" >/dev/null 2>&1; then
+    echo "Jarvis hozir qo'lda ishga tushirilgan (terminalda ishlayapti)."
+    echo
+    echo "Avval o'sha oynada Ctrl+C bosib to'xtating, keyin shu buyruqni"
+    echo "qaytadan bering:"
+    echo "  ./scripts/autostart.sh"
+    exit 1
+  fi
+
   mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
 
   # launchd'ning PATH'i juda qisqa va `bash -l` zsh'ning .zprofile'ini
