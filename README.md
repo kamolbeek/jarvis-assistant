@@ -604,6 +604,15 @@ Buyruq ketma-ket so'raydi: **api_id**, **api_hash** (ikkalasi
 telefon raqamingiz, Telegramdan kelgan **kod** va ikki bosqichli **parol**
 (agar yoqilgan bo'lsa).
 
+Ikki joyda ko'p adashiladi, shuning uchun buyruq ularni o'zi to'g'rilaydi:
+
+* **Raqam mamlakat kodi bilan bo'lishi kerak** — `+998935991333`. `935991333`,
+  `998935991333` yoki `93-599-13-33` deb yozsangiz ham to'g'ri ko'rinishga
+  keltiriladi va qanday o'qilgani ko'rsatiladi.
+* **Kod SMS bilan kelmaydi** — u Telegram ilovasidagi rasmiy «Telegram»
+  chatiga keladi va har urinishda yangilanadi. Xato kiritsangiz qaytadan
+  so'raydi, muddati o'tgan bo'lsa yangi kod yubortiradi.
+
 Bularning hammasini siz terminalga o'zingiz kiritasiz. Ular modelga
 ko'rsatilmaydi, jurnalga yozilmaydi va repozitoriyga tushmaydi: api_id/api_hash
 `~/.jarvis/telegram.json` (faqat siz o'qiy olasiz), seansning o'zi esa

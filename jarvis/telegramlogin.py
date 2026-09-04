@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import re
 from getpass import getpass
 
 GREEN = "\033[32m"
@@ -36,13 +37,44 @@ ga kirib, {BOLD}api_id{RESET} va {BOLD}api_hash{RESET} ni oling.
 {DIM}Quyidagilarni faqat siz kiritasiz. Ular modelga ko'rinmaydi.{RESET}
 """
 
-# Kod necha marta so'raladi.
+# Kod va raqam necha marta so'raladi.
 CODE_ATTEMPTS = 3
+PHONE_ATTEMPTS = 3
+
+# O'zbekiston mobil raqami mamlakat kodisiz shuncha raqamdan iborat.
+UZ_LOCAL_DIGITS = 9
+UZ_COUNTRY_CODE = "998"
 
 CODE_HINT = f"""\
 {YELLOW}Kod SMS bilan kelmaydi.{RESET} U Telegram ilovasining o'zida, ko'k belgili
 rasmiy {BOLD}«Telegram»{RESET} chatiga keladi (arxivda ham bo'lishi mumkin).
 {DIM}Har urinishda yangi kod yuboriladi — eski xabardagi kod ishlamaydi.{RESET}"""
+
+
+def normalize_phone(raw: str) -> str:
+    """Kiritilgan raqamni Telegram kutadigan ko'rinishga keltiradi.
+
+    Odam raqamni odam yozadigan tarzda yozadi: bo'shliq, tire, qavs bilan,
+    ko'pincha mamlakat kodisiz. Telegram esa faqat `+998901234567` ni
+    tushunadi va aks holda «phone number is invalid» deydi — sababini
+    aytmasdan. Shuning uchun tuzatishni o'zimiz qilamiz.
+    """
+    digits = re.sub(r"[^\d+]", "", raw)
+    digits = "+" + digits.lstrip("+") if digits.startswith("+") else digits
+
+    if digits.startswith("00"):                       # 00998... -> +998...
+        digits = "+" + digits[2:]
+    elif not digits.startswith("+"):
+        if len(digits) == UZ_LOCAL_DIGITS:            # 935991333 -> +998935991333
+            digits = f"+{UZ_COUNTRY_CODE}{digits}"
+        elif digits:                                  # 998935991333 -> +998935991333
+            digits = "+" + digits
+    return digits
+
+
+def phone_looks_valid(phone: str) -> bool:
+    """Xalqaro raqam: `+` va 10–15 ta raqam."""
+    return bool(re.fullmatch(r"\+\d{10,15}", phone))
 
 
 def _ask(prompt: str, secret: bool = False) -> str:
@@ -98,10 +130,34 @@ async def _login() -> int:
             tg.save_credentials(api_id, api_hash)
             return 0
 
-        phone = _ask("Telefon raqam (+998...): ")
-        if not phone.startswith("+"):
-            print(f"{YELLOW}Raqamni xalqaro ko'rinishda yozing: +998...{RESET}")
-        await client.send_code_request(phone)
+        phone = ""
+        for attempt in range(1, PHONE_ATTEMPTS + 1):
+            last = attempt == PHONE_ATTEMPTS
+            raw = _ask("Telefon raqam (+998901234567 ko'rinishida): ")
+            phone = normalize_phone(raw)
+
+            if not phone_looks_valid(phone):
+                print(f"{YELLOW}Raqam tushunarsiz: «{raw}». Namuna: "
+                      f"+998901234567{RESET}")
+                if last:
+                    print(f"{RED}Raqam to'g'ri kiritilmadi.{RESET}", file=sys.stderr)
+                    return 1
+                continue
+
+            if phone != raw.strip():
+                # Tuzatilgan bo'lsa, ko'rsatib qo'yamiz — jim tuzatish yaramaydi.
+                print(f"{DIM}Raqam shunday o'qildi: {phone}{RESET}")
+
+            try:
+                await client.send_code_request(phone)
+                break
+            except errors.PhoneNumberInvalidError:
+                print(f"{YELLOW}Telegram bu raqamni qabul qilmadi: {phone}{RESET}")
+                if last:
+                    print(f"{RED}Raqam noto'g'ri. Telegram akkauntingiz qaysi "
+                          f"raqamga bog'langanini tekshiring.{RESET}", file=sys.stderr)
+                    return 1
+
         print(CODE_HINT)
 
         # Kod xato bo'lsa yoki eskirsa, butun buyruqni qaytadan boshlash

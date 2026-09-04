@@ -40,6 +40,10 @@ class _PasswordHashInvalidError(_Err):
     pass
 
 
+class _PhoneNumberInvalidError(_Err):
+    pass
+
+
 class _FloodWaitError(_Err):
     def __init__(self, seconds: int = 60) -> None:
         super().__init__("flood")
@@ -49,9 +53,12 @@ class _FloodWaitError(_Err):
 class _FakeTelegramClient:
     """Skript bo'yicha javob beradigan mijoz."""
 
-    def __init__(self, codes: dict[str, object], password: str = "") -> None:
+    def __init__(self, codes: dict[str, object], password: str = "",
+                 bad_phones: tuple[str, ...] = ()) -> None:
         self.codes = codes           # kiritilgan kod -> None (o'tadi) yoki xato
         self.password = password
+        self.bad_phones = bad_phones
+        self.phones: list[str] = []
         self.code_requests = 0
         self.signed_in = False
 
@@ -62,6 +69,9 @@ class _FakeTelegramClient:
         return False
 
     async def send_code_request(self, phone: str) -> None:
+        self.phones.append(phone)
+        if phone in self.bad_phones:
+            raise _PhoneNumberInvalidError()
         self.code_requests += 1
 
     async def sign_in(self, phone: str = "", code: str = "", password: str = ""):
@@ -93,6 +103,7 @@ def fake_telethon(monkeypatch):
     errors.PhoneCodeEmptyError = _PhoneCodeEmptyError
     errors.PhoneCodeExpiredError = _PhoneCodeExpiredError
     errors.PasswordHashInvalidError = _PasswordHashInvalidError
+    errors.PhoneNumberInvalidError = _PhoneNumberInvalidError
     errors.FloodWaitError = _FloodWaitError
 
     telethon = types.ModuleType("telethon")
@@ -173,3 +184,56 @@ async def test_two_step_password_is_requested(wired):
     assert await wired["login"]() == 0
     assert client.signed_in is True
     assert any("parol" in p.lower() for p in wired["asked"])
+
+
+# --- Telefon raqami ----------------------------------------------------------
+
+
+@pytest.mark.parametrize("raw", [
+    "+998935991333",
+    "935991333",              # mamlakat kodisiz — eng ko'p uchraydigan holat
+    "998935991333",
+    "00998935991333",
+    "+998 93 599 13 33",
+    "93-599-13-33",
+    "(93) 599 13 33",
+])
+def test_phone_is_normalized(raw: str):
+    from jarvis.telegramlogin import normalize_phone, phone_looks_valid
+
+    phone = normalize_phone(raw)
+    assert phone == "+998935991333", raw
+    assert phone_looks_valid(phone)
+
+
+@pytest.mark.parametrize("raw", ["", "salom", "12345", "+", "9359913"])
+def test_broken_phone_is_rejected(raw: str):
+    from jarvis.telegramlogin import normalize_phone, phone_looks_valid
+
+    assert not phone_looks_valid(normalize_phone(raw))
+
+
+async def test_local_number_reaches_telegram_in_international_form(wired):
+    """«935991333» deb yozilsa ham Telegramga «+998935991333» boradi."""
+    client = _FakeTelegramClient(codes={"11111": None})
+    wired["wire"](client, ["935991333", "11111"])
+
+    assert await wired["login"]() == 0
+    assert client.phones == ["+998935991333"]
+
+
+async def test_unusable_phone_is_asked_again(wired):
+    """Tushunarsiz raqamda buyruq to'xtamaydi — qaytadan so'raydi."""
+    client = _FakeTelegramClient(codes={"11111": None})
+    wired["wire"](client, ["salom", "+998935991333", "11111"])
+
+    assert await wired["login"]() == 0
+    assert client.phones == ["+998935991333"]
+
+
+async def test_phone_rejected_by_telegram_is_asked_again(wired):
+    client = _FakeTelegramClient(codes={"11111": None}, bad_phones=("+998900000000",))
+    wired["wire"](client, ["+998900000000", "+998935991333", "11111"])
+
+    assert await wired["login"]() == 0
+    assert client.phones == ["+998900000000", "+998935991333"]
