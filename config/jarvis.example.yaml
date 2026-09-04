@@ -180,6 +180,10 @@ safety:
     Edit: "ask"
     Bash: "ask"
     NotebookEdit: "ask"
+    # Sizning nomingizdan ketgan Telegram xabarini qaytarib bo'lmaydi.
+    # Bu qator `trust on` da ham o'zgarmaydi va tasdiq bir marta emas,
+    # har safar so'raladi.
+    mcp__jarvis__telegram_send: "ask"
 
   # Bu naqshlar hech qachon bajarilmaydi (tasdiq so'ralmaydi ham).
   forbidden_patterns:
@@ -219,5 +223,11 @@ ui:
 channels:
   telegram:
     enabled: false
+    # Shaxsiy akkaunt (bot emas): Jarvis chatlaringizni o'qiy oladi va
+    # tanishlaringizga sizning nomingizdan yoza oladi.
+    # Yoqish: `python -m jarvis telegram-login` (bir marta, qo'lda).
+    # Seans `~/.jarvis/telegram.session` da — repozitoriyga tushmaydi.
+    account:
+      enabled: false
   n8n:
     enabled: false

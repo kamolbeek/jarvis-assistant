@@ -35,6 +35,11 @@ PATH_ARG_BY_TOOL = {
     "Read": "file_path",
 }
 
+# Bu asboblar uchun tasdiq hech qachon "eslab qolinmaydi": har chaqiruv
+# alohida so'raladi. Sabab — natija tashqariga chiqadi va qaytarib bo'lmaydi:
+# boshqa odamga ketgan xabarni orqaga qaytarish imkoni yo'q.
+ALWAYS_ASK_SUFFIXES = ("telegram_send",)
+
 # Shell buyruqlaridagi yozish operatorlari — yo'lni tekshirish uchun belgi.
 _REDIRECT_RE = re.compile(r"(?<![0-9<>])>{1,2}\s*(\S+)")
 
@@ -108,19 +113,24 @@ class SafetyGate:
 
         # 3. Qoidalar jadvali.
         policy = self._rules.get(tool_name, self._default)
+        # `trust on` (default: allow) ham buni yumshata olmaydi — qaytarib
+        # bo'lmaydigan tashqi amal har safar tasdiq so'raydi.
+        if policy != "deny" and tool_name.endswith(ALWAYS_ASK_SUFFIXES):
+            policy = "ask"
         if policy == "allow":
             return Decision(True)
         if policy == "deny":
             return Decision(False, f"`{tool_name}` konfiguratsiyada taqiqlangan")
 
         # 4. Tasdiq so'rash — lekin bu seansda allaqachon tasdiqlangan bo'lsa, so'ramaymiz.
+        once_only = tool_name.endswith(ALWAYS_ASK_SUFFIXES)
         signature = self._signature(tool_name, input_data)
-        if signature in self._session_grants:
+        if not once_only and signature in self._session_grants:
             return Decision(True, "seansda allaqachon tasdiqlangan")
 
         action, detail = self._describe(tool_name, input_data)
         approved = await self.bus.request_confirm(action, detail)
-        if approved:
+        if approved and not once_only:
             self._session_grants.add(signature)
         return Decision(approved, "" if approved else "Foydalanuvchi rad etdi", asked=True)
 
@@ -202,6 +212,12 @@ class SafetyGate:
             path = str(input_data.get("file_path", "?"))
             verb = "yaratilsinmi" if tool_name == "Write" else "o'zgartirilsinmi"
             return f"Fayl {verb}?", path
+        if tool_name.endswith("telegram_send"):
+            # Eng xavfli tasdiq — shuning uchun kimga va nima yozilishi to'liq
+            # ko'rinadi, JSON ichida yashirinib qolmaydi.
+            who = str(input_data.get("kimga", "?"))
+            text = str(input_data.get("matn", ""))
+            return (f"Telegramda {who} ga sizning nomingizdan yuborilsinmi?", text[:400])
         if tool_name.startswith("mcp__"):
             pretty = tool_name.split("__")[-1].replace("_", " ")
             return f"{pretty} bajarilsinmi?", json.dumps(input_data, ensure_ascii=False)[:400]

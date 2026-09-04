@@ -19,7 +19,7 @@ from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
 
 from ..brain.agenda import Agenda, format_when, parse_when
 from ..brain.memory import Memory
-from . import channels, macos, media
+from . import channels, macos, media, telegram_user
 
 log = logging.getLogger("jarvis.tools")
 
@@ -33,6 +33,7 @@ READ_ONLY_TOOLS = [
     "recall", "search_memory",
     "list_projects", "list_tasks", "daily_brief",
     "list_contacts", "find_contact",
+    "telegram_chats", "telegram_read",
     "frontmost_app", "list_shortcuts",
 ]
 
@@ -408,6 +409,66 @@ def _system_tools(agenda: Agenda) -> list[Any]:
             return _fail(str(exc))
 
     @tool(
+        "telegram_chats",
+        "Shaxsiy Telegram akkauntdagi oxirgi chatlar: kim yozgan, nechta o'qilmagan "
+        "xabar bor. «Telegramda nima yangilik?» degan savolga shu bilan javob bering. "
+        "`faqat_oqilmagan` = ha bo'lsa, faqat o'qilmaganlar ko'rsatiladi.",
+        {"nechta": int, "faqat_oqilmagan": str},
+        annotations=READ_ONLY,
+    )
+    async def telegram_chats(args: dict[str, Any]) -> dict[str, Any]:
+        unread = str(args.get("faqat_oqilmagan") or "").strip().lower() in ("ha", "yes", "true", "1")
+        try:
+            chats = await telegram_user.list_chats(
+                limit=int(args.get("nechta") or 15), unread_only=unread
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(chats) if chats else _ok("Yangi xabar yo'q")
+
+    @tool(
+        "telegram_read",
+        "Bitta Telegram chatidagi oxirgi xabarlarni o'qiydi. `kim` — ism, @username "
+        "yoki telefon raqam. Javob yozishdan oldin shu bilan kontekstni oling.",
+        {"kim": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def telegram_read(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            chat = await telegram_user.read_chat(
+                str(args.get("kim", "")), limit=int(args.get("nechta") or 15)
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(chat)
+
+    @tool(
+        "telegram_send",
+        "Telegramda **foydalanuvchining o'z nomidan** xabar yuboradi. `kimga` — ism, "
+        "@username yoki telefon raqam. Matnni foydalanuvchi aytgandek yuboring; "
+        "o'zingizdan qo'shimcha yozmang. Bu amal qaytarib bo'lmaydi, shuning uchun "
+        "har safar tasdiq so'raladi.",
+        {"kimga": str, "matn": str},
+    )
+    async def telegram_send(args: dict[str, Any]) -> dict[str, Any]:
+        target = str(args.get("kimga", "")).strip()
+        text = str(args.get("matn", "")).strip()
+        if not target or not text:
+            return _fail("`kimga` va `matn` kerak")
+
+        # Saqlangan aloqada @username bo'lsa, undan foydalanamiz — ism bo'yicha
+        # qidirishdan ko'ra aniqroq.
+        contact = agenda.find_contact(target) if not target.startswith(("@", "+")) else None
+        if contact and contact.get("telegram"):
+            target = contact["telegram"]
+
+        try:
+            name = await telegram_user.send_as_me(target, text)
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Yuborildi: {name}")
+
+    @tool(
         "list_shortcuts",
         "Mavjud macOS Shortcuts qisqa yo'llari ro'yxati. Telefonda amal bajarish "
         "uchun avval shu ro'yxatdan mos qisqa yo'lni toping.",
@@ -455,6 +516,7 @@ def _system_tools(agenda: Agenda) -> list[Any]:
 
     return [notify, open_app, open_url, play_youtube, close_youtube, playpause,
             frontmost_app, send_message, send_telegram,
+            telegram_chats, telegram_read, telegram_send,
             list_shortcuts, run_shortcut, call_n8n]
 
 

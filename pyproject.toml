@@ -29,6 +29,8 @@ dependencies = [
 # Lokal (internetsiz) STT — Apple Silicon uchun tez
 local-stt = ["mlx-whisper>=0.4.0"]
 porcupine = ["pvporcupine>=3.0.0"]
+# Shaxsiy Telegram akkaunt (xabarlarni o'qish va o'z nomingizdan yozish)
+telegram = ["telethon>=1.36"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6"]
 
 [project.scripts]

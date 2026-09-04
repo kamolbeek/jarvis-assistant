@@ -541,6 +541,36 @@ async def check_telegram() -> Result:
         return Result(False, f"Telegram'ga ulanib bo'lmadi: {exc}")
 
 
+async def check_telegram_account() -> Result:
+    """Shaxsiy Telegram akkauntga kirilganmi?
+
+    Bot bilan bir xil emas: bot sizning chatlaringizni ko'rmaydi. Xabarlarni
+    o'qish va tanishlarga sizning nomingizdan yozish faqat shu ulanish orqali
+    ishlaydi.
+    """
+    from .tools import telegram_user
+
+    if not telegram_user.is_logged_in():
+        return Result(True, "Kirilmagan (ixtiyoriy) — xabarlarni o'qish va sizning\n"
+                            "nomingizdan yozish ishlamaydi. Yoqish uchun:\n"
+                            "  python -m jarvis telegram-login")
+    try:
+        who = await telegram_user.me()
+    except telegram_user.TelegramUserError as exc:
+        return Result(False, str(exc))
+    except Exception as exc:  # noqa: BLE001 — sabab foydalanuvchiga kerak
+        return Result(False, f"Telegram akkaunt tekshirilmadi: {exc}")
+    finally:
+        try:
+            await telegram_user.close()
+        except Exception:  # noqa: BLE001 — yopishdagi xato muhim emas
+            pass
+
+    return Result(True, f"Shaxsiy akkaunt: {who} — o'qiy oladi va sizning "
+                        f"nomingizdan yoza oladi\n(yuborishdan oldin har safar "
+                        f"tasdiq so'raydi)")
+
+
 def check_permissions() -> Result:
     """macOS ruxsatlari haqida eslatma (dasturiy tekshirib bo'lmaydi)."""
     if sys.platform != "darwin":
@@ -603,7 +633,8 @@ async def run_doctor() -> int:
     report("Claude Agent SDK", await check_brain(cfg))
 
     _header("Kanallar")
-    report("Telegram", await check_telegram())
+    report("Telegram (bot)", await check_telegram())
+    report("Telegram (shaxsiy akkaunt)", await check_telegram_account())
 
     print(f"\n{'─' * 58}")
     if failures == 0:

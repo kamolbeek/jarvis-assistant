@@ -577,6 +577,69 @@ voice:
     voice: "uz-UZ-SardorNeural"
 ```
 
+## Telegram: o'z akkauntingiz bilan
+
+Ikki xil Telegram ulanishi bor va ular chalkashtirilmasligi kerak.
+
+| | Bot (`@sizning_botingiz`) | **Shaxsiy akkaunt** |
+|---|---|---|
+| Kim nomidan yozadi | botning nomidan | **sizning nomingizdan** |
+| Kimga yoza oladi | faqat botga /start yozgan odamga | istalgan tanishingizga |
+| Chatlaringizni ko'radimi | yo'q | **ha** |
+| Nima uchun kerak | «ish tugadi» deb sizga xabar berish | «Ibrat nima yozdi?», «Ibratga yoz: juma muborak» |
+| Sozlash | `.env` da `TELEGRAM_BOT_TOKEN` | `python -m jarvis telegram-login` |
+
+Ya'ni «Jarvis, Ibratga yoz» degan gap faqat shaxsiy akkaunt orqali ishlaydi —
+bot buni qila olmaydi, chunki bot boshqa shaxs.
+
+### Ulash (bir marta, qo'lda)
+
+```bash
+pip install -e '.[telegram]'          # Telethon (MTProto kutubxonasi)
+python -m jarvis telegram-login
+```
+
+Buyruq ketma-ket so'raydi: **api_id**, **api_hash** (ikkalasi
+[my.telegram.org](https://my.telegram.org) → *API development tools* dan),
+telefon raqamingiz, Telegramdan kelgan **kod** va ikki bosqichli **parol**
+(agar yoqilgan bo'lsa).
+
+Bularning hammasini siz terminalga o'zingiz kiritasiz. Ular modelga
+ko'rsatilmaydi, jurnalga yozilmaydi va repozitoriyga tushmaydi: api_id/api_hash
+`~/.jarvis/telegram.json` (faqat siz o'qiy olasiz), seansning o'zi esa
+`~/.jarvis/telegram.session` da saqlanadi. **Seans fayli parolga teng** — uni
+hech kimga bermang.
+
+Tekshirish: `python -m jarvis doctor` → «Telegram (shaxsiy akkaunt)» qatorida
+kirilgan akkaunt ismi chiqadi.
+
+Bekor qilish: `python -m jarvis telegram-logout` — seans Telegram tomonida ham
+bekor qilinadi va fayl o'chiriladi.
+
+### Nima deyish mumkin
+
+| Gap | Nima bo'ladi |
+|---|---|
+| «Telegramda nima yangilik?» | o'qilmagan chatlarni sanab beradi |
+| «Ibrat nima yozdi?» | o'sha chatning oxirgi xabarlarini o'qib beradi |
+| «Ibratga yoz: juma muborak» | matnni o'qib beradi, **tasdiq so'raydi**, keyin yuboradi |
+
+### Nega har safar so'raydi
+
+Boshqa odamga ketgan xabarni qaytarib bo'lmaydi. Shuning uchun `telegram_send`
+xavfsizlik darvozasida alohida turadi:
+
+* `jarvis trust on` (tasdiqsiz rejim) bunga **ta'sir qilmaydi** — baribir so'raydi;
+* tasdiq «eslab qolinmaydi»: bitta xabarga rozilik bergan bo'lsangiz, keyingisi
+  uchun yana so'raladi;
+* savolda kim va **aynan qanday matn** ketishi ko'rinib turadi.
+
+O'qish (`telegram_chats`, `telegram_read`) esa tasdiq so'ramaydi — u o'z
+xabarlaringizni o'qish, qaytarib bo'ladigan amal.
+
+Diqqat: shaxsiy akkauntni avtomatlashtirish Telegram qoidalari bo'yicha ehtiyot
+talab qiladi. Ommaviy tarqatma yubormang — akkaunt cheklanishi mumkin.
+
 ## Xavfsizlik — eng muhim qism
 
 «Mensiz to'liq nazorat» — bu tizimning eng xavfli tomoni. Agent `rm -rf` yozsa
@@ -612,6 +675,8 @@ safety:
     Read: "allow"       # o'qish — qaytarib bo'ladi, so'ralmaydi
     Bash: "ask"         # shell — har safar tasdiq
     Write: "ask"        # fayl yozish — tasdiq
+    # Sizning nomingizdan Telegram xabari: `trust on` da ham so'raydi
+    mcp__jarvis__telegram_send: "ask"
   forbidden_patterns:   # bular umuman bajarilmaydi
     - "rm -rf /"
     - "sudo rm"
@@ -670,6 +735,7 @@ jarvis/
 │   └── prompts.py  o'zbekcha tizim ko'rsatmasi
 ├── safety/         xavfsizlik darvozasi va audit
 ├── tools/          xotira, agenda, macOS, Telegram, Shortcuts asboblari
+│   └── telegram_user.py  shaxsiy Telegram akkaunt (MTProto)
 ├── ui/             orb va telefon uchun HTTP + WebSocket server
 ├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
 ├── bus.py          hodisa shinasi
@@ -719,7 +785,8 @@ Ovoz bilan aytishingiz mumkin:
 | «Har kuni ertalab 9 da iLevel hisobotini tekshir» | takrorlanuvchi vazifa yaratadi |
 | «Loyihalarim qaysi bosqichda?» | har birining holati va keyingi qadamini aytadi |
 | «iLevel loyihasi test bosqichida, keyingi qadam — deploy» | loyiha holatini yangilaydi |
-| «Alisherga yoz, kechikaman de» | aloqani topib, Telegram/SMS yuboradi |
+| «Alisherga yoz, kechikaman de» | aloqani topib, Telegram/SMS yuboradi (tasdiqdan keyin) |
+| «Telegramda nima yangilik?» | o'qilmagan chatlarni o'qib beradi |
 | «Bugun nima ishlarim bor?» | kunlik ro'yxatni aytadi |
 | «Shu papkadagi kodni ko'r va testlarni ishga tushir» | o'qiydi, bajaradi, natijani aytadi |
 | «Roshkaning Ishondingmi qo'shig'ini qo'y» | YouTube'dan topib, brauzerda qo'yadi |

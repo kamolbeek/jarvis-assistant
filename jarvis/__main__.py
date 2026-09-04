@@ -20,6 +20,8 @@ Misollar:
   jarvis wake-test  Chaqiruv ballini o'lchash va chegarani sozlash
   jarvis mic-test   Mikrofonlarni yonma-yon o'lchash (qaysi biri toza signal beradi)
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
+  jarvis telegram-login   Shaxsiy Telegram akkauntga kirish (bir marta)
+  jarvis telegram-logout  Telegram seansini bekor qilish
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
   jarvis -v         Batafsil jurnal bilan
@@ -48,15 +50,23 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust"],
+        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust",
+                 "telegram-login", "telegram-logout"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
              "mic-test — mikrofonlarni o'lchash; "
+             "telegram-login / telegram-logout — shaxsiy Telegram akkaunt; "
              "trust on|off — tasdiq so'rashni o'chirish/yoqish",
     )
     parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
+
+    if args.command in ("telegram-login", "telegram-logout"):
+        logging.basicConfig(level=logging.ERROR)
+        from .telegramlogin import main as telegram_main
+
+        return telegram_main(["logout" if args.command == "telegram-logout" else "login"])
 
     if args.command == "trust":
         from .trust import apply
