@@ -181,6 +181,12 @@ qolsa, tizim o'zi qayta ko'taradi.
 tail -f ~/.jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
 ```
 
+**Terminalga qaytmaslik uchun.** Keyingi yangilanishlarni olish uchun
+Finder'da `scripts` papkasidagi **«Jarvis yangilash.command»** faylini ikki
+marta bosing — u yangilanishni oladi va Jarvis'ni qaytadan ko'taradi.
+(Birinchi marta macOS ochishdan bosh tortsa: faylni o'ng tugma bilan bosib
+«Open» ni tanlang — bir martalik tasdiq.)
+
 **Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *ishga tushiruvchi
 dastur* bo'yicha beradi. Terminaldan ishga tushirsangiz javobgar Terminal
 bo'ladi va ruxsat ishlaydi; `launchd` ostida esa javobgar boshqa va macOS
@@ -405,15 +411,27 @@ Agar Jarvis o'z ovozidan bo'linib ketsa (dinamik juda baland), `barge_in_margin`
 ni 3.0 ga ko'taring. Aksincha, sizni eshitmasa — 1.5 ga tushiring yoki
 quloqchin ishlating.
 
-### Sukut holati: 5 daqiqadan keyin o'zini bosadi
+### Sukut holati: ekranda hech narsa, lekin eshitib turadi
 
-Suhbat jimlik bilan tugaganda sahna ataylab ochiq qoladi — davom ettirishingiz
-mumkin va oyna har safar ochilib-yopilib turmasligi kerak. Lekin hech kim
-qaytmasa, u shu holida soatlab turmaydi: belgilangan vaqtdan keyin sahna
-yopiladi va orb xiralashadi.
+Kompyuterni yoqasiz — ekranda **hech narsa yo'q**. Orb ham, sahna ham
+ko'rinmaydi. Lekin Jarvis ishlab turadi va sizni eshitadi. «Hey Jarvis»
+deysiz — o'sha zahoti paydo bo'ladi.
+
+Xuddi shu holatga uch yo'l bilan qaytiladi:
+
+| | |
+|---|---|
+| **O'zi** | muloqotsiz 5 daqiqa o'tsa |
+| **Ovoz bilan** | «bekor qil», «cancel», «bo'ldi bas», «keyin gaplashamiz» |
+| **Tugma bilan** | `Esc` · `⌘M` · `⌘W` · `⌘⇧J` |
 
 Bu **o'chish emas**. Mikrofon ishlashda davom etadi, chaqiruv eshitilaveradi —
-«Hey Jarvis» deyilishi bilan hammasi qaytadi (orbni bosish ham yetadi).
+«Hey Jarvis» (yoki «Jarvis», «Salom Jarvis», qarsak, `⌘⇧J`) bilan hammasi
+qaytadi.
+
+`⌘M` ataylab faqat sahna ochiq turganda ushlanadi: u macOS'ning «oynani
+yig'ish» tugmasi va uni doimiy egallab olish butun tizimda o'sha tugmani
+buzardi.
 
 ```yaml
 # config/jarvis.yaml
@@ -424,17 +442,11 @@ conversation:
 Har qanday muloqot hisobni qaytadan boshlaydi: ovozli chaqiruv, qarsak,
 tugma, telefondan yozilgan matn.
 
-**Kutmasdan sukutga o'tkazish** — ikki yo'l, ikkalasi bir xil natija beradi:
+Boshqa ilovaga o'tganingizda (⌘Tab) oyna shunchaki yashirinadi — bu sukut
+emas, suhbat davom etishi mumkin. Sukutga faqat **ataylab yopganingizda**
+o'tadi.
 
-| Yo'l | Nima deysiz / bosasiz |
-|---|---|
-| Ovoz bilan | «bekor qil», «cancel», «bo'ldi bas», «keyin gaplashamiz» |
-| Tugma bilan | `Esc` · `⌘W` · `⌘⇧J` (ikkinchi marta) |
-
-Qaytarish uchun tugma kerak emas: «Hey Jarvis» yetadi.
-
-Boshqa ilovaga o'tganingizda oyna shunchaki yashirinadi — bu sukut emas,
-suhbat davom etishi mumkin. Sukutga faqat **ataylab yopganingizda** o'tadi.
+Orb doim ko'rinib tursin desangiz: `standby_after_sec: 0`.
 
 ### Salomlashuv: bir so'z
 

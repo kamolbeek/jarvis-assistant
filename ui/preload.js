@@ -1,5 +1,5 @@
 // Renderer bilan main jarayoni o'rtasidagi tor va xavfsiz ko'prik.
-// Renderer'ga Node API'si ochilmaydi — faqat quyidagi to'rtta funksiya.
+// Renderer'ga Node API'si ochilmaydi — faqat quyidagilar.
 
 const { contextBridge, ipcRenderer } = require("electron");
 
@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld("orb", {
 
   // Orb o'lchami — CSS shu qiymatdan foydalanadi.
   size: Number(process.env.JARVIS_ORB_SIZE) || 150,
+
+  // Sukut holatida orb butunlay yashiriladi — ekranda hech narsa turmasin.
+  // Oyna yopilmaydi, faqat ko'rinmaydi: WebSocket ochiq qoladi va chaqiruv
+  // kelishi bilan orb qaytadi.
+  setVisible: (value) => ipcRenderer.send("orb-visible", Boolean(value)),
 
   quit: () => ipcRenderer.send("quit"),
 

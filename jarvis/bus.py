@@ -49,6 +49,10 @@ class EventBus:
     _subscribers: list[Subscriber] = field(default_factory=list)
     _pending: dict[str, PendingConfirm] = field(default_factory=dict)
     state: State = State.IDLE
+    # Sukut holati holatlar qatoriga kirmaydi (yadro baribir IDLE da
+    # tinglaydi), lekin yangi ulangan mijoz uni bilishi kerak — aks holda
+    # orb yashiringan bo'lsa ham qaytadan chiqib qolardi.
+    standby_on: bool = False
 
     def subscribe(self, callback: Subscriber) -> Callable[[], None]:
         """Obuna bo'ladi. Qaytgan funksiyani chaqirib obunani bekor qilish mumkin."""
@@ -106,7 +110,8 @@ class EventBus:
         qiymat qo'shilmaydi — eski UI'lar buni e'tiborsiz qoldiradi va
         hech narsa buzilmaydi.
         """
-        await self.emit({"type": "standby", "on": bool(on)})
+        self.standby_on = bool(on)
+        await self.emit({"type": "standby", "on": self.standby_on})
 
     # --- Tasdiq oqimi ---
 

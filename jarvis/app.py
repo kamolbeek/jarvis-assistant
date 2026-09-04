@@ -202,6 +202,12 @@ class Jarvis:
         self._standby.touch(time.monotonic())
         await self.bus.set_state(State.IDLE)
 
+        # Kompyuter yoqilganda ekranda hech narsa turmasin: Jarvis jimgina
+        # tinglab turadi, chaqirilganda paydo bo'ladi. Taymer o'chirilgan
+        # bo'lsa (standby_after_sec: 0), demak orb doim ko'rinishi kerak.
+        if self._standby.enabled:
+            await self._enter_standby("ishga tushdi")
+
         stats = self.memory.stats()
         log.info(
             "Jarvis tayyor — %d fakt, %d vazifa, %d loyiha",

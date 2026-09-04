@@ -98,6 +98,11 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Orb sukut holatida yashiriladi, lekin uning JS'i ishlashda davom
+      // etishi SHART: aynan o'sha yadro bilan WebSocket'ni ushlab turadi va
+      // chaqiruvni eshitib, orbni qaytaradi. Electron ko'rinmaydigan
+      // oynaning taymerlarini bo'g'adi — buni o'chiramiz.
+      backgroundThrottling: false,
     },
   });
 
@@ -224,7 +229,8 @@ function createDesktopWindow() {
     // sahifa JS'i ishga tushmasa ham keladi.
     deskWin.webContents.on("before-input-event", (event, input) => {
       if (input.type !== "keyDown") return;
-      const quit = input.key === "Escape" || (input.meta && input.key.toLowerCase() === "w");
+      const key = input.key.toLowerCase();
+      const quit = input.key === "Escape" || (input.meta && (key === "w" || key === "m"));
       if (quit) {
         event.preventDefault();
         dismissDesktop();
@@ -236,20 +242,27 @@ function createDesktopWindow() {
   startWeather();
 }
 
-// Esc faqat HUD ochiq turganda global tugma bo'ladi. Global — chunki oyna
-// fokusda bo'lmasligi yoki sahifa javob bermasligi mumkin.
-let escapeBound = false;
+// Yopish tugmalari FAQAT HUD ochiq turganda global bo'ladi. Global —
+// chunki oyna fokusda bo'lmasligi yoki sahifa javob bermasligi mumkin.
+//
+// Nega faqat o'shanda: ⌘M — macOS'ning "oynani yig'ish" tugmasi. Uni doimiy
+// egallab olsak, butun tizimda o'sha tugma buzilardi. HUD ochiq turganda
+// esa yig'ishning ma'nosi yo'q, shuning uchun vaqtincha o'zimizga olamiz.
+const DISMISS_KEYS = ["Escape", "Command+M"];
+let boundKeys = [];
 
-function bindEscape() {
-  if (escapeBound) return;
-  escapeBound = globalShortcut.register("Escape", dismissDesktop);
-  if (!escapeBound) console.warn("Esc ro'yxatdan o'tmadi — oynani ⌘⇧J bilan yoping");
+function bindDismissKeys() {
+  if (boundKeys.length) return;
+  for (const key of DISMISS_KEYS) {
+    if (globalShortcut.register(key, dismissDesktop)) boundKeys.push(key);
+    else console.warn(`${key} ro'yxatdan o'tmadi`);
+  }
+  if (!boundKeys.length) console.warn("Yopish tugmalari band — oynani ⌘⇧J bilan yoping");
 }
 
-function releaseEscape() {
-  if (!escapeBound) return;
-  globalShortcut.unregister("Escape");
-  escapeBound = false;
+function releaseDismissKeys() {
+  for (const key of boundKeys) globalShortcut.unregister(key);
+  boundKeys = [];
 }
 
 // Ochilgandan keyin shuncha vaqt ichida kelgan blur e'tiborga olinmaydi.
@@ -273,11 +286,11 @@ function showDesktop() {
     // Renderer yoqilish animatsiyasini noldan boshlaydi.
     deskWin.webContents.send("desk-visible");
   }
-  bindEscape();
+  bindDismissKeys();
 }
 
 function hideDesktop() {
-  releaseEscape();
+  releaseDismissKeys();
   if (deskWin && !DESK_AMBIENT && deskWin.isVisible()) deskWin.hide();
 }
 
@@ -298,6 +311,16 @@ function dismissDesktop() {
   hideDesktop();
   if (deskWin && !deskWin.isDestroyed()) deskWin.webContents.send("desk-dismissed");
 }
+
+// Sukut holatida orb ekranda umuman turmaydi. Oyna yopilmaydi — faqat
+// yashiriladi, chunki uning ichidagi WebSocket chaqiruvni kutib turadi.
+ipcMain.on("orb-visible", (_event, visible) => {
+  if (!win || win.isDestroyed()) return;
+  // `showInactive` — orb fokus tortmasligi kerak, siz ishlayotgan oyna
+  // oldinda qolsin.
+  if (visible) win.showInactive();
+  else win.hide();
+});
 
 ipcMain.on("desk-show", showDesktop);
 ipcMain.on("desk-hide", hideDesktop);

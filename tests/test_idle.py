@@ -6,6 +6,7 @@ mantiq alohida modulda: uni mikrofonsiz ham, oynasiz ham sinash mumkin.
 
 from __future__ import annotations
 
+from jarvis.bus import EventBus
 from jarvis.idle import StandbyWatch
 
 
@@ -90,3 +91,25 @@ def test_remaining_counts_down_and_never_goes_negative():
     assert watch.remaining(1000.0) == 300
     assert watch.remaining(1100.0) == 200
     assert watch.remaining(1e9) == 0.0
+
+
+# --- Shina: yangi ulangan mijoz sukut holatini bilishi kerak ---
+
+
+async def test_bus_remembers_standby_for_new_clients():
+    """Kompyuter yoqilganda orb sukutda ulanadi — u chiqib qolmasligi kerak."""
+    bus = EventBus()
+    seen: list[dict] = []
+
+    async def record(event: dict) -> None:
+        seen.append(event)
+
+    bus.subscribe(record)
+
+    await bus.standby(True)
+    assert bus.standby_on is True
+    assert seen[-1] == {"type": "standby", "on": True}
+
+    await bus.standby(False)
+    assert bus.standby_on is False
+    assert seen[-1] == {"type": "standby", "on": False}

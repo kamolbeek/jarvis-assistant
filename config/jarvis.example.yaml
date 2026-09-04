@@ -102,7 +102,12 @@ conversation:
   # deyilishi bilan hammasi qaytadi. 0 — hech qachon so'nmasin.
   #
   # «Bekor qil» (yoki «cancel», «bo'ldi bas») deyilsa, vaqt tugashi
-  # kutilmaydi — Jarvis darhol sukutga o'tadi.
+  # kutilmaydi — Jarvis darhol sukutga o'tadi. Tugmalar ham xuddi shunday:
+  # Esc, ⌘M, ⌘W, ⌘⇧J.
+  #
+  # Sukutda orb ekranda umuman ko'rinmaydi. Kompyuter yoqilganda ham
+  # shu holatda boshlanadi: hech narsa turmaydi, lekin tinglaydi.
+  # 0 qilsangiz, sukut butunlay o'chadi va orb doim ko'rinib turadi.
   standby_after_sec: 300           # 5 daqiqa
 
   # Jarvis gapirayotganda uni bo'lish. Chegara o'zi moslashadi: quloqchinda
