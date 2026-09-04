@@ -48,10 +48,24 @@ class StandbyWatch:
         return False
 
     def due(self, now: float) -> bool:
-        """Sukutga o'tish vaqti keldimi? Faqat bir marta True qaytaradi."""
+        """Sukutga o'tish vaqti keldimi?
+
+        Faqat savol — hech narsani o'zgartirmaydi. O'tkazish `force()` bilan
+        bo'ladi, chunki sukutga vaqt tugagani uchun ham, «bekor qil» degani
+        uchun ham o'tiladi va ikkala yo'l bitta joydan o'tishi kerak.
+        """
         if not self.enabled or self._on:
             return False
-        if now - self._last < self.after_sec:
+        return now - self._last >= self.after_sec
+
+    def force(self, now: float) -> bool:
+        """Darhol sukutga o'tkazadi («bekor qil» aytilganda).
+
+        Allaqachon sukutda bo'lsa False — sahna ikki marta yopilmasin.
+        Bu yerda `after_sec` tekshirilmaydi: foydalanuvchi aniq aytdi.
+        """
+        self._last = now
+        if self._on:
             return False
         self._on = True
         return True

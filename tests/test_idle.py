@@ -22,23 +22,43 @@ def test_goes_to_standby_after_the_timeout():
     watch.touch(1000.0)
 
     assert watch.due(1000.0 + 300) is True
+    assert watch.force(1000.0 + 300) is True
     assert watch.on is True
 
 
 def test_standby_is_announced_only_once():
-    """Ikkinchi tekshiruv yana «o'tdi» demasligi kerak — HUD qayta-qayta yopilmasin."""
+    """Sukutga o'tgach, taymer yana «o'tdi» demasligi kerak — sahna bir marta yopiladi."""
     watch = StandbyWatch(after_sec=60)
     watch.touch(0.0)
+    watch.force(100.0)
 
-    assert watch.due(100.0) is True
     assert watch.due(200.0) is False
     assert watch.due(9999.0) is False
+    assert watch.force(9999.0) is False, "ikkinchi marta yopish buyrug'i berilmaydi"
+
+
+def test_cancel_goes_to_standby_immediately():
+    """«Bekor qil» — vaqt tugashini kutmaydi."""
+    watch = StandbyWatch(after_sec=300)
+    watch.touch(1000.0)
+
+    assert watch.due(1001.0) is False, "hali vaqti kelmagan"
+    assert watch.force(1001.0) is True
+    assert watch.on is True
+
+
+def test_cancel_works_even_when_standby_is_disabled():
+    """Taymer o'chirilgan bo'lsa ham, aniq aytilgan «bekor qil» ishlaydi."""
+    watch = StandbyWatch(after_sec=0)
+
+    assert watch.force(5.0) is True
+    assert watch.on is True
 
 
 def test_activity_wakes_it_up():
     watch = StandbyWatch(after_sec=60)
     watch.touch(0.0)
-    watch.due(100.0)
+    watch.force(100.0)
 
     assert watch.touch(101.0) is True, "sukutdan qaytgani bir marta bildiriladi"
     assert watch.on is False

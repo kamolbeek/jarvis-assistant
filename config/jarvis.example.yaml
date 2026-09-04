@@ -88,6 +88,11 @@ conversation:
   follow_up_sec: 8                 # javobdan keyingi tinglash oynasi
   max_turns: 12                    # bitta suhbatdagi eng ko'p navbat
 
+  # Chaqirilganda aytiladigan javob — ro'yxatdan tasodifiy bittasi.
+  # Bu javob emas, «eshitdim» degan belgi: kuniga o'nlab marta
+  # eshitiladi, shuning uchun qisqa bo'lgani ma'qul.
+  greetings: ["Aha.", "Labbay.", "Ha."]
+
   # Sukut holati. Suhbat jimlik bilan tugasa, sahna ataylab ochiq qoladi —
   # foydalanuvchi davom ettirishi mumkin. Lekin hech kim qaytmasa, u shu
   # holida soatlab turmasligi kerak: shuncha soniyadan keyin sahna yopiladi
@@ -95,6 +100,9 @@ conversation:
   #
   # Bu "o'chish" emas: mikrofon ishlashda davom etadi va «Hey Jarvis»
   # deyilishi bilan hammasi qaytadi. 0 — hech qachon so'nmasin.
+  #
+  # «Bekor qil» (yoki «cancel», «bo'ldi bas») deyilsa, vaqt tugashi
+  # kutilmaydi — Jarvis darhol sukutga o'tadi.
   standby_after_sec: 300           # 5 daqiqa
 
   # Jarvis gapirayotganda uni bo'lish. Chegara o'zi moslashadi: quloqchinda

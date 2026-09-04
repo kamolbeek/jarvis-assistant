@@ -424,6 +424,21 @@ conversation:
 Har qanday muloqot hisobni qaytadan boshlaydi: ovozli chaqiruv, qarsak,
 tugma, telefondan yozilgan matn.
 
+**Kutmasdan sukutga o'tkazish:** «bekor qil» (yoki «cancel», «bo'ldi bas»,
+«keyin gaplashamiz») deng — Jarvis «Xo'p» deb sahnani darhol yopadi. Qaytarish
+uchun tugma kerak emas: «Hey Jarvis» yetadi.
+
+### Salomlashuv: bir so'z
+
+Chaqirilganda aytiladigan javob — bu javob emas, «eshitdim» degan belgi.
+Kuniga o'nlab marta eshitiladi, shuning uchun u ataylab bir so'z: **«Aha»**,
+«Labbay», «Ha». O'zgartirmoqchi bo'lsangiz:
+
+```yaml
+conversation:
+  greetings: ["Aha.", "Labbay.", "Ha."]
+```
+
 ## Telefonda ishlatish
 
 Boshidan aniq aytish kerak: **iPhone'da fon rejimida «Hey Jarvis» deb uyg'otish

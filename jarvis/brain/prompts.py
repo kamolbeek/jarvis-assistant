@@ -108,24 +108,24 @@ def build_system_prompt(
     return prompt
 
 
-# Uyg'onganda aytiladigan qisqa javoblar — har safar bir xil bo'lmasligi uchun.
+# Uyg'onganda aytiladigan javob. Qasddan bir so'z: chaqiruvdan keyingi
+# salomlashuv — bu javob emas, «eshitdim» degan belgi. Siri ham shunday
+# qiladi. Uzun jumla har safar bir necha soniyani yeydi va tez orada
+# jahlni chiqaradi, chunki uni kuniga o'nlab marta eshitasiz.
 GREETINGS = (
-    "Buyrug'ingizni kutyapman.",
-    "Labbay?",
-    "Eshitaman.",
-    "Xizmatdaman.",
-    "Ha, tinglayapman.",
+    "Aha.",
+    "Labbay.",
+    "Ha.",
 )
 
-# Qarsak bilan uyg'otilganda — Iron Man'dagidek, biroz rasmiyroq.
+# Qarsak bilan uyg'otilganda — xuddi shunday qisqa.
 CLAP_GREETINGS = (
-    "Buyrug'ingizni kutyapman.",
+    "Aha.",
     "Tayyorman.",
-    "Xizmatingizdaman.",
 )
 
-# Birinchi marta ishga tushganda.
-FIRST_GREETING = "Assalomu alaykum, {user}. Men {name}man. Bugun nimada yordam beray?"
+# Birinchi marta ishga tushganda — bir marta, shuning uchun ismi aytiladi.
+FIRST_GREETING = "Assalomu alaykum, {user}. Tinglayman."
 
 # Tushunarsiz yoki bo'sh audio bo'lganda.
 NOT_UNDERSTOOD = (
@@ -133,12 +133,12 @@ NOT_UNDERSTOOD = (
     "Tushunmadim, qaytaring iltimos.",
 )
 
-# Foydalanuvchi suhbatni yakunlaganda. Qisqa bo'lishi kerak — bu javob emas,
-# xayrlashuv, va sahna shu paytda yopiladi.
+# Foydalanuvchi suhbatni yakunlaganda. Bu javob emas, xayrlashuv —
+# va sahna shu paytda yopilib, Jarvis sukutga o'tadi.
 FAREWELLS = (
-    "Xo'p, shu yerda to'xtaymiz.",
-    "Bo'ldi. Kerak bo'lsam chaqiring.",
-    "Xayr. Shu yerdaman.",
+    "Xo'p.",
+    "Bo'ldi.",
+    "Xayr.",
 )
 
 # Xatolik yuz berganda.

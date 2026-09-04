@@ -555,10 +555,16 @@ class Jarvis:
 
     async def _maybe_standby(self) -> None:
         """Vaqti kelgan bo'lsa, sukut holatiga o'tadi."""
-        if not self._standby.due(time.monotonic()):
+        if self._standby.due(time.monotonic()):
+            await self._enter_standby(
+                f"{self._standby.after_sec / 60:.0f} daqiqa muloqot bo'lmadi"
+            )
+
+    async def _enter_standby(self, reason: str) -> None:
+        """Sahnani yopib, orbni xiralashtiradi. Tinglash davom etadi."""
+        if not self._standby.force(time.monotonic()):
             return
-        log.info("Sukut holati: %.0f daqiqa muloqot bo'lmadi",
-                 self._standby.after_sec / 60)
+        log.info("Sukut holati: %s", reason)
         await self.bus.hud("hide")
         await self.bus.standby(True)
 
@@ -586,11 +592,21 @@ class Jarvis:
                 )
             )
         else:
-            # Qarsak bilan chaqirilganda kinodagidek rasmiyroq javob beramiz.
-            pool = CLAP_GREETINGS if source == "qarsak" else GREETINGS
-            await self._speak(random.choice(pool))
+            await self._speak(random.choice(self._greetings(source)))
 
         await self._converse()
+
+    def _greetings(self, source: str) -> list[str]:
+        """Chaqirilganda aytiladigan javoblar.
+
+        Sozlamadagi ro'yxat ustun turadi — bu eng ko'p eshitiladigan jumla,
+        shuning uchun uni o'zgartirish uchun kodga tegish kerak emas.
+        """
+        custom = self._talk.get("greetings")
+        if isinstance(custom, list) and custom:
+            return [str(item) for item in custom]
+        # Qarsak bilan chaqirilganda kinodagidek biroz boshqacha javob.
+        return list(CLAP_GREETINGS if source == "qarsak" else GREETINGS)
 
     async def _converse(self) -> None:
         """Tinglash -> javob -> yana tinglash.
@@ -646,8 +662,11 @@ class Jarvis:
         # Sahna faqat aniq yakunlanganda yopiladi. Jimlik bilan tugagan
         # suhbatdan keyin oyna ochiq qoladi — foydalanuvchi davom ettirishi
         # mumkin va u har safar qaytadan ochilib-yopilib turmasligi kerak.
+        #
+        # «Bekor qil» esa aniq buyruq: taymer tugashini kutmasdan darhol
+        # sukutga o'tamiz. Chaqiruv baribir eshitilaveradi.
         if closed:
-            await self.bus.hud("hide")
+            await self._enter_standby("bekor qilindi")
         await self.bus.set_state(State.IDLE)
 
     def _patience(self, turn: int) -> float:
