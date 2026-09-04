@@ -188,6 +188,7 @@ bosiladigan fayl bor:
 |---|---|
 | **Jarvis yangilash.command** | yangilanishni oladi va Jarvis'ni qayta ko'taradi |
 | **Jarvis holati.command** | ishlayaptimi, ishlamasa sababi nimada |
+| **Jarvis ishga tushirish.command** | Terminal orqali ishga tushiradi (mikrofon ruxsati muammosida) |
 
 (Birinchi marta macOS ochishdan bosh tortsa: faylni o'ng tugma bilan bosib
 «Open» ni tanlang — bir martalik tasdiq.)
@@ -214,10 +215,18 @@ kelsa, HUD'da mikrofon siferblati qizarib, jurnalga sabab yoziladi (haqiqiy
 jimlikda ham fon shovqini bo'ladi — mutlaq nol aynan bloklanganning
 belgisi).
 
-Tuzatish: **Tizim sozlamalari → Maxfiylik va xavfsizlik → Mikrofon** ro'yxatiga
-Python'ni qo'shing. Ro'yxatda `+` bo'lmasa, Finder'da `⌘⇧G` bilan yo'lni
-oching va binary'ni ro'yxatga sudrab tashlang. Yo'lni Jarvis jurnalda
-ko'rsatadi.
+Tuzatish: **Tizim sozlamalari → Maxfiylik va xavfsizlik → Mikrofon**
+ro'yxatida Python yoqilgan bo'lishi kerak.
+
+Diqqat: bu ro'yxatga **qo'lda qo'shib bo'lmaydi** — unda `+` tugmasi yo'q.
+Unda faqat mikrofonni haqiqatan **so'ragan** dasturlar paydo bo'ladi. Ya'ni
+Python u yerda yo'q bo'lsa, demak yadro hali biror marta ham to'g'ri ishga
+tushmagan (yoki eski, bash orqali ishlaydigan sozlama qolgan).
+
+Ishonchli zaxira yo'l — **«Jarvis ishga tushirish.command»**: u Terminal
+orqali ishga tushadi, Terminalda esa mikrofon ruxsati bor. Uni *Tizim
+sozlamalari → Asosiy → Kirish elementlari* ga qo'shsangiz, kompyuter
+yoqilganda o'zi ishga tushadi.
 
 Vaqtinchalik yechim — terminaldan ishlatish (u ruxsatga ega):
 
