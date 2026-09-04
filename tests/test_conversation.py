@@ -14,6 +14,7 @@ import pytest
 
 from jarvis.app import Jarvis
 from jarvis.bus import EventBus, State
+from jarvis.idle import StandbyWatch
 
 
 class FakeTalker:
@@ -25,6 +26,9 @@ class FakeTalker:
         self.jarvis._shutdown = asyncio.Event()
         self.jarvis._interrupted = False
         self.jarvis._talk = talk
+        # Suhbat «bekor qil» bilan tugasa, yadro sukut holatiga o'tadi —
+        # taymer holati shu yerda ham kerak.
+        self.jarvis._standby = StandbyWatch(after_sec=300)
 
         self.heard = list(heard)
         self.handled: list[str] = []
@@ -158,6 +162,9 @@ class Recorder:
     def hud_actions(self) -> list[str]:
         return [e["action"] for e in self.events if e.get("type") == "hud"]
 
+    def standby_events(self) -> list[bool]:
+        return [e["on"] for e in self.events if e.get("type") == "standby"]
+
 
 @pytest.mark.asyncio
 async def test_voice_command_ends_and_closes_the_scene():
@@ -168,6 +175,10 @@ async def test_voice_command_ends_and_closes_the_scene():
 
     assert talker.handled == ["bugun nima ishlarim bor"], "yakun miyaga bormasligi kerak"
     assert recorder.hud_actions() == ["hide"]
+    # «Bekor qil» — bu shunchaki oynani yopish emas: Jarvis sukutga o'tadi,
+    # ya'ni orb ham ekrandan ketadi. Taymer tugashini kutmaydi.
+    assert recorder.standby_events() == [True]
+    assert talker.jarvis._standby.on is True
 
 
 @pytest.mark.asyncio
@@ -179,6 +190,8 @@ async def test_silence_leaves_the_scene_open():
     await talker.run()
 
     assert recorder.hud_actions() == []
+    assert recorder.standby_events() == [], "jimlik sukutga o'tkazmaydi"
+    assert talker.jarvis._standby.on is False
 
 
 @pytest.mark.asyncio

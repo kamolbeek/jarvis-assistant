@@ -181,11 +181,20 @@ qolsa, tizim o'zi qayta ko'taradi.
 tail -f ~/.jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
 ```
 
-**Terminalga qaytmaslik uchun.** Keyingi yangilanishlarni olish uchun
-Finder'da `scripts` papkasidagi **«Jarvis yangilash.command»** faylini ikki
-marta bosing — u yangilanishni oladi va Jarvis'ni qaytadan ko'taradi.
+**Terminalga qaytmaslik uchun** `scripts` papkasida ikkita ikki marta
+bosiladigan fayl bor:
+
+| Fayl | Nima qiladi |
+|---|---|
+| **Jarvis yangilash.command** | yangilanishni oladi va Jarvis'ni qayta ko'taradi |
+| **Jarvis holati.command** | ishlayaptimi, ishlamasa sababi nimada |
+
 (Birinchi marta macOS ochishdan bosh tortsa: faylni o'ng tugma bilan bosib
 «Open» ni tanlang — bir martalik tasdiq.)
+
+Mikrofon bloklangan bo'lsa, orb **yashirilmaydi**: u ekranda qolib, qizil
+siferblat bilan sababni ko'rsatadi. Ekranda hech narsa yo'q va sabab ham
+yo'q degan holat bo'lmasligi kerak.
 
 **Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *ishga tushiruvchi
 dastur* bo'yicha beradi. Terminaldan ishga tushirsangiz javobgar Terminal

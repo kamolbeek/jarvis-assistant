@@ -496,23 +496,27 @@ async def _run_mic_check(value: int):
     jarvis.health = Health(jarvis.bus.emit)
     jarvis.mic = _SilentMic(value)
 
-    await jarvis._check_mic_delivers_audio(seconds=0.1)
-    return jarvis.health.snapshot(), System
+    ok = await jarvis._check_mic_delivers_audio(seconds=0.1)
+    return jarvis.health.snapshot(), System, ok
 
 
 @pytest.mark.asyncio
 async def test_silent_mic_is_reported_as_down():
-    snapshot, System = await _run_mic_check(0)
+    snapshot, System, ok = await _run_mic_check(0)
 
     mic = next(s for s in snapshot["systems"] if s["id"] == System.MIC.value)
     assert mic["status"] == "down"
     assert "macOS" in (mic.get("detail") or ""), "sabab aytilishi kerak"
+    # Bu javob orbni ekranda qoldirish uchun ishlatiladi: nosozlik
+    # yashiringan holat ortida ko'rinmay qolmasligi kerak.
+    assert ok is False
 
 
 @pytest.mark.asyncio
 async def test_working_mic_is_left_alone():
     """Ovoz kelayotgan bo'lsa, tekshiruv hech nimaga tegmaydi."""
-    snapshot, System = await _run_mic_check(120)
+    snapshot, System, ok = await _run_mic_check(120)
 
     mic = next(s for s in snapshot["systems"] if s["id"] == System.MIC.value)
     assert mic["status"] != "down"
+    assert ok is True

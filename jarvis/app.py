@@ -196,7 +196,7 @@ class Jarvis:
         await self.brain.start()
         await self.scheduler.start()
         await self.mic.start()
-        await self._check_mic_delivers_audio()
+        mic_ok = await self._check_mic_delivers_audio()
         await self._mark_ready()
         self._heartbeat = asyncio.create_task(self.health.heartbeat())
         self._standby.touch(time.monotonic())
@@ -205,8 +205,16 @@ class Jarvis:
         # Kompyuter yoqilganda ekranda hech narsa turmasin: Jarvis jimgina
         # tinglab turadi, chaqirilganda paydo bo'ladi. Taymer o'chirilgan
         # bo'lsa (standby_after_sec: 0), demak orb doim ko'rinishi kerak.
-        if self._standby.enabled:
+        #
+        # Lekin mikrofon ishlamayotgan bo'lsa — yashirinmaymiz. Aks holda
+        # eng yomon holat chiqadi: ekranda hech narsa yo'q, chaqiruvga javob
+        # yo'q va sababni ko'rsatadigan joy ham yo'q. Shunday paytda orb
+        # ekranda qolib, qizil siferblat bilan nima buzilganini aytadi.
+        if self._standby.enabled and mic_ok:
             await self._enter_standby("ishga tushdi")
+        elif not mic_ok:
+            log.warning("Mikrofon ishlamayapti — orb ekranda qoldirildi "
+                        "(sabab ko'rinib tursin)")
 
         stats = self.memory.stats()
         log.info(
@@ -221,8 +229,8 @@ class Jarvis:
 
         await self.bus.log_line("Jarvis tayyor. «Hey Jarvis» deb chaqiring.")
 
-    async def _check_mic_delivers_audio(self, seconds: float = 1.0) -> None:
-        """Mikrofon ochildi — lekin ovoz kelyaptimi?
+    async def _check_mic_delivers_audio(self, seconds: float = 1.0) -> bool:
+        """Mikrofon ochildi — lekin ovoz kelyaptimi? Ovoz kelsa True.
 
         macOS mikrofon ruxsatini ishga tushiruvchi dastur bo'yicha beradi.
         Terminaldan ishga tushirilganda javobgar Terminal bo'ladi va ruxsat
@@ -250,7 +258,7 @@ class Jarvis:
             pass
 
         if loudest > 0:
-            return
+            return True
 
         reason = "macOS mikrofonni bloklayapti (faqat nol keladi)"
         log.error(
@@ -264,6 +272,7 @@ class Jarvis:
         )
         await self.health.mark(System.MIC, Status.DOWN, reason)
         await self.bus.log_line(f"Mikrofon: {reason}", level="error")
+        return False
 
     async def _mark_ready(self) -> None:
         """Ishga tushgach har bir bo'g'inning boshlang'ich holatini belgilaydi.
