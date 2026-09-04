@@ -36,6 +36,14 @@ ga kirib, {BOLD}api_id{RESET} va {BOLD}api_hash{RESET} ni oling.
 {DIM}Quyidagilarni faqat siz kiritasiz. Ular modelga ko'rinmaydi.{RESET}
 """
 
+# Kod necha marta so'raladi.
+CODE_ATTEMPTS = 3
+
+CODE_HINT = f"""\
+{YELLOW}Kod SMS bilan kelmaydi.{RESET} U Telegram ilovasining o'zida, ko'k belgili
+rasmiy {BOLD}«Telegram»{RESET} chatiga keladi (arxivda ham bo'lishi mumkin).
+{DIM}Har urinishda yangi kod yuboriladi — eski xabardagi kod ishlamaydi.{RESET}"""
+
 
 def _ask(prompt: str, secret: bool = False) -> str:
     try:
@@ -94,13 +102,35 @@ async def _login() -> int:
         if not phone.startswith("+"):
             print(f"{YELLOW}Raqamni xalqaro ko'rinishda yozing: +998...{RESET}")
         await client.send_code_request(phone)
+        print(CODE_HINT)
 
-        code = _ask("Telegramdan kelgan kod: ")
-        try:
-            await client.sign_in(phone, code)
-        except errors.SessionPasswordNeededError:
-            password = _ask("Ikki bosqichli parol: ", secret=True)
-            await client.sign_in(password=password)
+        # Kod xato bo'lsa yoki eskirsa, butun buyruqni qaytadan boshlash
+        # shart emas — bu yerda eng ko'p adashiladi (kod SMS emas, Telegram
+        # ilovasiga keladi va har urinishda yangisi yuboriladi).
+        for attempt in range(1, CODE_ATTEMPTS + 1):
+            last = attempt == CODE_ATTEMPTS
+            code = _ask("Telegramdan kelgan kod: ")
+            try:
+                await client.sign_in(phone, code)
+                break
+            except errors.SessionPasswordNeededError:
+                password = _ask("Ikki bosqichli parol: ", secret=True)
+                await client.sign_in(password=password)
+                break
+            except (errors.PhoneCodeInvalidError, errors.PhoneCodeEmptyError):
+                print(f"{YELLOW}Kod noto'g'ri. Telegramdagi eng oxirgi xabarga "
+                      f"qarang.{RESET}")
+                if last:
+                    print(f"{RED}Kod uch marta to'g'ri kelmadi. Buyruqni qaytadan "
+                          f"bering.{RESET}", file=sys.stderr)
+                    return 1
+            except errors.PhoneCodeExpiredError:
+                if last:
+                    print(f"{RED}Kodning muddati o'tdi. Buyruqni qaytadan bering.{RESET}",
+                          file=sys.stderr)
+                    return 1
+                print(f"{YELLOW}Kodning muddati o'tibdi — yangisini yubordim.{RESET}")
+                await client.send_code_request(phone)
 
         user = await client.get_me()
         tg.save_credentials(api_id, api_hash)
@@ -115,12 +145,6 @@ async def _login() -> int:
               f"«Ibratga yoz: juma muborak».{RESET}\n")
         return 0
 
-    except errors.PhoneCodeInvalidError:
-        print(f"{RED}Kod noto'g'ri. Qaytadan urinib ko'ring.{RESET}", file=sys.stderr)
-        return 1
-    except errors.PhoneCodeExpiredError:
-        print(f"{RED}Kodning muddati o'tdi. Buyruqni qaytadan bering.{RESET}", file=sys.stderr)
-        return 1
     except errors.PasswordHashInvalidError:
         print(f"{RED}Ikki bosqichli parol noto'g'ri.{RESET}", file=sys.stderr)
         return 1
