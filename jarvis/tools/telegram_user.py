@@ -52,6 +52,17 @@ class TelegramUserError(RuntimeError):
     """Shaxsiy Telegram akkaunti bilan ishlab bo'lmadi."""
 
 
+def _load_dotenv() -> None:
+    """Repozitoriydagi `.env` ni muhitga qo'yadi (mavjud qiymatlar ustun)."""
+    try:
+        from dotenv import load_dotenv  # noqa: PLC0415 — faqat kerak bo'lganda
+
+        from ..config import REPO_ROOT  # noqa: PLC0415 — aylanma importdan qochish
+    except ImportError:  # pragma: no cover — muhitga bog'liq
+        return
+    load_dotenv(REPO_ROOT / ".env")
+
+
 def _import_telethon() -> Any:
     try:
         import telethon  # noqa: PLC0415 — ixtiyoriy bog'liqlik
@@ -61,7 +72,14 @@ def _import_telethon() -> Any:
 
 
 def load_credentials() -> tuple[int, str]:
-    """api_id / api_hash ni topadi: avval muhit o'zgaruvchilari, keyin fayl."""
+    """api_id / api_hash ni topadi: avval muhit o'zgaruvchilari, keyin fayl.
+
+    `.env` ni ham o'qiymiz: `.env.example` da bu ikki qator turibdi, ya'ni
+    odam ularni o'sha yerga yozishi tabiiy. Yadro `.env` ni o'zi yuklaydi,
+    lekin `telegram-login` yadrosiz ishlaydi.
+    """
+    _load_dotenv()
+
     api_id = os.environ.get("TELEGRAM_API_ID", "").strip()
     api_hash = os.environ.get("TELEGRAM_API_HASH", "").strip()
 
