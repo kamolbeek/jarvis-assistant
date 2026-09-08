@@ -59,12 +59,36 @@ class _FakeClient:
                                        else [_dialog(n) for n in names])
         self.iter_messages = _AsyncList([])
         self.sent: list[tuple[str, str]] = []
+        self.edited: list[tuple[str, int, str]] = []
+        self.removed: list[tuple[str, list[int], bool]] = []
+        self._next_id = 101
 
     async def get_entity(self, target: str):
         return SimpleNamespace(first_name=target.lstrip("@"), last_name=None, username=None, id=1)
 
     async def send_message(self, entity, text):
         self.sent.append((entity, text))
+        message = SimpleNamespace(id=self._next_id)
+        self._next_id += 1
+        return message
+
+    async def edit_message(self, entity, message_id, text):
+        self.edited.append((entity, message_id, text))
+
+    async def delete_messages(self, entity, ids, revoke=False):
+        self.removed.append((entity, list(ids), revoke))
+
+
+def _wire(monkeypatch, names: list[str]) -> _FakeClient:
+    """Soxta mijozni ulaydi va oldingi testdan qolgan xabarni tozalaydi."""
+    client = _FakeClient(names)
+
+    async def fake_client():
+        return client
+
+    monkeypatch.setattr(tg, "get_client", fake_client)
+    monkeypatch.setattr(tg, "_last_sent", None)
+    return client
 
 
 # --- Manzilni aniqlash -------------------------------------------------------
@@ -188,8 +212,12 @@ def _autoapprove(gate: SafetyGate, counter: list[dict]) -> None:
     gate.bus.subscribe(approve)
 
 
-async def test_send_asks_even_in_trust_mode():
-    """`trust on` (default: allow) buni yumshata olmaydi."""
+async def test_send_does_not_ask_in_trust_mode():
+    """`trust on` yoqilganda yuborish to'xtatilmaydi.
+
+    Himoya boshqa joyda: chat ko'z oldida ochiladi va xato ketgan xabar
+    tahrirlanadi yoki olib tashlanadi.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         gate = _gate(tmp, default="allow")
         asked: list[dict] = []
@@ -198,35 +226,25 @@ async def test_send_asks_even_in_trust_mode():
         decision = await gate.evaluate(SEND_TOOL, {"kimga": "Ibrat", "matn": "Salom"})
 
         assert decision.allowed is True
+        assert decision.asked is False
+        assert asked == []
+
+
+async def test_send_still_asks_when_the_config_says_so():
+    """Tasdiqni qaytarmoqchi bo'lgan odam uchun yo'l ochiq qolsin."""
+    with tempfile.TemporaryDirectory() as tmp:
+        gate = _gate(tmp, default="allow")
+        gate._rules[SEND_TOOL] = "ask"
+        asked: list[dict] = []
+        _autoapprove(gate, asked)
+
+        decision = await gate.evaluate(SEND_TOOL, {"kimga": "Ibrat", "matn": "Juma muborak"})
+
+        assert decision.allowed is True
         assert decision.asked is True
-        assert len(asked) == 1
-
-
-async def test_send_asks_every_time():
-    """Bir marta tasdiqlash keyingi xabarlarga ruxsat bermaydi."""
-    with tempfile.TemporaryDirectory() as tmp:
-        gate = _gate(tmp)
-        asked: list[dict] = []
-        _autoapprove(gate, asked)
-
-        await gate.evaluate(SEND_TOOL, {"kimga": "Ibrat", "matn": "Birinchi"})
-        await gate.evaluate(SEND_TOOL, {"kimga": "Ibrat", "matn": "Ikkinchi"})
-
-        assert len(asked) == 2
-
-
-async def test_confirm_text_shows_who_and_what():
-    """Tasdiq savolida kim va nima yozilishi ko'rinib tursin."""
-    with tempfile.TemporaryDirectory() as tmp:
-        gate = _gate(tmp)
-        asked: list[dict] = []
-        _autoapprove(gate, asked)
-
-        await gate.evaluate(SEND_TOOL, {"kimga": "Ibrat", "matn": "Juma muborak"})
-
-        event = asked[0]
-        assert "Ibrat" in event["action"]
-        assert "Juma muborak" in event["detail"]
+        # Savolda kim va aynan qanday matn ketishi ko'rinib tursin.
+        assert "Ibrat" in asked[0]["action"]
+        assert "Juma muborak" in asked[0]["detail"]
 
 
 async def test_send_can_still_be_denied_by_config():
@@ -305,13 +323,71 @@ async def test_send_rejects_empty_text(monkeypatch):
 
 
 async def test_send_goes_to_the_resolved_chat(monkeypatch):
-    client = _FakeClient(["Ibrat", "Bekzod"])
-
-    async def fake_client():
-        return client
-
-    monkeypatch.setattr(tg, "get_client", fake_client)
-    name = await tg.send_as_me("ibrat", "Juma muborak")
+    client = _wire(monkeypatch, ["Ibrat", "Bekzod"])
+    name = await tg.send_as_me("ibrat", "Juma muborak", show=False)
 
     assert name == "Ibrat"
     assert client.sent == [("entity:Ibrat", "Juma muborak")]
+
+
+async def test_chat_is_opened_before_the_message_lands(monkeypatch):
+    """Tartib muhim: xabar ko'rinib turgan chatga tushishi kerak.
+
+    Tasdiq so'ramaymiz, ya'ni yagona ogohlantirish shu — ekranda ochilgan
+    chat. U xabardan keyin ochilsa, foydalanuvchi nima ketganini o'z
+    vaqtida ko'rmaydi.
+    """
+    client = _wire(monkeypatch, ["Ibrat"])
+    order: list[str] = []
+
+    async def fake_open(entity):
+        order.append(f"open:{entity}")
+        return True
+
+    monkeypatch.setattr(tg, "open_chat", fake_open)
+    original_send = client.send_message
+
+    async def watched_send(entity, text):
+        order.append("send")
+        return await original_send(entity, text)
+
+    client.send_message = watched_send
+
+    await tg.send_as_me("Ibrat", "Salom")
+    assert order == ["open:entity:Ibrat", "send"]
+
+
+# --- Tuzatish -----------------------------------------------------------------
+
+
+async def test_last_message_can_be_edited(monkeypatch):
+    client = _wire(monkeypatch, ["Ibrat"])
+    await tg.send_as_me("Ibrat", "Juma muborak", show=False)
+
+    name = await tg.edit_last("Bayramingiz bilan")
+
+    assert name == "Ibrat"
+    assert client.edited == [("entity:Ibrat", 101, "Bayramingiz bilan")]
+
+
+async def test_last_message_can_be_taken_back(monkeypatch):
+    """O'chirish qabul qiluvchida ham bo'lishi kerak (revoke)."""
+    client = _wire(monkeypatch, ["Ibrat"])
+    await tg.send_as_me("Ibrat", "Xato xabar", show=False)
+
+    name = await tg.undo_last()
+
+    assert name == "Ibrat"
+    assert client.removed == [("entity:Ibrat", [101], True)]
+    assert tg.last_sent() is None, "olib tashlangandan keyin qaytarish uchun narsa qolmaydi"
+
+
+async def test_editing_without_a_sent_message_explains_itself(monkeypatch):
+    _wire(monkeypatch, ["Ibrat"])
+
+    with pytest.raises(tg.TelegramUserError) as exc:
+        await tg.edit_last("nimadir")
+    assert "yuborilmagan" in str(exc.value)
+
+    with pytest.raises(tg.TelegramUserError):
+        await tg.undo_last()

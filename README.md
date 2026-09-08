@@ -714,20 +714,31 @@ bekor qilinadi va fayl o'chiriladi.
 |---|---|
 | «Telegramda nima yangilik?» | o'qilmagan chatlarni sanab beradi |
 | «Ibrat nima yozdi?» | o'sha chatning oxirgi xabarlarini o'qib beradi |
-| «Ibratga yoz: juma muborak» | matnni o'qib beradi, **tasdiq so'raydi**, keyin yuboradi |
+| «Ibratga yoz: juma muborak» | Telegramni o'sha chatda ochadi va yuboradi |
+| «Unday emas, "Bayramingiz bilan" deb yoz» | oxirgi xabarni tuzatadi |
+| «O'chir» / «bekor qil» | oxirgi xabarni olib tashlaydi — u yerda ham yo'qoladi |
 
-### Nega har safar so'raydi
+### Tasdiq o'rniga — ko'rib turish
 
-Boshqa odamga ketgan xabarni qaytarib bo'lmaydi. Shuning uchun `telegram_send`
-xavfsizlik darvozasida alohida turadi:
+Har bir xabar uchun «ha yoki yo'q deb ayting» deb turish ish jarayonini
+buzadi: aytdingiz, javob kutdingiz, keyin yuborildi. Shuning uchun boshqa
+yo'l tanlangan:
 
-* `jarvis trust on` (tasdiqsiz rejim) bunga **ta'sir qilmaydi** — baribir so'raydi;
-* tasdiq «eslab qolinmaydi»: bitta xabarga rozilik bergan bo'lsangiz, keyingisi
-  uchun yana so'raladi;
-* savolda kim va **aynan qanday matn** ketishi ko'rinib turadi.
+1. Yuborishdan **oldin** Telegram ilovasi o'sha chatda ochiladi;
+2. xabar ko'z oldingizda paydo bo'ladi — kimga va nima ketganini ko'rasiz;
+3. xato ketsa **«tahrirla»** yoki **«o'chir»** deysiz. O'chirilgan xabar
+   qabul qiluvchining ekranidan ham yo'qoladi (`revoke`).
 
-O'qish (`telegram_chats`, `telegram_read`) esa tasdiq so'ramaydi — u o'z
-xabarlaringizni o'qish, qaytarib bo'ladigan amal.
+Telegram tahrirlash va o'chirishga 48 soat beradi — undan keyin xabar
+o'zgarmas bo'lib qoladi.
+
+Eski xatti-harakat (har safar tasdiq) kerak bo'lsa, `config/jarvis.yaml` ga:
+
+```yaml
+safety:
+  rules:
+    mcp__jarvis__telegram_send: "ask"
+```
 
 Diqqat: shaxsiy akkauntni avtomatlashtirish Telegram qoidalari bo'yicha ehtiyot
 talab qiladi. Ommaviy tarqatma yubormang — akkaunt cheklanishi mumkin.
@@ -767,8 +778,6 @@ safety:
     Read: "allow"       # o'qish — qaytarib bo'ladi, so'ralmaydi
     Bash: "ask"         # shell — har safar tasdiq
     Write: "ask"        # fayl yozish — tasdiq
-    # Sizning nomingizdan Telegram xabari: `trust on` da ham so'raydi
-    mcp__jarvis__telegram_send: "ask"
   forbidden_patterns:   # bular umuman bajarilmaydi
     - "rm -rf /"
     - "sudo rm"
@@ -797,16 +806,14 @@ python -m jarvis trust on      # holatni ko'rish: trust status
 Terminalsiz: `scripts/**Jarvis ishonch rejimi.command**` ni ikki marta bosing.
 
 Shundan keyin «qil» deganingizda darhol bajaradi. Lekin bu «hamma narsaga
-ruxsat» degani emas — uch narsa ataylab qoladi:
+ruxsat» degani emas — ikki qatlam ataylab qoladi:
 
 * `forbidden_patterns` — `rm -rf /`, `mkfs`, `sudo rm` hech qachon bajarilmaydi;
-* `writable_roots` — yozish faqat ruxsat etilgan papkalarda;
-* **Telegramda sizning nomingizdan xabar yuborish** — har safar so'rayveradi.
+* `writable_roots` — yozish faqat ruxsat etilgan papkalarda.
 
-Uchinchisi ataylab shunday: boshqa odamga ketgan xabarni qaytarib bo'lmaydi.
-Uni ham o'chirmoqchi bo'lsangiz, `jarvis/safety/gate.py` dagi
-`ALWAYS_ASK_SUFFIXES` ro'yxatini bo'shatish kerak — ya'ni bu qaror ongli
-ravishda qabul qilinadi, tasodifan emas.
+Telegramda sizning nomingizdan yozish ham tasdiq so'ramaydi. Uning himoyasi
+boshqacha: chat ko'z oldingizda ochiladi va xato ketgan xabarni «tahrirla»
+yoki «o'chir» deb tuzatasiz.
 
 ## Halol cheklovlar
 

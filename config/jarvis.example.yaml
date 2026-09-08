@@ -202,10 +202,11 @@ safety:
     Edit: "ask"
     Bash: "ask"
     NotebookEdit: "ask"
-    # Sizning nomingizdan ketgan Telegram xabarini qaytarib bo'lmaydi.
-    # Bu qator `trust on` da ham o'zgarmaydi va tasdiq bir marta emas,
-    # har safar so'raladi.
-    mcp__jarvis__telegram_send: "ask"
+    # Telegramda sizning nomingizdan yozish tasdiq so'ramaydi: uning
+    # o'rniga Telegram ilovasi o'sha chatda ochiladi va xabar ko'z
+    # oldingizda paydo bo'ladi. Xato ketsa «tahrirla» yoki «o'chir»
+    # deysiz. Tasdiq qaytishini xohlasangiz:
+    #   mcp__jarvis__telegram_send: "ask"
 
   # Bu naqshlar hech qachon bajarilmaydi (tasdiq so'ralmaydi ham).
   forbidden_patterns:

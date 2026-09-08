@@ -36,9 +36,15 @@ PATH_ARG_BY_TOOL = {
 }
 
 # Bu asboblar uchun tasdiq hech qachon "eslab qolinmaydi": har chaqiruv
-# alohida so'raladi. Sabab — natija tashqariga chiqadi va qaytarib bo'lmaydi:
-# boshqa odamga ketgan xabarni orqaga qaytarish imkoni yo'q.
-ALWAYS_ASK_SUFFIXES = ("telegram_send",)
+# alohida so'raladi — ya'ni bir marta "ha" deyish keyingilariga o'tmaydi.
+#
+# Hozir ro'yxat bo'sh, va bu ongli qaror. Telegram xabari shu yerda edi,
+# lekin har safar «ha yoki yo'q deb ayting» deb turish ish jarayonini
+# buzardi. Uning o'rniga boshqa himoya qo'yildi: yuborishdan oldin Telegram
+# ilovasi o'sha chatda ochiladi (foydalanuvchi xabarni ko'radi), va xato
+# ketsa `telegram_edit` / `telegram_undo` bilan tuzatiladi — o'chirilgan
+# xabar qabul qiluvchida ham yo'qoladi.
+ALWAYS_ASK_SUFFIXES: tuple[str, ...] = ()
 
 # Shell buyruqlaridagi yozish operatorlari — yo'lni tekshirish uchun belgi.
 _REDIRECT_RE = re.compile(r"(?<![0-9<>])>{1,2}\s*(\S+)")

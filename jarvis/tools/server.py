@@ -446,8 +446,9 @@ def _system_tools(agenda: Agenda) -> list[Any]:
         "telegram_send",
         "Telegramda **foydalanuvchining o'z nomidan** xabar yuboradi. `kimga` — ism, "
         "@username yoki telefon raqam. Matnni foydalanuvchi aytgandek yuboring; "
-        "o'zingizdan qo'shimcha yozmang. Bu amal qaytarib bo'lmaydi, shuning uchun "
-        "har safar tasdiq so'raladi.",
+        "o'zingizdan qo'shimcha yozmang. Telegram ilovasi o'sha chatda ochiladi, "
+        "ya'ni foydalanuvchi xabarni ko'rib turadi. Xato ketsa u aytadi — "
+        "shunda `telegram_edit` yoki `telegram_undo` ni ishlating.",
         {"kimga": str, "matn": str},
     )
     async def telegram_send(args: dict[str, Any]) -> dict[str, Any]:
@@ -467,6 +468,37 @@ def _system_tools(agenda: Agenda) -> list[Any]:
         except telegram_user.TelegramUserError as exc:
             return _fail(str(exc))
         return _ok(f"Yuborildi: {name}")
+
+    @tool(
+        "telegram_edit",
+        "Telegramda oxirgi yuborilgan xabarni tuzatadi. Foydalanuvchi «unday emas», "
+        "«tahrirla», «o'zgartir» desa shuni ishlating. `matn` — xabarning to'liq "
+        "yangi matni (qo'shimcha emas, o'rniga yoziladi).",
+        {"matn": str},
+    )
+    async def telegram_edit(args: dict[str, Any]) -> dict[str, Any]:
+        text = str(args.get("matn", "")).strip()
+        if not text:
+            return _fail("Yangi matn kerak")
+        try:
+            name = await telegram_user.edit_last(text)
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Tuzatildi: {name}")
+
+    @tool(
+        "telegram_undo",
+        "Telegramda oxirgi yuborilgan xabarni olib tashlaydi — qabul qiluvchida ham "
+        "yo'qoladi. Foydalanuvchi «o'chir», «bekor qil», «yuborma edi» desa shuni "
+        "ishlating.",
+        {},
+    )
+    async def telegram_undo(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            name = await telegram_user.undo_last()
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Olib tashlandi: {name}")
 
     @tool(
         "list_shortcuts",
@@ -516,7 +548,7 @@ def _system_tools(agenda: Agenda) -> list[Any]:
 
     return [notify, open_app, open_url, play_youtube, close_youtube, playpause,
             frontmost_app, send_message, send_telegram,
-            telegram_chats, telegram_read, telegram_send,
+            telegram_chats, telegram_read, telegram_send, telegram_edit, telegram_undo,
             list_shortcuts, run_shortcut, call_n8n]
 
 

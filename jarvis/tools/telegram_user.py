@@ -14,8 +14,10 @@ Shuning uchun uchta qoida ataylab qo'yilgan:
     ko'rinmaydi va repozitoriyga tushmaydi;
   * seans fayli repozitoriydan tashqarida (`~/.jarvis/`) va faqat egasi
     o'qiy oladigan huquq bilan saqlanadi — u kuchi bo'yicha parolga teng;
-  * xabar yuborish har safar tasdiq so'raydi (`trust on` bo'lganda ham) —
-    boshqa odamga ketgan xabarni qaytarib bo'lmaydi.
+  * yuborishdan oldin Telegram ilovasi o'sha chatda ochiladi — xabar ko'z
+    oldingizda paydo bo'ladi. Tasdiq so'ralmaydi (u yo'lni sekinlashtiradi),
+    lekin xato ketsa «tahrirla» yoki «o'chir» deyish yetadi: oxirgi
+    yuborilgan xabar eslab qolinadi.
 """
 
 from __future__ import annotations
@@ -255,6 +257,42 @@ async def resolve(client: Any, who: str) -> tuple[Any, str]:
     return dialog.entity, dialog.name
 
 
+# Oxirgi yuborilgan xabar: (entity, message_id, chat nomi).
+#
+# Tasdiq so'ramaslikning narxi shu: xato ketishi mumkin. Shuning uchun
+# yuborilgan xabarni eslab qolamiz — «tahrirla» yoki «o'chir» deyilganda
+# aynan shu xabar ustida ishlanadi.
+_last_sent: tuple[Any, int, str] | None = None
+
+
+async def open_chat(entity: Any) -> bool:
+    """Telegram ilovasini o'sha chatda ochadi. Ochilsa True.
+
+    Bu tasdiq so'rashning o'rnini bosadi: xabar ko'z oldingizda paydo
+    bo'ladi, ya'ni nima yozilganini o'zingiz ko'rasiz.
+    """
+    username = getattr(entity, "username", None)
+    user_id = getattr(entity, "id", None)
+
+    if username:
+        url = f"tg://resolve?domain={username}"
+    elif user_id:
+        url = f"tg://openmessage?user_id={user_id}"
+    else:
+        url = ""
+
+    try:
+        args = ["open", url] if url else ["open", "-a", "Telegram"]
+        process = await asyncio.create_subprocess_exec(
+            *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await process.wait()
+        return process.returncode == 0
+    except OSError:
+        log.debug("Telegram ilovasi ochilmadi", exc_info=True)
+        return False
+
+
 # --- Amallar ---
 
 
@@ -305,20 +343,81 @@ async def read_chat(who: str, limit: int = 15) -> dict[str, Any]:
     return {"chat": name, "xabarlar": messages}
 
 
-async def send_as_me(who: str, text: str) -> str:
-    """Sizning nomingizdan xabar yuboradi. Chaqirilishidan oldin tasdiq so'raladi."""
+async def send_as_me(who: str, text: str, show: bool = True) -> str:
+    """Sizning nomingizdan xabar yuboradi.
+
+    `show` — yuborishdan oldin Telegram ilovasini o'sha chatda ochadi. Tartib
+    muhim: avval ochamiz, keyin yuboramiz — shunda xabar ko'rinib turgan
+    chatga tushadi va siz uni paydo bo'lishini ko'rasiz.
+    """
+    global _last_sent
+
     body = text.strip()
     if not body:
         raise TelegramUserError("Xabar matni bo'sh")
 
     client = await get_client()
     entity, name = await resolve(client, who)
+
+    if show:
+        await open_chat(entity)
+
     try:
-        await client.send_message(entity, body)
+        message = await client.send_message(entity, body)
     except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
         raise TelegramUserError(f"Xabar ketmadi: {exc}") from exc
 
+    _last_sent = (entity, int(getattr(message, "id", 0)), name)
     log.info("Telegram (shaxsiy) xabari yuborildi: %s (%d belgi)", name, len(body))
+    return name
+
+
+def last_sent() -> tuple[Any, int, str] | None:
+    """Oxirgi yuborilgan xabar: (entity, id, chat nomi) yoki None."""
+    return _last_sent
+
+
+async def edit_last(text: str) -> str:
+    """Oxirgi yuborilgan xabarni tahrirlaydi. Chat nomini qaytaradi."""
+    body = text.strip()
+    if not body:
+        raise TelegramUserError("Yangi matn bo'sh")
+    if _last_sent is None:
+        raise TelegramUserError("Bu seansda hali xabar yuborilmagan")
+
+    entity, message_id, name = _last_sent
+    client = await get_client()
+    try:
+        await client.edit_message(entity, message_id, body)
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        # Telegram eski xabarni tahrirlashga ruxsat bermaydi (48 soat).
+        raise TelegramUserError(f"Tahrirlab bo'lmadi: {exc}") from exc
+
+    log.info("Telegram xabari tahrirlandi: %s", name)
+    return name
+
+
+async def undo_last() -> str:
+    """Oxirgi yuborilgan xabarni ikkala tomondan olib tashlaydi.
+
+    Xato ketgan xabarni qaytarish yo'li shu — tasdiq so'ramaslikning
+    o'rniga aynan shu imkoniyat bor.
+    """
+    global _last_sent
+
+    if _last_sent is None:
+        raise TelegramUserError("Bu seansda hali xabar yuborilmagan")
+
+    entity, message_id, name = _last_sent
+    client = await get_client()
+    try:
+        # revoke=True — qabul qiluvchining ekranidan ham yo'qoladi.
+        await client.delete_messages(entity, [message_id], revoke=True)
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"Olib tashlab bo'lmadi: {exc}") from exc
+
+    _last_sent = None
+    log.info("Telegram xabari olib tashlandi: %s", name)
     return name
 
 
