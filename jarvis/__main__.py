@@ -22,6 +22,7 @@ Misollar:
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
   jarvis telegram-login   Shaxsiy Telegram akkauntga kirish (bir marta)
   jarvis telegram-logout  Telegram seansini bekor qilish
+  jarvis trust status     Ishonch rejimi yoqilganmi
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
   jarvis -v         Batafsil jurnal bilan
@@ -56,7 +57,7 @@ def main() -> int:
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
              "mic-test — mikrofonlarni o'lchash; "
              "telegram-login / telegram-logout — shaxsiy Telegram akkaunt; "
-             "trust on|off — tasdiq so'rashni o'chirish/yoqish",
+             "trust on|off|status — tasdiq so'rashni o'chirish/yoqish",
     )
     parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")

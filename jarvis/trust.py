@@ -31,13 +31,35 @@ RESET = "\033[0m"
 GATED_TOOLS = ("Write", "Edit", "Bash", "NotebookEdit")
 
 
+def current() -> str:
+    """Hozirgi rejim: "on", "off" yoki "?" (sozlama o'qilmasa).
+
+    Sozlamani yozishdan oldin uni ko'rsata olish kerak — «yoqilganmi yoki
+    yo'qmi» degan savolga fayl ichini ochmasdan javob bo'lsin.
+    """
+    from .config import load_config
+
+    try:
+        return "on" if str(load_config().get("safety.default", "ask")) == "allow" else "off"
+    except Exception:  # noqa: BLE001 — holat ko'rsatish hech qachon yiqilmasin
+        return "?"
+
+
 def apply(mode: str) -> int:
     """`on` — so'ramasdan bajaradi, `off` — har safar so'raydi."""
     from .config import CONFIG_PATH
     from .configpatch import patch_file
 
+    if mode == "status":
+        state = current()
+        label = {"on": "YOQILGAN — tasdiq so'ralmaydi",
+                 "off": "O'CHIRILGAN — har bir amal tasdiq so'raydi"}.get(state, "noma'lum")
+        print(f"Ishonch rejimi: {label}")
+        return 0
+
     if mode not in ("on", "off"):
-        print(f"{RED}Ishlatilishi: python -m jarvis trust on|off{RESET}", file=sys.stderr)
+        print(f"{RED}Ishlatilishi: python -m jarvis trust on|off|status{RESET}",
+              file=sys.stderr)
         return 2
 
     path = Path(CONFIG_PATH)
@@ -56,6 +78,8 @@ def apply(mode: str) -> int:
 
     if mode == "on":
         print(f"{GREEN}{BOLD}Tasdiq so'ralmaydi.{RESET} «Qil» deganingizda darhol bajaradi.")
+        print(f"{DIM}Telegramda sizning nomingizdan xabar yuborish bundan "
+              f"mustasno — u har safar so'rayveradi.{RESET}")
         print(f"{DIM}Himoyaning ikki qatlami joyida qoladi:\n"
               f"  • taqiqlangan buyruqlar (rm -rf /, mkfs, sudo rm…) — baribir "
               f"bajarilmaydi\n"

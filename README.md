@@ -189,6 +189,7 @@ bosiladigan fayl bor:
 | **Jarvis yangilash.command** | yangilanishni oladi va Jarvis'ni qayta ko'taradi |
 | **Jarvis holati.command** | ishlayaptimi, ishlamasa sababi nimada |
 | **Jarvis ishga tushirish.command** | Terminal orqali ishga tushiradi (mikrofon ruxsati muammosida) |
+| **Jarvis ishonch rejimi.command** | tasdiq so'rashni yoqadi/o'chiradi |
 
 (Birinchi marta macOS ochishdan bosh tortsa: faylni o'ng tugma bilan bosib
 «Open» ni tanlang — bir martalik tasdiq.)
@@ -784,6 +785,28 @@ Uch qatlam:
 
 Hammasi `~/.jarvis/audit.log` ga yoziladi. **Boshidan to'liq erkinlik bermang** —
 ishonch ortgan sari qoidalarni yumshating.
+
+### Tasdiq so'rashni butunlay o'chirish
+
+Har bir amal uchun «ha yoki yo'q» deb turish halaqit bera boshlasa:
+
+```bash
+python -m jarvis trust on      # holatni ko'rish: trust status
+```
+
+Terminalsiz: `scripts/**Jarvis ishonch rejimi.command**` ni ikki marta bosing.
+
+Shundan keyin «qil» deganingizda darhol bajaradi. Lekin bu «hamma narsaga
+ruxsat» degani emas — uch narsa ataylab qoladi:
+
+* `forbidden_patterns` — `rm -rf /`, `mkfs`, `sudo rm` hech qachon bajarilmaydi;
+* `writable_roots` — yozish faqat ruxsat etilgan papkalarda;
+* **Telegramda sizning nomingizdan xabar yuborish** — har safar so'rayveradi.
+
+Uchinchisi ataylab shunday: boshqa odamga ketgan xabarni qaytarib bo'lmaydi.
+Uni ham o'chirmoqchi bo'lsangiz, `jarvis/safety/gate.py` dagi
+`ALWAYS_ASK_SUFFIXES` ro'yxatini bo'shatish kerak — ya'ni bu qaror ongli
+ravishda qabul qilinadi, tasodifan emas.
 
 ## Halol cheklovlar
 
