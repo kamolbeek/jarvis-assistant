@@ -51,4 +51,12 @@ else
 fi
 
 echo "==> Jarvis yadrosi"
-exec python -m jarvis "$@"
+
+# Chiqishni ekranga ham, jurnalga ham yozamiz. Ilgari qo'lda ishga
+# tushirilganda jurnal yozilmasdi va «Jarvis holati.command» eski
+# ma'lumotni ko'rsatardi — sabab qidirayotgan odam uchun eng chalg'ituvchi
+# hol. `exec` yo'q: quvur ortidagi `tee` ham yopilishi kerak.
+LOG_DIR="$HOME/.jarvis/logs"
+mkdir -p "$LOG_DIR"
+export PYTHONUNBUFFERED=1
+python -m jarvis "$@" 2>&1 | tee -a "$LOG_DIR/jarvis.log"
