@@ -26,7 +26,9 @@ import asyncio
 import json
 import logging
 import os
+import random
 import stat
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -419,6 +421,280 @@ async def undo_last() -> str:
     _last_sent = None
     log.info("Telegram xabari olib tashlandi: %s", name)
     return name
+
+
+# --- Qidiruv --------------------------------------------------------------
+#
+# «Bir vaqtlar Asadga tashlagan edim» degan gap qidiruvning eng tipik
+# ko'rinishi: qaysi chat ekani esda yo'q, faqat so'z esda. Shuning uchun
+# `chat` bo'sh bo'lsa butun akkaunt bo'ylab qidiriladi.
+
+
+async def search(query: str, chat: str = "", limit: int = 20) -> dict[str, Any]:
+    """Xabarlar ichidan matn bo'yicha qidiradi.
+
+    `chat` berilsa — faqat o'sha chatda, bo'lmasa — hamma yozishmalarda.
+    Saqlangan xabarlar uchun: chat="men".
+    """
+    needle = query.strip()
+    if not needle:
+        raise TelegramUserError("Qidiruv so'zi kerak")
+
+    client = await get_client()
+
+    entity: Any = None
+    where = "hamma chatlar"
+    if chat:
+        entity, where = await resolve(client, chat)
+
+    found: list[dict[str, Any]] = []
+    try:
+        async for message in client.iter_messages(entity, search=needle, limit=max(1, limit)):
+            found.append({
+                "chat": _chat_name(message) if entity is None else where,
+                "kim": "Siz" if getattr(message, "out", False) else _sender_name(message),
+                "matn": (getattr(message, "text", "") or "")[:400],
+                "vaqt": _when(message),
+            })
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"Qidirib bo'lmadi: {exc}") from exc
+
+    return {"soz": needle, "qayerda": where, "topildi": len(found), "xabarlar": found}
+
+
+def _chat_name(message: Any) -> str:
+    """Xabar qaysi chatdan kelgani — global qidiruv natijasi uchun."""
+    chat = getattr(message, "chat", None)
+    return _name_of(chat) if chat is not None else ""
+
+
+def _sender_name(message: Any) -> str:
+    sender = getattr(message, "sender", None)
+    return _name_of(sender) if sender is not None else ""
+
+
+# --- Fayl yuborish --------------------------------------------------------
+
+
+async def send_file(
+    who: str,
+    path: str,
+    caption: str = "",
+    *,
+    video_note: bool = False,
+    show: bool = True,
+) -> str:
+    """Fayl (rasm, video, hujjat) yuboradi.
+
+    `video_note=True` — dumaloq video. Telegram uni faqat kvadrat va qisqa
+    (60 s gacha) mp4 dan yasay oladi; mos kelmasa xatoni o'zi aytadi.
+    """
+    global _last_sent
+
+    source = Path(os.path.expandvars(path)).expanduser()
+    if not source.exists():
+        raise TelegramUserError(f"Fayl topilmadi: {source}")
+    if source.is_dir():
+        raise TelegramUserError(f"Bu papka, fayl emas: {source}")
+
+    client = await get_client()
+    entity, name = await resolve(client, who)
+
+    if show:
+        await open_chat(entity)
+
+    try:
+        message = await client.send_file(
+            entity, str(source), caption=caption.strip() or None, video_note=video_note
+        )
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"Fayl ketmadi: {exc}") from exc
+
+    _last_sent = (entity, int(getattr(message, "id", 0)), name)
+    log.info("Telegram fayli yuborildi: %s (%s)", name, source.name)
+    return name
+
+
+# --- So'rovnoma -----------------------------------------------------------
+
+
+async def send_poll(
+    who: str, question: str, options: list[str], multiple: bool = False
+) -> str:
+    """So'rovnoma yuboradi (guruh yoki kanalga)."""
+    title = question.strip()
+    answers = [str(o).strip() for o in options if str(o).strip()]
+    if not title:
+        raise TelegramUserError("Savol matni kerak")
+    if len(answers) < 2:
+        raise TelegramUserError("Kamida ikkita javob varianti kerak")
+
+    telethon = _import_telethon()
+    types_ = telethon.tl.types
+
+    def _text(value: str) -> Any:
+        # Telegram yangi qatlamlarda matnni TextWithEntities sifatida
+        # kutadi, eskilarida oddiy satr. Ikkalasini ham qo'llab-quvvatlaymiz.
+        wrapper = getattr(types_, "TextWithEntities", None)
+        return wrapper(text=value, entities=[]) if wrapper else value
+
+    poll = types_.Poll(
+        id=random.getrandbits(63),
+        question=_text(title),
+        answers=[
+            types_.PollAnswer(text=_text(answer), option=bytes([index]))
+            for index, answer in enumerate(answers)
+        ],
+        hash=0,
+        multiple_choice=multiple or None,
+    )
+
+    client = await get_client()
+    entity, name = await resolve(client, who)
+    await open_chat(entity)
+
+    try:
+        await client.send_file(entity, types_.InputMediaPoll(poll=poll))
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"So'rovnoma ketmadi: {exc}") from exc
+
+    log.info("Telegram so'rovnomasi yuborildi: %s", name)
+    return name
+
+
+# --- Umumiy manzara -------------------------------------------------------
+
+
+async def overview(limit: int = 200, quiet_days: int = 30) -> dict[str, Any]:
+    """Akkauntning qisqa tahlili: nima ko'p, nima o'qilmagan, nima jim turibdi.
+
+    «Jim kanallar» ro'yxati ataylab bor: «keraksiz kanallardan chiq» degan
+    qarorni taxmin bilan emas, sana bilan qabul qilish kerak.
+    """
+    client = await get_client()
+
+    total = unread_chats = unread_messages = 0
+    people = groups = channels = 0
+    top: list[dict[str, Any]] = []
+    quiet: list[dict[str, Any]] = []
+    threshold = datetime.now(timezone.utc) - timedelta(days=max(1, quiet_days))
+
+    async for dialog in client.iter_dialogs(limit=max(1, limit)):
+        total += 1
+        count = int(getattr(dialog, "unread_count", 0) or 0)
+        if count:
+            unread_chats += 1
+            unread_messages += count
+            top.append({"kim": dialog.name or "?", "oqilmagan": count})
+
+        if getattr(dialog, "is_channel", False) and not getattr(dialog, "is_group", False):
+            channels += 1
+            last = getattr(getattr(dialog, "message", None), "date", None)
+            if last is not None and last < threshold:
+                quiet.append({"kanal": dialog.name or "?", "oxirgi_xabar": _when(dialog.message)})
+        elif getattr(dialog, "is_group", False):
+            groups += 1
+        else:
+            people += 1
+
+    top.sort(key=lambda row: row["oqilmagan"], reverse=True)
+    return {
+        "jami_chatlar": total,
+        "shaxsiy": people,
+        "guruhlar": groups,
+        "kanallar": channels,
+        "oqilmagan_chatlar": unread_chats,
+        "oqilmagan_xabarlar": unread_messages,
+        "eng_kop_oqilmagan": top[:10],
+        f"jim_kanallar_{quiet_days}_kun": quiet[:15],
+    }
+
+
+# --- Guruh va kanallar ----------------------------------------------------
+
+
+async def leave(who: str) -> str:
+    """Guruh yoki kanaldan chiqadi."""
+    client = await get_client()
+    entity, name = await resolve(client, who)
+    try:
+        await client.delete_dialog(entity)
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"Chiqib bo'lmadi: {exc}") from exc
+
+    log.info("Telegram: chiqildi — %s", name)
+    return name
+
+
+async def create_group(title: str, members: list[str], about: str = "",
+                       broadcast: bool = False) -> str:
+    """Guruh (yoki `broadcast=True` bo'lsa kanal) yaratadi."""
+    name = title.strip()
+    if not name:
+        raise TelegramUserError("Nom kerak")
+
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+
+    client = await get_client()
+    users = await _resolve_users(client, members)
+
+    try:
+        # Kanal/superguruh sifatida yaratamiz: oddiy guruhning imkoniyati
+        # kam va u baribir keyin superguruhga o'tkaziladi.
+        result = await client(functions.channels.CreateChannelRequest(
+            title=name,
+            about=about.strip(),
+            megagroup=not broadcast,
+            broadcast=broadcast or None,
+        ))
+        created = result.chats[0]
+        if users:
+            await client(functions.channels.InviteToChannelRequest(created, users))
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"Yaratib bo'lmadi: {exc}") from exc
+
+    kind = "Kanal" if broadcast else "Guruh"
+    log.info("Telegram: %s yaratildi — %s (%d a'zo)", kind.lower(), name, len(users))
+    return f"{kind} yaratildi: {name}" + (f" — {len(users)} kishi qo'shildi" if users else "")
+
+
+async def add_members(chat: str, members: list[str]) -> str:
+    """Guruh yoki kanalga odam qo'shadi."""
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+    users = await _resolve_users(client, members)
+    if not users:
+        raise TelegramUserError("Kimni qo'shishni ayting")
+
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+
+    try:
+        await client(functions.channels.InviteToChannelRequest(entity, users))
+    except Exception as exc:  # noqa: BLE001 — eski (superguruh bo'lmagan) chat
+        try:
+            for user in users:
+                await client(functions.messages.AddChatUserRequest(
+                    chat_id=entity.id, user_id=user, fwd_limit=10,
+                ))
+        except Exception:  # noqa: BLE001 — sabab birinchi xatoda aniqroq
+            raise TelegramUserError(f"Qo'shib bo'lmadi: {exc}") from exc
+
+    log.info("Telegram: %s ga %d kishi qo'shildi", name, len(users))
+    return f"{name}: {len(users)} kishi qo'shildi"
+
+
+async def _resolve_users(client: Any, members: list[str]) -> list[Any]:
+    """Ism/username ro'yxatini Telegram foydalanuvchilariga aylantiradi."""
+    users: list[Any] = []
+    for member in members or []:
+        target = str(member).strip()
+        if not target:
+            continue
+        entity, _ = await resolve(client, target)
+        users.append(entity)
+    return users
 
 
 def _when(message: Any) -> str:

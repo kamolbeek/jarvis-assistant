@@ -61,6 +61,8 @@ class _FakeClient:
         self.sent: list[tuple[str, str]] = []
         self.edited: list[tuple[str, int, str]] = []
         self.removed: list[tuple[str, list[int], bool]] = []
+        self.files: list[tuple[str, str, str | None, bool]] = []
+        self.left: list[str] = []
         self._next_id = 101
 
     async def get_entity(self, target: str):
@@ -77,6 +79,15 @@ class _FakeClient:
 
     async def delete_messages(self, entity, ids, revoke=False):
         self.removed.append((entity, list(ids), revoke))
+
+    async def send_file(self, entity, file, caption=None, video_note=False):
+        self.files.append((entity, str(file), caption, video_note))
+        message = SimpleNamespace(id=self._next_id)
+        self._next_id += 1
+        return message
+
+    async def delete_dialog(self, entity):
+        self.left.append(entity)
 
 
 def _wire(monkeypatch, names: list[str]) -> _FakeClient:
@@ -391,3 +402,154 @@ async def test_editing_without_a_sent_message_explains_itself(monkeypatch):
 
     with pytest.raises(tg.TelegramUserError):
         await tg.undo_last()
+
+
+# --- Fayl yuborish ------------------------------------------------------------
+
+
+async def test_file_is_sent_from_disk(monkeypatch, tmp_path):
+    client = _wire(monkeypatch, ["Ibrat"])
+    photo = tmp_path / "rasm.jpg"
+    photo.write_bytes(b"fake")
+
+    name = await tg.send_file("Ibrat", str(photo), "mana", show=False)
+
+    assert name == "Ibrat"
+    assert client.files == [("entity:Ibrat", str(photo), "mana", False)]
+    assert tg.last_sent() is not None, "faylni ham qaytarib olish mumkin bo'lsin"
+
+
+async def test_round_video_is_marked_as_such(monkeypatch, tmp_path):
+    client = _wire(monkeypatch, ["Ibrat"])
+    clip = tmp_path / "video.mp4"
+    clip.write_bytes(b"fake")
+
+    await tg.send_file("Ibrat", str(clip), video_note=True, show=False)
+
+    assert client.files[0][3] is True
+
+
+async def test_missing_file_says_so_instead_of_sending(monkeypatch, tmp_path):
+    """Yo'q faylni yuborishga urinish jimgina o'tib ketmasin."""
+    client = _wire(monkeypatch, ["Ibrat"])
+
+    with pytest.raises(tg.TelegramUserError) as exc:
+        await tg.send_file("Ibrat", str(tmp_path / "yoq.jpg"), show=False)
+
+    assert "topilmadi" in str(exc.value)
+    assert client.files == []
+
+
+async def test_folder_is_not_mistaken_for_a_file(monkeypatch, tmp_path):
+    _wire(monkeypatch, ["Ibrat"])
+
+    with pytest.raises(tg.TelegramUserError) as exc:
+        await tg.send_file("Ibrat", str(tmp_path), show=False)
+    assert "papka" in str(exc.value)
+
+
+# --- Qidiruv ------------------------------------------------------------------
+
+
+def _found(text: str, chat: str, out: bool = False) -> SimpleNamespace:
+    return SimpleNamespace(
+        text=text, date=None, out=out, media=None,
+        chat=SimpleNamespace(title=chat, first_name=None, last_name=None, username=None, id=5),
+        sender=SimpleNamespace(title=None, first_name="Asad", last_name=None,
+                               username=None, id=6),
+    )
+
+
+async def test_search_looks_through_every_chat(monkeypatch):
+    """Qaysi chat ekani esda bo'lmasa ham topilishi kerak."""
+    client = _wire(monkeypatch, ["Asad"])
+    client.iter_messages = _AsyncList([
+        _found("mana hujjat", "Asad"),
+        _found("yana bir marta", "Ish guruhi"),
+    ])
+
+    result = await tg.search("hujjat")
+
+    assert result["qayerda"] == "hamma chatlar"
+    assert result["topildi"] == 2
+    assert result["xabarlar"][0]["chat"] == "Asad"
+    assert result["xabarlar"][0]["kim"] == "Asad"
+
+
+async def test_search_can_be_limited_to_one_chat(monkeypatch):
+    """«Saqlangan xabarlarimda bor edi» — aynan shu holat."""
+    client = _wire(monkeypatch, ["Asad"])
+    client.iter_messages = _AsyncList([_found("parol", "Saqlangan", out=True)])
+
+    result = await tg.search("parol", chat="men")
+
+    assert result["qayerda"] == "Saqlangan xabarlar"
+    assert result["xabarlar"][0]["kim"] == "Siz"
+
+
+async def test_empty_query_is_refused(monkeypatch):
+    _wire(monkeypatch, ["Asad"])
+    with pytest.raises(tg.TelegramUserError):
+        await tg.search("   ")
+
+
+# --- Umumiy manzara -----------------------------------------------------------
+
+
+def _rich_dialog(name, unread=0, days_ago=0, kind="user") -> SimpleNamespace:
+    from datetime import datetime, timedelta, timezone
+
+    message = SimpleNamespace(
+        text="", date=datetime.now(timezone.utc) - timedelta(days=days_ago),
+        out=False, media=None,
+    )
+    return SimpleNamespace(
+        name=name, entity=f"entity:{name}", unread_count=unread, message=message,
+        is_channel=kind in ("channel", "supergroup"),
+        is_group=kind in ("group", "supergroup"),
+    )
+
+
+async def test_overview_counts_and_finds_quiet_channels(monkeypatch):
+    client = _wire(monkeypatch, [])
+    client.iter_dialogs = _AsyncList([
+        _rich_dialog("Ibrat", unread=3),
+        _rich_dialog("Ish guruhi", unread=1, kind="group"),
+        _rich_dialog("Yangiliklar", kind="channel", days_ago=1),
+        _rich_dialog("Eski kanal", kind="channel", days_ago=200),
+    ])
+
+    result = await tg.overview(quiet_days=30)
+
+    assert result["jami_chatlar"] == 4
+    assert result["shaxsiy"] == 1
+    assert result["guruhlar"] == 1
+    assert result["kanallar"] == 2
+    assert result["oqilmagan_chatlar"] == 2
+    assert result["oqilmagan_xabarlar"] == 4
+    assert result["eng_kop_oqilmagan"][0] == {"kim": "Ibrat", "oqilmagan": 3}
+    # 200 kun jim turgan kanal — «keraksizmi?» degan savolning asosi.
+    quiet = [row["kanal"] for row in result["jim_kanallar_30_kun"]]
+    assert quiet == ["Eski kanal"]
+
+
+# --- Guruhlar -----------------------------------------------------------------
+
+
+async def test_leaving_a_channel_reports_its_name(monkeypatch):
+    client = _wire(monkeypatch, ["Eski kanal"])
+
+    name = await tg.leave("eski kanal")
+
+    assert name == "Eski kanal"
+    assert client.left == ["entity:Eski kanal"]
+
+
+async def test_leaving_an_ambiguous_name_is_refused(monkeypatch):
+    """Adashib boshqa kanaldan chiqib ketish — qaytarib bo'lmaydigan xato."""
+    client = _wire(monkeypatch, ["Sport kanali", "Sport yangiliklari"])
+
+    with pytest.raises(tg.TelegramUserError):
+        await tg.leave("sport")
+
+    assert client.left == []

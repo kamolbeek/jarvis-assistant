@@ -33,7 +33,7 @@ READ_ONLY_TOOLS = [
     "recall", "search_memory",
     "list_projects", "list_tasks", "daily_brief",
     "list_contacts", "find_contact",
-    "telegram_chats", "telegram_read",
+    "telegram_chats", "telegram_read", "telegram_search", "telegram_overview",
     "frontmost_app", "list_shortcuts",
 ]
 
@@ -470,6 +470,124 @@ def _system_tools(agenda: Agenda) -> list[Any]:
         return _ok(f"Yuborildi: {name}")
 
     @tool(
+        "telegram_search",
+        "Telegram yozishmalari ichidan matn bo'yicha qidiradi — sana va chat "
+        "esda bo'lmasa ham topadi. `kim` berilsa faqat o'sha chatda qidiradi "
+        "(saqlangan xabarlar uchun: kim='men'). «Asadga tashlagan edim», "
+        "«saqlangan xabarlarimda bor edi» kabi so'rovlarda shuni ishlating.",
+        {"soz": str, "kim": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def telegram_search(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            result = await telegram_user.search(
+                str(args.get("soz", "")),
+                chat=str(args.get("kim") or ""),
+                limit=int(args.get("nechta") or 20),
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(result) if result["topildi"] else _ok("Hech narsa topilmadi")
+
+    @tool(
+        "telegram_overview",
+        "Telegram akkauntining qisqa tahlili: nechta chat, qaysilari o'qilmagan, "
+        "nechta guruh va kanal, qaysi kanallar uzoq vaqtdan beri jim. «Telegramni "
+        "analiz qilib ber», «qaysi kanallar keraksiz?» degan so'rovlarda ishlating.",
+        {"jim_kunlar": int},
+        annotations=READ_ONLY,
+    )
+    async def telegram_overview(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _json(await telegram_user.overview(
+                quiet_days=int(args.get("jim_kunlar") or 30)
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_send_file",
+        "Telegramga fayl yuboradi: rasm, video, hujjat. `fayl` — kompyuterdagi "
+        "to'liq yo'l (avval Glob/Bash bilan toping). `dumaloq_video` = ha bo'lsa "
+        "dumaloq video sifatida yuboriladi (kvadrat, 60 soniyagacha mp4 kerak).",
+        {"kimga": str, "fayl": str, "izoh": str, "dumaloq_video": str},
+    )
+    async def telegram_send_file(args: dict[str, Any]) -> dict[str, Any]:
+        target = str(args.get("kimga", "")).strip()
+        path = str(args.get("fayl", "")).strip()
+        if not target or not path:
+            return _fail("`kimga` va `fayl` kerak")
+
+        round_video = str(args.get("dumaloq_video") or "").lower() in ("ha", "yes", "true", "1")
+        try:
+            name = await telegram_user.send_file(
+                target, path, str(args.get("izoh") or ""), video_note=round_video
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Yuborildi: {name}")
+
+    @tool(
+        "telegram_poll",
+        "Guruh yoki kanalga so'rovnoma yuboradi. `variantlar` — javoblar, "
+        "vergul bilan ajratilgan (kamida ikkita).",
+        {"kimga": str, "savol": str, "variantlar": str, "kop_tanlov": str},
+    )
+    async def telegram_poll(args: dict[str, Any]) -> dict[str, Any]:
+        options = [p.strip() for p in str(args.get("variantlar", "")).split(",") if p.strip()]
+        multiple = str(args.get("kop_tanlov") or "").lower() in ("ha", "yes", "true", "1")
+        try:
+            name = await telegram_user.send_poll(
+                str(args.get("kimga", "")), str(args.get("savol", "")), options, multiple
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"So'rovnoma yuborildi: {name}")
+
+    @tool(
+        "telegram_create",
+        "Telegramda guruh yoki kanal yaratadi. `turi`: guruh | kanal. `azolar` — "
+        "qo'shiladigan odamlar, vergul bilan (ixtiyoriy).",
+        {"nom": str, "turi": str, "azolar": str, "tavsif": str},
+    )
+    async def telegram_create(args: dict[str, Any]) -> dict[str, Any]:
+        members = [p.strip() for p in str(args.get("azolar") or "").split(",") if p.strip()]
+        broadcast = str(args.get("turi") or "guruh").strip().lower() in ("kanal", "channel")
+        try:
+            return _ok(await telegram_user.create_group(
+                str(args.get("nom", "")), members,
+                about=str(args.get("tavsif") or ""), broadcast=broadcast,
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_add_members",
+        "Guruh yoki kanalga odam qo'shadi. `kimlar` — vergul bilan ajratilgan "
+        "ismlar yoki @username lar.",
+        {"guruh": str, "kimlar": str},
+    )
+    async def telegram_add_members(args: dict[str, Any]) -> dict[str, Any]:
+        members = [p.strip() for p in str(args.get("kimlar") or "").split(",") if p.strip()]
+        try:
+            return _ok(await telegram_user.add_members(str(args.get("guruh", "")), members))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_leave",
+        "Guruh yoki kanaldan chiqadi. Chiqishdan oldin nomini aniq aytib bering — "
+        "adashib boshqasidan chiqib ketmang.",
+        {"kim": str},
+    )
+    async def telegram_leave(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            name = await telegram_user.leave(str(args.get("kim", "")))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Chiqildi: {name}")
+
+    @tool(
         "telegram_edit",
         "Telegramda oxirgi yuborilgan xabarni tuzatadi. Foydalanuvchi «unday emas», "
         "«tahrirla», «o'zgartir» desa shuni ishlating. `matn` — xabarning to'liq "
@@ -548,7 +666,10 @@ def _system_tools(agenda: Agenda) -> list[Any]:
 
     return [notify, open_app, open_url, play_youtube, close_youtube, playpause,
             frontmost_app, send_message, send_telegram,
-            telegram_chats, telegram_read, telegram_send, telegram_edit, telegram_undo,
+            telegram_chats, telegram_read, telegram_search, telegram_overview,
+            telegram_send, telegram_send_file, telegram_poll,
+            telegram_create, telegram_add_members, telegram_leave,
+            telegram_edit, telegram_undo,
             list_shortcuts, run_shortcut, call_n8n]
 
 

@@ -717,6 +717,26 @@ bekor qilinadi va fayl o'chiriladi.
 | «Ibratga yoz: juma muborak» | Telegramni o'sha chatda ochadi va yuboradi |
 | «Unday emas, "Bayramingiz bilan" deb yoz» | oxirgi xabarni tuzatadi |
 | «O'chir» / «bekor qil» | oxirgi xabarni olib tashlaydi — u yerda ham yo'qoladi |
+| «Ish guruhiga o'sha shartnomani tashla» | faylni kompyuterdan topib yuboradi |
+| «Buni dumaloq video qilib yubor» | video note sifatida yuboradi |
+| «Guruhga so'rovnoma tashla: qachon uchrashamiz — ertaga, indinga» | poll yaratadi |
+| «Loyiha guruhini och, Ibrat bilan Asadni qo'sh» | guruh yaratadi va odam qo'shadi |
+| «Telegramni analiz qilib ber» | nechta chat, nima o'qilmagan, qaysi kanallar jim |
+| «Bu kanaldan chiqib ket» | guruh yoki kanaldan chiqadi |
+
+### «Bir vaqtlar tashlagan edim…»
+
+Eng ko'p kerak bo'ladigan narsa — qachonligi esdan chiqqan xabar.
+`telegram_search` butun akkaunt bo'ylab qidiradi: qaysi chat ekanini
+bilish shart emas.
+
+> — Jarvis, bir vaqtlar kimgadir shartnoma shablonini tashlagan edim, topib ber.
+>
+> — 23-fevralda Asad bilan yozishganingizda tashlagansiz. Men uni
+>   saqlangan xabarlaringizga ko'chirib qo'ydim — tez topib olasiz.
+
+Saqlangan xabarlar oddiy chat sifatida ishlaydi: `kim: men` deb qidirish
+yoki o'sha yerga yozish mumkin.
 
 ### Tasdiq o'rniga — ko'rib turish
 
