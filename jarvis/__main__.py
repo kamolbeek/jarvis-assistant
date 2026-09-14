@@ -23,6 +23,7 @@ Misollar:
   jarvis telegram-login   Shaxsiy Telegram akkauntga kirish (bir marta)
   jarvis telegram-logout  Telegram seansini bekor qilish
   jarvis stt              Eshitish (STT) provayderini ko'rish/almashtirish
+  jarvis tts azure        Gapirish ovozini almashtirish (o'zbekcha aksent)
   jarvis trust status     Ishonch rejimi yoqilganmi
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
@@ -52,12 +53,12 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust", "stt",
+        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust", "stt", "tts",
                  "telegram-login", "telegram-logout"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
              "mic-test — mikrofonlarni o'lchash; "
-             "stt — eshitish provayderi; "
+             "stt / tts — eshitish va gapirish provayderi; "
              "telegram-login / telegram-logout — shaxsiy Telegram akkaunt; "
              "trust on|off|status — tasdiq so'rashni o'chirish/yoqish",
     )
@@ -76,6 +77,11 @@ def main() -> int:
         from .sttswitch import apply as apply_stt
 
         return apply_stt(args.values)
+
+    if args.command == "tts":
+        from .sttswitch import apply_tts
+
+        return apply_tts(args.values)
 
     if args.command == "trust":
         from .trust import apply

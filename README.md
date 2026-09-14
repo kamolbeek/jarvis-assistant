@@ -651,6 +651,21 @@ Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
 avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
 qo'shimcha vaqt ketadi.
 
+### Gapirishni almashtirish — aksent shu yerda hal bo'ladi
+
+```bash
+python -m jarvis tts              # hozir qaysi ovoz
+python -m jarvis tts azure        # haqiqiy o'zbek ovozi
+python -m jarvis tts azure uz-UZ-MadinaNeural
+```
+
+macOS'ning o'z ovozlari orasida o'zbekchasi **yo'q** — ular o'zbek matnini
+ingliz talaffuzi bilan o'qiydi. ElevenLabs tabiiyroq, lekin uning ham
+o'zbekchasi begona aksent bilan chiqadi. Yagona haqiqiy o'zbek ovozi —
+Azure'ning `uz-UZ-SardorNeural` va `uz-UZ-MadinaNeural` ovozlari.
+
+Kerak: `.env` da `AZURE_SPEECH_KEY` va `AZURE_SPEECH_REGION`.
+
 ## O'zbek tili uchun ovoz: qaysi provayderni tanlash
 
 Bu loyihaning eng nozik qismi — o'zbekcha sifat provayderdan provayderga
