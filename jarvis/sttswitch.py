@@ -100,9 +100,10 @@ def current_tts() -> tuple[str, str]:
 
 def apply_tts(values: list[str]) -> int:
     """`jarvis tts [provayder] [ovoz]`. Argumentsiz — hozirgi holat."""
-    from .config import ensure_config
+    from .config import ensure_config, load_env
     from .configpatch import patch_file
 
+    load_env()
     if not values:
         now, voice = current_tts()
         suffix = f" · {voice}" if voice else ""
@@ -165,9 +166,10 @@ def _show() -> int:
 
 def apply(values: list[str]) -> int:
     """`jarvis stt [provayder]`. Argumentsiz — hozirgi holatni ko'rsatadi."""
-    from .config import ensure_config
+    from .config import ensure_config, load_env
     from .configpatch import patch_file
 
+    load_env()
     if not values:
         return _show()
 

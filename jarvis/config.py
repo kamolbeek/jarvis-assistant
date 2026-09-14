@@ -88,6 +88,16 @@ class Config:
             path.mkdir(parents=True, exist_ok=True)
 
 
+def load_env() -> None:
+    """`.env` ni muhitga qo'yadi.
+
+    Sozlamani o'qimaydigan buyruqlar ham kalitlar borligini tekshiradi
+    (`stt`, `tts`). `.env` yuklanmasa, ular «kalit yo'q» deb bekorga
+    ogohlantiradi — va odam mavjud kalitni qidirib vaqt yo'qotadi.
+    """
+    load_dotenv(REPO_ROOT / ".env")
+
+
 def ensure_config() -> Path:
     """Sozlama faylini qaytaradi, bo'lmasa namunadan yaratadi.
 
