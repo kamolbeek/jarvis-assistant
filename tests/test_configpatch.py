@@ -257,3 +257,48 @@ def test_existing_config_is_left_alone(monkeypatch):
         config_module.ensure_config()
 
         assert "Meniki" in target.read_text(encoding="utf-8"), "mavjud sozlama o'chmasin"
+
+
+# --- `trust on` qisqa sozlama faylida ham ishlasin ----------------------------
+
+
+def test_trust_can_be_enabled_on_a_minimal_config():
+    """Foydalanuvchi faylida `safety:` bo'limi bo'lmasligi mumkin.
+
+    Ilgari bu «`safety:` bloki topilmadi» xatosi bilan tugardi — ya'ni
+    ishonch rejimini umuman yoqib bo'lmasdi va Jarvis har safar tasdiq
+    so'rayverardi.
+    """
+    from jarvis.configpatch import patch_file
+    from jarvis.trust import GATED_TOOLS
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "jarvis.yaml"
+        path.write_text(
+            'identity:\n  name: "Jarvis"\n\nvoice:\n  tts:\n    provider: "azure"\n',
+            encoding="utf-8",
+        )
+
+        patch_file(path, "safety", {"default": "allow"}, create=True)
+        patch_file(path, "safety.rules", dict.fromkeys(GATED_TOOLS, "allow"), create=True)
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert data["safety"]["default"] == "allow"
+        assert data["safety"]["rules"]["Bash"] == "allow"
+        assert data["voice"]["tts"]["provider"] == "azure", "boshqa bo'limlar tegilmasin"
+
+
+def test_trust_rules_land_inside_safety():
+    """Qoidalar ildizga emas, `safety:` ichiga tushishi kerak."""
+    from jarvis.configpatch import patch_file
+    from jarvis.trust import GATED_TOOLS
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "jarvis.yaml"
+        shutil.copy(Path("config/jarvis.example.yaml"), path)
+
+        patch_file(path, "safety.rules", dict.fromkeys(GATED_TOOLS, "allow"), create=True)
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert data["safety"]["rules"]["Write"] == "allow"
+        assert "rules" not in data, "ildizda ikkinchi `rules:` paydo bo'lmasin"

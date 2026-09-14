@@ -65,8 +65,12 @@ def apply(mode: str) -> int:
 
     policy = "allow" if mode == "on" else "ask"
     try:
-        patch_file(path, "safety", {"default": policy})
-        patch_file(path, "rules", dict.fromkeys(GATED_TOOLS, policy))
+        # `create=True` — sozlama faylida `safety:` bo'limi bo'lmasligi
+        # mumkin (namunada bor, lekin foydalanuvchi fayli qisqa bo'lsa
+        # yo'q). Ilgari bu «`safety:` bloki topilmadi» xatosi bilan
+        # tugardi va ishonch rejimini yoqib bo'lmasdi.
+        patch_file(path, "safety", {"default": policy}, create=True)
+        patch_file(path, "safety.rules", dict.fromkeys(GATED_TOOLS, policy), create=True)
     except Exception as exc:  # noqa: BLE001 — sabab foydalanuvchiga kerak
         print(f"{RED}{type(exc).__name__}: {exc}{RESET}", file=sys.stderr)
         return 1
