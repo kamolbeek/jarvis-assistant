@@ -80,7 +80,12 @@ audio:
   endpointing:
     backend: "webrtcvad"           # webrtcvad | energy
     aggressiveness: 2              # 0..3
-    silence_ms: 900                # shuncha jimlikdan keyin yozib olish tugaydi
+    # Shuncha jimlikdan keyin yozib olish tugaydi. Bu — javob tezligi va
+    # uzun gapni oxirigacha eshitish o'rtasidagi muvozanat. 900 ms qisqa
+    # ekan: uzun gapning o'rtasida bir nafas olish ham «gap tugadi» deb
+    # o'qilardi, gapning qolgani esa alohida savol bo'lib ketardi va
+    # boshidagi mazmun yo'qolardi. Tez javob kerak bo'lsa pasaytiring.
+    silence_ms: 1500
     max_utterance_sec: 30
     preroll_ms: 300                # uyg'otuvchi so'zdan oldingi audio (kontekst uchun)
 

@@ -186,6 +186,7 @@ class Jarvis:
         self._greeted = False
         self._interrupted = False
         self._heartbeat: asyncio.Task[None] | None = None
+        self._watchdog: asyncio.Task[None] | None = None
 
     # --- Hayot sikli ---
 
@@ -209,6 +210,7 @@ class Jarvis:
         mic_ok = await self._check_mic_delivers_audio()
         await self._mark_ready()
         self._heartbeat = asyncio.create_task(self.health.heartbeat())
+        self._watchdog = asyncio.create_task(self._mic_watchdog())
         self._standby.touch(time.monotonic())
         await self.bus.set_state(State.IDLE)
 
@@ -348,6 +350,8 @@ class Jarvis:
             self._confirm_task.cancel()
         if self._heartbeat is not None:
             self._heartbeat.cancel()
+        if self._watchdog is not None:
+            self._watchdog.cancel()
         await self.scheduler.stop()
         await self.mic.stop()
         await self.brain.stop()
@@ -599,6 +603,34 @@ class Jarvis:
 
         await self.bus.set_state(State.IDLE)
 
+    # Shuncha vaqt kadr kelmasa, mikrofon o'lgan deb hisoblaymiz.
+    MIC_STALL_SEC = 6.0
+
+    async def _mic_watchdog(self) -> None:
+        """Mikrofon oqimi o'lib qolsa, uni qaytadan ochadi.
+
+        macOS audio qurilmani almashtirsa (quloqchin ulandi, boshqa ilova
+        chiqishni o'zgartirdi), PortAudio oqimi jimgina to'xtaydi: na xato,
+        na kadr keladi. Tashqaridan bu «Jarvis to'satdan kar bo'lib qoldi»
+        bo'lib ko'rinadi — chaqiruv ham, tugma ham ishlamaydi. Buni
+        foydalanuvchi emas, dastur o'zi sezishi kerak.
+        """
+        while not self._shutdown.is_set():
+            await asyncio.sleep(2.0)
+            if self.speaker.speaking or self.mic.silent_for < self.MIC_STALL_SEC:
+                continue
+
+            await self.health.mark(System.MIC, Status.DOWN, "kadr kelmayapti")
+            if await self.mic.restart():
+                await self.health.mark(System.MIC, Status.READY, quiet=True)
+                await self.bus.log_line("Mikrofon qayta ochildi", level="warn")
+            else:
+                await self.bus.log_line(
+                    "Mikrofon ochilmadi — Jarvisni qayta ishga tushiring", level="error"
+                )
+                # Qayta-qayta urinib jurnalni to'ldirmaymiz.
+                await asyncio.sleep(20.0)
+
     async def _maybe_standby(self) -> None:
         """Vaqti kelgan bo'lsa, sukut holatiga o'tadi."""
         if self._standby.due(time.monotonic()):
@@ -790,7 +822,7 @@ class Jarvis:
         endpointer = Endpointer(
             detector=build_speech_detector(endpoint_cfg, self.config.sample_rate),
             frame_ms=int(self.config.get("audio.frame_ms", 20)),
-            silence_ms=int(endpoint_cfg.get("silence_ms", 900)),
+            silence_ms=int(endpoint_cfg.get("silence_ms", 1500)),
             max_utterance_sec=float(endpoint_cfg.get("max_utterance_sec", 30)),
         )
         # Gapni bo'lgan bo'lsa, aytilgan birinchi so'zlar shu buferda —

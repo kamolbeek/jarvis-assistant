@@ -651,6 +651,23 @@ Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
 avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
 qo'shimcha vaqt ketadi.
 
+### Mikrofon o'lib qolsa — o'zi tiklanadi
+
+macOS audio qurilmani almashtirganda (quloqchin ulandi, boshqa ilova
+chiqishni o'zgartirdi) PortAudio oqimi **jimgina** to'xtaydi: na xato, na
+kadr keladi. Tashqaridan bu «Jarvis to'satdan kar bo'lib qoldi» bo'lib
+ko'rinadi — chaqiruv ham, orbni bosish ham, `⌘⇧J` ham ishlamaydi.
+
+Ikkita himoya bor:
+
+* kadr kelmasa, oqim jim kadr beradi — asosiy sikl qotib qolmaydi va
+  tugmalar ishlashda davom etadi;
+* qo'riqchi 6 soniya kadr kelmaganini sezsa, mikrofonni **o'zi qaytadan
+  ochadi** va jurnalga yozadi.
+
+Shu paytda HUD'dagi mikrofon siferblati qizaradi — ya'ni nima
+bo'layotgani ko'rinib turadi.
+
 ### Musiqa chalinib turganda
 
 Siz gapira boshlaganingizda musiqa **butunlay jim bo'ladi** — pasaymaydi,
