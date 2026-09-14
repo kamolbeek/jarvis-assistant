@@ -92,3 +92,52 @@ async def test_restart_reports_failure_instead_of_raising(monkeypatch):
     monkeypatch.setattr(mic, "start", broken_start)
 
     assert await mic.restart() is False
+
+
+# --- Gap bo'lingandan keyingi orqaga qarash --------------------------------
+
+
+async def test_recent_keeps_more_than_the_preroll():
+    """Bo'lish paytida 300 ms preroll yetmaydi — uzunroq oyna kerak.
+
+    Bo'lish qarori ~350 ms nutqdan keyin qabul qilinadi, undan keyin ham
+    ijroni to'xtatishga vaqt ketadi. Shuning uchun `recent` buferi shu
+    oynani qoplashi kerak.
+    """
+    mic = MicStream(sample_rate=16000, frame_samples=320, preroll_ms=300, recent_ms=1700)
+
+    # 2 soniyalik audio: har kadr o'z raqami bilan belgilangan.
+    for index in range(100):
+        mic._push(np.full(320, index % 100, dtype=np.int16))
+
+    preroll = mic.take_preroll()
+    recent = mic.recent(1200)
+
+    assert preroll.size == 320 * 15, "preroll — atigi 300 ms"
+    assert recent.size == 320 * 60, "orqaga qarash — 1200 ms"
+    assert recent.size > preroll.size * 3
+
+
+async def test_recent_does_not_clear_the_buffer():
+    """`recent` ni ikki marta o'qish mumkin — u tozalamaydi."""
+    mic = MicStream(sample_rate=16000, frame_samples=320, recent_ms=1000)
+    for index in range(20):
+        mic._push(np.full(320, index, dtype=np.int16))
+
+    first = mic.recent(200)
+    second = mic.recent(200)
+
+    assert first.size == second.size
+    assert np.array_equal(first, second)
+
+
+async def test_drain_clears_the_queue_so_audio_is_not_doubled():
+    """Bo'lishdan keyin navbat tozalanadi — aks holda audio ikki marta tushardi."""
+    mic = MicStream(sample_rate=16000, frame_samples=320, recent_ms=1000)
+    for index in range(10):
+        mic._push(np.full(320, index, dtype=np.int16))
+
+    assert mic._queue.qsize() == 10
+    mic.drain()
+    assert mic._queue.qsize() == 0
+    assert mic.recent(200).size > 0, "tarix saqlanib qolsin"

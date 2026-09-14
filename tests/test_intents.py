@@ -80,3 +80,25 @@ def test_cancel_closes_everything(text: str):
 def test_stop_word_in_a_long_sentence_is_ignored():
     """«bu ishni to'xtat deb yozib qo'y» — bu buyruq emas, matn."""
     assert is_stop_speaking("bu loyihani to'xtatilgan deb belgila") is False
+
+
+# «To'xta» dan keyin buyruq aytilishi — eng ko'p uchraydigan holat.
+#
+# Odam Jarvisning gapini bo'lib, darhol nima qilish kerakligini aytadi:
+# «to'xta, Instagramga kirib buni qil». Ilgari bunday gap «to'xta» deb
+# o'qilib, butunlay tashlab yuborilardi — va foydalanuvchi buyrug'ining
+# boshi yo'qolib ketardi.
+
+
+@pytest.mark.parametrize("text", [
+    "to'xta instagramga kir",
+    "to'xta buni qil",
+    "jim bo'l endi qaytar",
+])
+def test_stop_plus_command_is_a_command(text: str):
+    assert is_stop_speaking(text) is False, text
+
+
+@pytest.mark.parametrize("text", ["to'xta iltimos", "to'xta jarvis", "jim bo'l endi", "bas"])
+def test_stop_with_filler_is_still_a_stop(text: str):
+    assert is_stop_speaking(text) is True, text

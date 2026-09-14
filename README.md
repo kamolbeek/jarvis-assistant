@@ -651,6 +651,25 @@ Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
 avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
 qo'shimcha vaqt ketadi.
 
+### Gapni bo'lganda boshi yo'qolmasin
+
+«To'xta, Instagramga kirib buni qil» — odam Jarvisning gapini bo'lib,
+darhol buyruqni aytadi. Bu yerda ikkita tuzoq bor edi.
+
+**Birinchisi:** «to'xta» so'zi gapning boshida turgani uchun butun gap
+«gapirishni to'xtat» deb o'qilib, tashlab yuborilardi. Endi faqat
+**yolg'iz** «to'xta» shunday o'qiladi; orqasidan buyruq kelsa — bu buyruq.
+
+**Ikkinchisi:** bo'lish qarori ~350 ms nutqdan keyin qabul qilinadi va
+undan keyin ham ijroni to'xtatishga vaqt ketadi. 300 ms lik preroll bunga
+yetmasdi — Jarvis gapni o'rtasidan eshitardi. Endi orqaga qarash oynasi
+alohida sozlanadi:
+
+```yaml
+conversation:
+  interrupt_lookback_ms: 1200
+```
+
 ### Mikrofon o'lib qolsa — o'zi tiklanadi
 
 macOS audio qurilmani almashtirganda (quloqchin ulandi, boshqa ilova

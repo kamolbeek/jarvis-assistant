@@ -121,7 +121,12 @@ class Jarvis:
             device=config.get("audio.input_device"),
             preroll_ms=int(config.get("audio.endpointing.preroll_ms", 300)),
             gain=float(config.get("audio.input_gain", 1.0)),
-            recent_ms=int(config.get("activation.wake_word.verify_window_ms", 2000)) + 500,
+            # Bufer ikki ishni qoplashi kerak: chaqiruvni matn bilan
+            # tekshirish va gap bo'lingandagi orqaga qarash.
+            recent_ms=max(
+                int(config.get("activation.wake_word.verify_window_ms", 2000)) + 500,
+                int(config.section("conversation").get("interrupt_lookback_ms", 1200)) + 500,
+            ),
         )
 
         wake_cfg = config.section("activation.wake_word")
@@ -176,6 +181,9 @@ class Jarvis:
         # ikkita ovoz oqimi bir vaqtda ochilib, ikki ovoz bir-birining
         # ustidan gapiradi — eshitib bo'lmaydigan aralashma chiqadi.
         self._speech_lock = asyncio.Lock()
+
+        # Gap bo'lingandan keyin qancha orqaga qarab audio olinadi.
+        self._interrupt_lookback_ms = int(self._talk.get("interrupt_lookback_ms", 1200))
 
         # Uzoq jimlikdan keyin sahna yopiladi, orb xiralashadi. Chaqiruv
         # ishlashda davom etadi — bu "o'chish" emas, "o'zini bosish".
@@ -825,9 +833,22 @@ class Jarvis:
             silence_ms=int(endpoint_cfg.get("silence_ms", 1500)),
             max_utterance_sec=float(endpoint_cfg.get("max_utterance_sec", 30)),
         )
-        # Gapni bo'lgan bo'lsa, aytilgan birinchi so'zlar shu buferda —
-        # ular yo'qolmasligi kerak.
-        endpointer.prime(self.mic.take_preroll())
+        if self._interrupted:
+            # Gapni bo'lish qarori ~350 ms nutqdan keyin qabul qilinadi, va
+            # undan keyin ham ijroni to'xtatish, ovozni pasaytirish uchun
+            # vaqt ketadi. 300 ms lik preroll bunga yetmaydi: «to'xta,
+            # Instagramga kirib...» degan gapning boshi yo'qolib, Jarvis
+            # o'rtasidan eshitardi. Shuning uchun uzunroq oyna olamiz.
+            #
+            # `drain` shart: o'sha audio navbatda ham turibdi va tozalamasak
+            # ikki marta tushib, so'zlar takrorlanib ketardi.
+            endpointer.prime(self.mic.recent(self._interrupt_lookback_ms))
+            self.mic.take_preroll()
+            self.mic.drain()
+        else:
+            # Uyg'otuvchi so'zdan oldingi audio — «Hey Jarvis, ob-havo
+            # qanday?» bir nafasda aytilsa, savol qismi yo'qolmasin.
+            endpointer.prime(self.mic.take_preroll())
         self._interrupted = False
 
         # Foydalanuvchi umuman gapirmasa, cheksiz kutib qolmaymiz.

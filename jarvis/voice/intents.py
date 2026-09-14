@@ -47,16 +47,35 @@ def _tokens(text: str) -> list[str]:
 STOP_WORDS = frozenset({"toxta", "tuxta", "jim", "bas", "shosh"})
 STOP_PHRASES = ("jim bol", "bas qil", "gapirma", "toxtat")
 
+# «To'xta» bilan birga kelishi mumkin bo'lgan, o'zi ma'no tashimaydigan
+# so'zlar. Ular buyruq emas, shuning uchun «to'xta» ni yolg'iz deb
+# hisoblashga xalaqit bermaydi.
+_FILLERS = frozenset({"ha", "yoq", "iltimos", "endi", "hoy", "hey", "jarvis", "bir", "hozir"})
+
 
 def is_stop_speaking(text: str) -> bool:
-    """«To'xta» — gapirishni to'xtat, lekin suhbatni yopma."""
+    """«To'xta» — gapirishni to'xtat, lekin suhbatni yopma.
+
+    Faqat YOLG'IZ «to'xta» shunday o'qiladi. «To'xta, Instagramga kir»
+    degan gap — bu buyruq: odam avval gapni bo'ladi, keyin nima qilish
+    kerakligini aytadi. Ilgari bunday gap butunlay tashlab yuborilardi va
+    foydalanuvchi buyrug'ining boshi yo'qolib ketardi.
+    """
     words = _tokens(text)
     if not words or len(words) > 3:
         return False
 
     joined = " ".join(words)
-    return (any(phrase in joined for phrase in STOP_PHRASES)
-            or any(word in STOP_WORDS for word in words))
+    hit = (any(phrase in joined for phrase in STOP_PHRASES)
+           or any(word in STOP_WORDS for word in words))
+    if not hit:
+        return False
+
+    # Buyruq qo'shilgan bo'lsa, bu «to'xta» emas — buni miyaga berish kerak.
+    extra = [w for w in words
+             if w not in STOP_WORDS and w not in _FILLERS
+             and not any(w in phrase for phrase in STOP_PHRASES)]
+    return not extra
 
 
 def is_end_of_conversation(text: str) -> bool:

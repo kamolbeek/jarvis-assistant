@@ -125,6 +125,12 @@ conversation:
   barge_in_min_speech_ms: 350       # shuncha uzluksiz nutqdan keyin to'xtaydi
   barge_in_margin: 2.0              # foniga nisbatan shuncha baland bo'lishi kerak
 
+  # Gap bo'lingandan keyin qancha orqaga qarab audio olinadi. Bo'lish
+  # qarori ~350 ms nutqdan keyin qabul qilinadi va undan keyin ham ijroni
+  # to'xtatishga vaqt ketadi — shu oyna bo'lmasa, «to'xta, Instagramga
+  # kirib...» degan gapning boshi yo'qolib, Jarvis o'rtasidan eshitadi.
+  interrupt_lookback_ms: 1200
+
 # Eshitish va gapirish ALOHIDA tanlanadi — har biri uchun eng yaxshisini
 # olish mumkin. O'zbek tili uchun tavsiya:
 #   stt: mohir  (o'zbek nutqiga ixtisoslashgan)
