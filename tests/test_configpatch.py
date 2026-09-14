@@ -10,6 +10,10 @@ natija diskka tushmasligi kerak.
 
 from __future__ import annotations
 
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -188,3 +192,32 @@ def test_existing_parent_gets_the_new_child_block():
     assert data["activation"]["wake_word"]["threshold"] == 0.3
     assert data["activation"]["clap"]["enabled"] is True
     assert data["audio"]["input_gain"] == 1.0
+
+
+# --- `jarvis stt` almashtirishi -----------------------------------------------
+
+
+def test_stt_provider_is_switched_without_touching_anything_else():
+    """Provayderni almashtirish qolgan sozlamalarni va izohlarni buzmasin."""
+    from jarvis.configpatch import patch_file
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "jarvis.yaml"
+        shutil.copy(Path("config/jarvis.example.yaml"), path)
+
+        patch_file(path, "voice.stt", {"provider": "whisper_local"}, create=True)
+
+        text = path.read_text(encoding="utf-8")
+        data = yaml.safe_load(text)
+        assert data["voice"]["stt"]["provider"] == "whisper_local"
+        assert data["voice"]["tts"]["provider"] == "elevenlabs", "TTS tegilmasin"
+        assert data["identity"]["name"] == "Jarvis"
+        assert "rubai" in text, "izohlar joyida qolsin"
+
+
+def test_stt_aliases_point_at_real_providers():
+    """«rubai» kabi odam aytadigan nomlar haqiqiy provayderga olib borsin."""
+    from jarvis.sttswitch import ALIASES, PROVIDERS
+
+    for alias, target in ALIASES.items():
+        assert target in PROVIDERS, f"{alias} -> {target} mavjud emas"

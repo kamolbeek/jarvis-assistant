@@ -629,6 +629,28 @@ qiymatlarni qaytaring. Rostini aytganda, eng katta farqni yaxshi mikrofon
 beradi: MacBook'ning ichki mikrofoni 1–2 metrgacha yaxshi ishlaydi, undan
 narisiga tashqi mikrofon kerak.
 
+### Eshitishni almashtirish
+
+Qaysi provayder to'g'ri kelishini faqat o'z ovozingiz, o'z mikrofoningiz va
+o'z internetingiz bilan sinab bilasiz. Shuning uchun YAML faylni qo'lda
+ochish shart emas:
+
+```bash
+python -m jarvis stt                # hozir qaysi biri
+python -m jarvis stt whisper_local  # almashtirish
+```
+
+| Provayder | Qanday |
+|---|---|
+| `elevenlabs` | eng aniq va tez; internet va kalit kerak, har so'rov pullik |
+| `mohir` | o'zbek tiliga ixtisoslashgan; internet va kalit kerak |
+| `whisper_local` | oflayn va bepul; M-seriyali Mac'da tez |
+| `whisper_cpp` (`rubai`) | oflayn va bepul; aniq, lekin sezilarli kechikish beradi |
+
+Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
+avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
+qo'shimcha vaqt ketadi.
+
 ## O'zbek tili uchun ovoz: qaysi provayderni tanlash
 
 Bu loyihaning eng nozik qismi — o'zbekcha sifat provayderdan provayderga

@@ -167,6 +167,12 @@ class Jarvis:
         self._vc_attempts = int(vc.get("attempts", 2))
         self._confirm_task: asyncio.Task[None] | None = None
 
+        # Dinamikka navbat. Tasdiq savoli alohida vazifada boshlanadi va
+        # javob hali aytilib turgan paytga to'g'ri kelishi mumkin. Qulfsiz
+        # ikkita ovoz oqimi bir vaqtda ochilib, ikki ovoz bir-birining
+        # ustidan gapiradi — eshitib bo'lmaydigan aralashma chiqadi.
+        self._speech_lock = asyncio.Lock()
+
         # Uzoq jimlikdan keyin sahna yopiladi, orb xiralashadi. Chaqiruv
         # ishlashda davom etadi — bu "o'chish" emas, "o'zini bosish".
         self._standby = StandbyWatch(float(self._talk.get("standby_after_sec", 300)))
@@ -852,13 +858,24 @@ class Jarvis:
         if not text:
             return
 
+        if remote is not None:
+            await self.bus.set_state(State.SPEAKING)
+            await self.bus.say(text)
+            log.info("Jarvis: %s", text)
+            await self._speak_remote(text, remote)
+            return
+
+        # Navbat kutish shu yerda. Holat va matn ham qulf ichida yuboriladi —
+        # aks holda ekranda keyingi jumla oldinroq chiqib, aytilayotgan gapga
+        # mos kelmay qolardi.
+        async with self._speech_lock:
+            await self._speak_now(text)
+
+    async def _speak_now(self, text: str) -> None:
+        """Dinamikdan chiqarish — faqat `_speak` chaqiradi, navbat ichida."""
         await self.bus.set_state(State.SPEAKING)
         await self.bus.say(text)
         log.info("Jarvis: %s", text)
-
-        if remote is not None:
-            await self._speak_remote(text, remote)
-            return
 
         def on_level(value: float) -> None:
             # `Speaker` buni event loop oqimidan chaqiradi, shuning uchun bu yerda
@@ -917,13 +934,14 @@ class Jarvis:
             await self.ui.send_audio(client, audio, self.tts.sample_rate)
 
     async def _play_chime(self) -> None:
-        """Uyg'onish signalini chaladi."""
+        """Uyg'onish signalini chaladi — u ham dinamik navbatida."""
 
         async def one_chunk():
             yield chime(self.tts.sample_rate)
 
         try:
-            await self.speaker.play(one_chunk(), self.tts.sample_rate)
+            async with self._speech_lock:
+                await self.speaker.play(one_chunk(), self.tts.sample_rate)
         except Exception:
             log.debug("Signal chalinmadi", exc_info=True)
 

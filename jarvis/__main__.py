@@ -22,6 +22,7 @@ Misollar:
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
   jarvis telegram-login   Shaxsiy Telegram akkauntga kirish (bir marta)
   jarvis telegram-logout  Telegram seansini bekor qilish
+  jarvis stt              Eshitish (STT) provayderini ko'rish/almashtirish
   jarvis trust status     Ishonch rejimi yoqilganmi
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
@@ -51,15 +52,17 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust",
+        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust", "stt",
                  "telegram-login", "telegram-logout"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
              "mic-test — mikrofonlarni o'lchash; "
+             "stt — eshitish provayderi; "
              "telegram-login / telegram-logout — shaxsiy Telegram akkaunt; "
              "trust on|off|status — tasdiq so'rashni o'chirish/yoqish",
     )
-    parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
+    parser.add_argument("values", nargs="*",
+                        help="wake-set uchun: chegara [shubhali]; stt uchun: provayder")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
 
@@ -68,6 +71,11 @@ def main() -> int:
         from .telegramlogin import main as telegram_main
 
         return telegram_main(["logout" if args.command == "telegram-logout" else "login"])
+
+    if args.command == "stt":
+        from .sttswitch import apply as apply_stt
+
+        return apply_stt(args.values)
 
     if args.command == "trust":
         from .trust import apply
