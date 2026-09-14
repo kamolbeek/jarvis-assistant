@@ -51,6 +51,7 @@ from .voice.consent import consent_prompt, parse_consent
 from .voice.intents import is_end_of_conversation, is_stop_speaking
 from .voice.stt import build_stt, transcribe_guarded
 from .voice.tts import Speaker, build_tts
+from .voice.unfinished import looks_unfinished
 
 log = logging.getLogger("jarvis")
 
@@ -184,6 +185,10 @@ class Jarvis:
 
         # Gap bo'lingandan keyin qancha orqaga qarab audio olinadi.
         self._interrupt_lookback_ms = int(self._talk.get("interrupt_lookback_ms", 1200))
+
+        # Gap tugamagan bo'lsa, davomini shuncha kutamiz (necha marta).
+        self._continue_wait_sec = float(self._talk.get("continue_wait_sec", 2.0))
+        self._continue_tries = int(self._talk.get("continue_tries", 2))
 
         # Uzoq jimlikdan keyin sahna yopiladi, orb xiralashadi. Chaqiruv
         # ishlashda davom etadi — bu "o'chish" emas, "o'zini bosish".
@@ -819,9 +824,29 @@ class Jarvis:
                     await macos.set_volume(previous)
 
     async def _capture_utterance(self, patience_sec: float = 6.0) -> str:
-        """Foydalanuvchini tinglaydi va aytganini matnga aylantiradi."""
+        """Foydalanuvchini tinglaydi va aytganini matnga aylantiradi.
+
+        Jimlik taymeri qisqa — javob tez boshlanishi uchun. Lekin gap
+        tugamagan bo'lsa («...va», «...keyin», «aaa»), yana tinglaymiz va
+        aytilganini birinchisiga qo'shamiz. Shunday qilib odam o'ylanib
+        turgani gapni bo'lib yubormaydi, nuqta qo'yilgan gap esa darhol
+        javob oladi.
+        """
         async with self._ducked():
-            return await self._listen(patience_sec)
+            text = await self._listen(patience_sec)
+            if not text:
+                return ""
+
+            for _ in range(self._continue_tries):
+                if not looks_unfinished(text):
+                    break
+                log.info("Gap tugamaganga o'xshaydi, davomini kutamiz: «%s»", text)
+                more = await self._listen(self._continue_wait_sec)
+                if not more:
+                    break
+                text = f"{text} {more}".strip()
+
+            return text
 
     async def _listen(self, patience_sec: float) -> str:
         await self.bus.set_state(State.LISTENING)
@@ -830,7 +855,7 @@ class Jarvis:
         endpointer = Endpointer(
             detector=build_speech_detector(endpoint_cfg, self.config.sample_rate),
             frame_ms=int(self.config.get("audio.frame_ms", 20)),
-            silence_ms=int(endpoint_cfg.get("silence_ms", 1500)),
+            silence_ms=int(endpoint_cfg.get("silence_ms", 1000)),
             max_utterance_sec=float(endpoint_cfg.get("max_utterance_sec", 30)),
         )
         if self._interrupted:

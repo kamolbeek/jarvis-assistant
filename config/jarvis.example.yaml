@@ -80,12 +80,15 @@ audio:
   endpointing:
     backend: "webrtcvad"           # webrtcvad | energy
     aggressiveness: 2              # 0..3
-    # Shuncha jimlikdan keyin yozib olish tugaydi. Bu — javob tezligi va
-    # uzun gapni oxirigacha eshitish o'rtasidagi muvozanat. 900 ms qisqa
-    # ekan: uzun gapning o'rtasida bir nafas olish ham «gap tugadi» deb
-    # o'qilardi, gapning qolgani esa alohida savol bo'lib ketardi va
-    # boshidagi mazmun yo'qolardi. Tez javob kerak bo'lsa pasaytiring.
-    silence_ms: 1500
+    # Shuncha jimlikdan keyin yozib olish tugaydi.
+    #
+    # Bu qiymat qasddan qisqa: nuqta qo'yilgan gap darhol javob olishi
+    # kerak. Odam o'ylanib qolgani gapni bo'lib yubormasligi uchun esa
+    # boshqa yo'l ishlatiladi — pastdagi `continue_wait_sec` ga qarang:
+    # gap «...va», «...keyin», «aaa» bilan tugagan bo'lsa, Jarvis davomini
+    # kutadi. Ya'ni qaror jimlik uzunligi bilan emas, aytilgan gap bilan
+    # qabul qilinadi.
+    silence_ms: 1000
     max_utterance_sec: 30
     preroll_ms: 300                # uyg'otuvchi so'zdan oldingi audio (kontekst uchun)
 
@@ -130,6 +133,12 @@ conversation:
   # to'xtatishga vaqt ketadi — shu oyna bo'lmasa, «to'xta, Instagramga
   # kirib...» degan gapning boshi yo'qolib, Jarvis o'rtasidan eshitadi.
   interrupt_lookback_ms: 1200
+
+  # Gap tugamagan bo'lsa (masalan «...keyin», «...va», «aaa» bilan
+  # tugasa), Jarvis javob bermasdan davomini kutadi. Shuncha soniya va
+  # shuncha marta — undan keyin baribir javob beradi.
+  continue_wait_sec: 2.0
+  continue_tries: 2
 
 # Eshitish va gapirish ALOHIDA tanlanadi — har biri uchun eng yaxshisini
 # olish mumkin. O'zbek tili uchun tavsiya:

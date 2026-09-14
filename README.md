@@ -651,6 +651,34 @@ Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
 avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
 qo'shimcha vaqt ketadi.
 
+### Qachon javob berishni boshlaydi
+
+Jimlik taymeri bitta savolga ikki xil javob bera olmaydi: «bir soniya
+jimlik» — bu gap tugagani ham, odam o'ylanib qolgani ham bo'lishi mumkin.
+Qisqa kutsa gapni bo'ladi, uzoq kutsa har bir javob kechikadi.
+
+Shuning uchun qaror **aytilgan gap bo'yicha** qabul qilinadi:
+
+| Gap qanday tugadi | Nima bo'ladi |
+|---|---|
+| «…Instagramga kir» | 1 soniyadan keyin javob beradi |
+| «…kir va» · «…keyin» · «…chunki» | davomini kutadi |
+| «aaa» · «mmm» | davomini kutadi |
+| «…aytib ber.» (nuqta bilan) | darhol javob beradi |
+
+```yaml
+audio:
+  endpointing:
+    silence_ms: 1000       # gap tugagach shuncha kutadi
+conversation:
+  continue_wait_sec: 2.0   # tugamagan gapning davomini shuncha kutadi
+  continue_tries: 2        # shuncha marta
+```
+
+Ya'ni tez javob uchun `silence_ms` ni pasaytiring; o'ylanib gapiradigan
+bo'lsangiz `continue_wait_sec` ni ko'taring. Ikkalasi bir-biriga xalaqit
+bermaydi.
+
 ### Gapni bo'lganda boshi yo'qolmasin
 
 «To'xta, Instagramga kirib buni qil» — odam Jarvisning gapini bo'lib,
