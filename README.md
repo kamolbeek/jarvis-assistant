@@ -651,6 +651,21 @@ Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
 avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
 qo'shimcha vaqt ketadi.
 
+### Ovozni sinash
+
+Almashtirgandan keyin darhol eshitib ko'rish uchun:
+
+```bash
+python -m jarvis say
+python -m jarvis say "Salom, bu sinov"
+```
+
+U avval **nima ishlatilayotganini yozadi** (provayder, ovoz, kalitlar
+joyidami), keyin o'sha bilan gapiradi. «Sozlamani o'zgartirdim, lekin ovoz
+o'sha-o'sha» degan holatda birinchi navbatda shu buyruqni bering: u
+sozlama haqiqatan o'zgarganini yoki eski nusxa ishlab turganini ajratib
+beradi.
+
 ### Gapirishni almashtirish — aksent shu yerda hal bo'ladi
 
 ```bash

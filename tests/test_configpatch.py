@@ -221,3 +221,39 @@ def test_stt_aliases_point_at_real_providers():
 
     for alias, target in ALIASES.items():
         assert target in PROVIDERS, f"{alias} -> {target} mavjud emas"
+
+
+# --- Sozlama fayli yo'qligi to'siq bo'lmasin -----------------------------------
+
+
+def test_missing_config_is_created_from_the_example(monkeypatch):
+    """`trust on` / `tts azure` fayl yo'qligida jimgina yiqilmasin.
+
+    Amalda shunday bo'lgan: buyruq berilgan, ekranda bir qator xato chiqib
+    yo'qolgan, foydalanuvchi esa sozlama o'zgardi deb o'ylagan.
+    """
+    from jarvis import config as config_module
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "config" / "jarvis.yaml"
+        monkeypatch.setattr(config_module, "CONFIG_PATH", target)
+
+        created = config_module.ensure_config()
+
+        assert created == target
+        assert target.exists()
+        data = yaml.safe_load(target.read_text(encoding="utf-8"))
+        assert data["identity"]["name"] == "Jarvis"
+
+
+def test_existing_config_is_left_alone(monkeypatch):
+    from jarvis import config as config_module
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "jarvis.yaml"
+        target.write_text("identity:\n  name: \"Meniki\"\n", encoding="utf-8")
+        monkeypatch.setattr(config_module, "CONFIG_PATH", target)
+
+        config_module.ensure_config()
+
+        assert "Meniki" in target.read_text(encoding="utf-8"), "mavjud sozlama o'chmasin"

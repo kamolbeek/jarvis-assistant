@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
 GREEN = "\033[32m"
 RED = "\033[31m"
@@ -101,7 +100,7 @@ def current_tts() -> tuple[str, str]:
 
 def apply_tts(values: list[str]) -> int:
     """`jarvis tts [provayder] [ovoz]`. Argumentsiz — hozirgi holat."""
-    from .config import CONFIG_PATH
+    from .config import ensure_config
     from .configpatch import patch_file
 
     if not values:
@@ -124,11 +123,7 @@ def apply_tts(values: list[str]) -> int:
 
     voice = values[1] if len(values) > 1 else TTS_DEFAULT_VOICE.get(choice, "")
 
-    path = Path(CONFIG_PATH)
-    if not path.exists():
-        print(f"{RED}{path} topilmadi. Avval:\n"
-              f"  cp config/jarvis.example.yaml config/jarvis.yaml{RESET}", file=sys.stderr)
-        return 1
+    path = ensure_config()
 
     patch: dict[str, str] = {"provider": choice}
     if voice:
@@ -170,7 +165,7 @@ def _show() -> int:
 
 def apply(values: list[str]) -> int:
     """`jarvis stt [provayder]`. Argumentsiz — hozirgi holatni ko'rsatadi."""
-    from .config import CONFIG_PATH
+    from .config import ensure_config
     from .configpatch import patch_file
 
     if not values:
@@ -182,11 +177,7 @@ def apply(values: list[str]) -> int:
         print(f"Mumkin: {', '.join(PROVIDERS)}", file=sys.stderr)
         return 2
 
-    path = Path(CONFIG_PATH)
-    if not path.exists():
-        print(f"{RED}{path} topilmadi. Avval:\n"
-              f"  cp config/jarvis.example.yaml config/jarvis.yaml{RESET}", file=sys.stderr)
-        return 1
+    path = ensure_config()
 
     try:
         patch_file(path, "voice.stt", {"provider": choice}, create=True)
