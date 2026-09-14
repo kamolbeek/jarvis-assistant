@@ -158,7 +158,11 @@ class Jarvis:
         # Tinglayotganda tizim ovozini pasaytirish — musiqa ustidan
         # eshitilishi uchun.
         self._duck_enabled = bool(config.get("audio.duck_while_listening", True))
-        self._duck_level = int(config.get("audio.duck_volume", 20))
+        # Standart 0 — ya'ni tinglash paytida musiqa butunlay jim bo'ladi.
+        # Pasaytirish yetarli emas edi: mikrofon baribir musiqani eshitadi va
+        # u sizning gapingiz bilan aralashib, matnga aylantirishni buzadi.
+        self._duck_level = int(config.get("audio.duck_volume", 0))
+        self._duck_depth = 0
 
         # Ovozli tasdiq: tugma bosish shart emas, «ha» / «yo'q» deyish yetadi.
         vc = config.section("safety.voice_confirm")
@@ -221,6 +225,15 @@ class Jarvis:
         elif not mic_ok:
             log.warning("Mikrofon ishlamayapti — orb ekranda qoldirildi "
                         "(sabab ko'rinib tursin)")
+
+        # Tasdiq so'ralishi/so'ralmasligi jurnalda ko'rinib tursin. Bu
+        # sozlama sukut bilan ishlaydi, ya'ni «nega yana so'rayapti?» degan
+        # savolga javobni faqat shu qator beradi.
+        policy = str(self.config.get("safety.default", "ask")).lower()
+        log.info("Ishonch rejimi: %s",
+                 "yoqilgan — tasdiq so'ralmaydi" if policy == "allow"
+                 else "o'chirilgan — xavfli amallar tasdiq so'raydi "
+                      "(yoqish: python -m jarvis trust on)")
 
         stats = self.memory.stats()
         log.info(
@@ -733,18 +746,34 @@ class Jarvis:
 
         from .tools import macos
 
+        # Ichma-ich chaqirilishi mumkin (suhbat ichida yana tinglash).
+        # Hisobsiz ikkinchi chaqiruv "eski daraja" sifatida allaqachon
+        # pasaytirilgan qiymatni saqlab qo'yardi va musiqa jim bo'lib
+        # qolardi.
+        self._duck_depth += 1
+        if self._duck_depth > 1:
+            try:
+                yield
+            finally:
+                self._duck_depth -= 1
+            return
+
+        # `previous` faqat haqiqatan pasaytirgan bo'lsak saqlanadi: ovoz
+        # allaqachon past bo'lsa, uni qaytarish uchun `osascript` chaqirish
+        # ham keraksiz — har bir navbatda ~100 ms bekorga ketardi.
         previous: int | None = None
         try:
-            previous = await macos.get_volume()
-            if previous > self._duck_level:
+            current = await macos.get_volume()
+            if current > self._duck_level:
                 await macos.set_volume(self._duck_level)
+                previous = current
         except macos.MacOsError:
             log.debug("Ovoz balandligi boshqarilmadi", exc_info=True)
-            previous = None
 
         try:
             yield
         finally:
+            self._duck_depth -= 1
             if previous is not None:
                 with suppress(Exception):
                     await macos.set_volume(previous)

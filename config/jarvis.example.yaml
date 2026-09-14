@@ -70,7 +70,11 @@ audio:
   # Aks sadoni dasturiy yo'q qilish og'ir ish; ovozni pasaytirish esa
   # arzon va aynan shu muammoni yechadi. Tinglash tugagach qaytariladi.
   duck_while_listening: true
-  duck_volume: 20                # foizda
+  # 0 — tinglash paytida musiqa BUTUNLAY jim bo'ladi. Pasaytirish yetarli
+  # emas: mikrofon baribir musiqani eshitadi va u sizning gapingiz bilan
+  # aralashib, matnga aylantirishni buzadi. Gapirib bo'lganingizdan keyin
+  # eski daraja qaytariladi — ya'ni ish bajarilayotganda musiqa chalinaveradi.
+  duck_volume: 0                 # foizda
 
   # Gapirishni tugatganini aniqlash
   endpointing:

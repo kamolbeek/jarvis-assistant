@@ -651,6 +651,23 @@ Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
 avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
 qo'shimcha vaqt ketadi.
 
+### Musiqa chalinib turganda
+
+Siz gapira boshlaganingizda musiqa **butunlay jim bo'ladi** — pasaymaydi,
+o'chadi. Sababi oddiy: pasaytirilgan musiqani ham mikrofon eshitadi va u
+sizning gapingiz bilan aralashib, matnga aylantirishni buzadi.
+
+Gapirib bo'lganingizdan keyin avvalgi daraja qaytariladi — ya'ni Jarvis
+ishni bajarayotganda musiqa chalinaveradi.
+
+```yaml
+audio:
+  duck_while_listening: true
+  duck_volume: 0        # 0 — butunlay jim; 20 — pasaytirish
+```
+
+Quloqchin taqsangiz bu umuman kerak emas: `duck_while_listening: false`.
+
 ### Ovozni sinash
 
 Almashtirgandan keyin darhol eshitib ko'rish uchun:
