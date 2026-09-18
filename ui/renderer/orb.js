@@ -16,6 +16,21 @@ const offlinePanel = document.getElementById("offline");
 const tooltip = document.getElementById("dial-tip");
 const workBadge = document.getElementById("work");
 const workText = document.getElementById("work-text");
+const statusState = document.getElementById("status-state");
+const statusWhat = document.getElementById("status-what");
+const problemBox = document.getElementById("problem");
+
+// Holatning o'zbekcha nomi. Ekranda doim shulardan biri turadi — «hech nima
+// ko'rinmayapti» degan holat bo'lmasligi kerak.
+const STATE_TEXT = {
+  idle: "KUTMOQDA",
+  wake: "UYG'ONDI",
+  listening: "ESHITYAPTI",
+  thinking: "O'YLAYAPTI",
+  speaking: "GAPIRYAPTI",
+  confirm: "TASDIQ KUTMOQDA",
+  error: "XATO",
+};
 
 let state = "idle";
 let level = 0;        // yadrodan kelgan xom daraja
@@ -77,6 +92,20 @@ function frame(now) {
 function setState(next) {
   if (next === "wake" && state !== "wake") flash = 1;
   state = next;
+  statusState.textContent = STATE_TEXT[next] || next.toUpperCase();
+  document.body.dataset.state = next;
+}
+
+// Hozir aynan nima qilinyapti (asbob nomi, bosqich). Bo'sh bo'lsa faqat
+// holat qoladi — bu ham axborot: «kutmoqda» degani ham holat.
+function showActivity(text) {
+  statusWhat.textContent = text ? `· ${text}` : "";
+}
+
+// Nosozlik keyingi muvaffaqiyatli qadamgacha turadi.
+function showProblem(text) {
+  problemBox.textContent = text || "";
+  problemBox.classList.toggle("hidden", !text);
 }
 
 function showCaption(role, text) {
@@ -151,6 +180,8 @@ function connect() {
     statusDot.classList.add("offline");
     offlinePanel.classList.remove("hidden");
     setState("idle");
+    statusState.textContent = "ALOQA YO'Q";
+    showActivity("");
     level = 0;
     applyStandby(false);
     // Aloqa yo'q — bo'g'inlar holati endi ishonchsiz, siferblatlar so'nsin.
@@ -171,8 +202,18 @@ function handleEvent(data) {
   switch (data.type) {
     case "hello":
       // Orb yadrodan keyin ochilgan bo'lishi mumkin — o'sha paytdagi
-      // band holatini ham shu xabardan olamiz.
+      // holatni ham shu xabardan olamiz.
       showWork(data.working || "");
+      showActivity(data.activity || "");
+      showProblem(data.problem || "");
+      if (data.state) setState(data.state);
+      applyStandby(!!data.standby);
+      break;
+    case "activity":
+      showActivity(data.text || "");
+      break;
+    case "problem":
+      showProblem(data.text || "");
       break;
     case "work":
       showWork(data.active ? data.text : "");
@@ -208,11 +249,6 @@ function handleEvent(data) {
     // butunlay ketadi. Chaqirilganda qaytadi.
     case "standby":
       applyStandby(!!data.on);
-      break;
-    // Yangi ulanish: yadro allaqachon sukutda bo'lishi mumkin (masalan
-    // kompyuter endi yoqildi) — orb chiqib qolmasligi kerak.
-    case "hello":
-      applyStandby(!!data.standby);
       break;
   }
 }

@@ -139,6 +139,62 @@ body.standby #orb-wrap:hover {
   50% { opacity: 1; transform: scale(1.15); }
 }
 
+/* --- Doimiy holat qatori --- */
+
+/* Eng muhim qoida: bu yozuv yo'qolmaydi. Caption 9 soniyadan keyin
+   so'nadi va shundan keyin ekranda hech nima qolmasdi — Jarvis
+   ishlayaptimi yoki qotib qolganmi, bilib bo'lmasdi. */
+#status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#status-state {
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+#status-what {
+  color: rgba(223, 246, 255, 0.62);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Holatga qarab rang — bir qarashda tushunarli bo'lsin */
+body[data-state="listening"] #status-state { color: var(--cyan); }
+body[data-state="thinking"] #status-state { color: var(--amber); }
+body[data-state="speaking"] #status-state { color: #ecfdff; }
+body[data-state="confirm"] #status-state { color: var(--amber); }
+body[data-state="error"] #status-state { color: var(--red); }
+body[data-state="idle"] #status-state { color: rgba(34, 227, 255, 0.55); }
+
+/* --- Nosozlik --- */
+
+#problem {
+  max-width: 100%;
+  padding: 5px 11px;
+  border-radius: 9px;
+  background: rgba(255, 68, 58, 0.14);
+  border: 1px solid rgba(255, 68, 58, 0.45);
+  color: #ffd9d6;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+#problem.hidden {
+  display: none;
+}
+
 /* --- Panellar --- */
 
 .panel {

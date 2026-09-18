@@ -69,6 +69,76 @@ TOOL_LABELS = {
 }
 
 
+# Asbob nomini ekranga chiqarish uchun o'zbekchalashtirish. Tasdiq savoli
+# uchun to'liq nomlar `TOOL_LABELS` da; bu yerda esa qisqa, «hozir nima
+# qilyapti» qatoriga mos ko'rinish.
+_ACTION_WORDS = {
+    "telegram": "Telegram",
+    "self": "o'z kodi",
+    "read": "o'qiyapti",
+    "chats": "chatlar",
+    "folders": "papkalar",
+    "folder": "papka",
+    "members": "a'zolar",
+    "send": "yuboryapti",
+    "later": "keyinroq",
+    "file": "fayl",
+    "search": "qidiryapti",
+    "delete": "o'chiryapti",
+    "create": "yaratyapti",
+    "join": "qo'shilyapti",
+    "leave": "chiqyapti",
+    "kick": "chiqaryapti",
+    "promote": "admin qilyapti",
+    "demote": "adminlikdan olyapti",
+    "block": "bloklayapti",
+    "story": "storiya",
+    "stories": "storiyalar",
+    "gift": "sovg'a",
+    "gifts": "sovg'alar",
+    "react": "reaksiya qo'yyapti",
+    "profile": "profil",
+    "sessions": "seanslar",
+    "check": "tekshiryapti",
+    "start": "boshlayapti",
+    "finish": "tugatyapti",
+    "status": "holati",
+    "issues": "kamchiliklar",
+    "note": "yozib qo'yyapti",
+    "restart": "qayta ishga tushyapti",
+    "revert": "orqaga qaytaryapti",
+}
+
+# Claude'ning o'z asboblari — ular ham ko'rinishi kerak.
+_BUILTIN_WORDS = {
+    "Bash": "buyruq bajaryapti",
+    "Read": "fayl o'qiyapti",
+    "Write": "fayl yozyapti",
+    "Edit": "fayl tahrirlayapti",
+    "Glob": "fayl qidiryapti",
+    "Grep": "fayllar ichidan qidiryapti",
+    "WebSearch": "internetdan qidiryapti",
+    "WebFetch": "sahifani o'qiyapti",
+    "NotebookEdit": "daftarni tahrirlayapti",
+    "Task": "yordamchi vazifa",
+}
+
+
+def describe_activity(tool_name: str) -> str:
+    """«mcp__jarvis__telegram_folder» -> «Telegram: papka»."""
+    label = TOOL_LABELS.get(tool_name) or _BUILTIN_WORDS.get(tool_name)
+    if label:
+        return label
+    if not tool_name.startswith("mcp__"):
+        return tool_name
+    bare = tool_name.split("__")[-1]
+    parts = bare.split("_")
+    words = [_ACTION_WORDS.get(part, part) for part in parts]
+    if parts and parts[0] in ("telegram", "self"):
+        return f"{words[0]}: {' '.join(words[1:])}".strip().rstrip(":")
+    return " ".join(words)
+
+
 @dataclass
 class Decision:
     """Bitta qaror natijasi."""
@@ -124,6 +194,10 @@ class SafetyGate:
     ) -> Any:
         """Claude Agent SDK'ning `can_use_tool` qayta chaqiruvi."""
         from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+
+        # Foydalanuvchi «nima qilyapti?» deb o'tirmasin — har bir asbob
+        # chaqiruvi ekrandagi holat qatoriga chiqadi.
+        await self.bus.activity(describe_activity(tool_name))
 
         decision = await self.evaluate(tool_name, input_data)
         self._audit(tool_name, input_data, decision)

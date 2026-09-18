@@ -56,6 +56,10 @@ class EventBus:
     # Bo'sh bo'lmasa — Jarvis uzoq, o'zi boshqaradigan ish bilan band
     # (masalan o'z kodini o'zgartiryapti). Orbda yozuv bo'lib turadi.
     working: str = ""
+    # Hozir aynan nima qilinyapti (asbob nomi, bosqich) va oxirgi nosozlik.
+    # Ikkalasi ham ekranda turadi — jimlikning sababi ko'rinmay qolmasin.
+    activity_text: str = ""
+    problem_text: str = ""
 
     def subscribe(self, callback: Subscriber) -> Callable[[], None]:
         """Obuna bo'ladi. Qaytgan funksiyani chaqirib obunani bekor qilish mumkin."""
@@ -81,6 +85,12 @@ class EventBus:
     # --- Qulaylik metodlari ---
 
     async def set_state(self, state: State, **extra: Any) -> None:
+        # Yangi bosqich boshlandi — oldingi asbobning nomi ekranda qolib
+        # ketmasin, aks holda «hali ham Telegramda ishlayapti» degan
+        # noto'g'ri taassurot qoladi.
+        if self.activity_text and state is not State.THINKING:
+            self.activity_text = ""
+            await self.emit({"type": "activity", "text": ""})
         self.state = state
         await self.emit({"type": "state", "state": str(state), **extra})
 
@@ -110,6 +120,35 @@ class EventBus:
         if text:
             log.info("Band: %s", text)
         await self.emit({"type": "work", "active": bool(text), "text": text})
+
+    async def activity(self, text: str) -> None:
+        """«Hozir aynan nima qilyapti» — ekrandagi holat qatorining ikkinchi qismi.
+
+        Holat («o'ylayapti») nima bo'layotganini umumiy aytadi, bu esa
+        aniq: «Telegram: papka yig'yapti», «matnga aylantiryapti».
+        Ikkisi bitta hodisa bo'lmasligi kerak: holat suhbat siklidan,
+        bu esa asbob chaqiruvlaridan keladi.
+
+        Bo'sh matn — aniq ish tugadi, faqat holat qoladi.
+        """
+        self.activity_text = text
+        await self.emit({"type": "activity", "text": text})
+
+    async def problem(self, text: str) -> None:
+        """Ko'rinadigan nosozlik: ekranda qoladi, vaqt bo'yicha yo'qolmaydi.
+
+        `log_line` jurnalga yozadi va 9 soniyadan keyin so'nadi — jimlikning
+        sababini topish uchun bu yetarli emas edi. Nosozlik keyingi muvaffaqiyatli
+        qadamgacha ko'rinib tursin.
+        """
+        self.problem_text = text
+        log.warning("Nosozlik: %s", text)
+        await self.emit({"type": "problem", "text": text})
+
+    async def clear_problem(self) -> None:
+        if self.problem_text:
+            self.problem_text = ""
+            await self.emit({"type": "problem", "text": ""})
 
     async def hud(self, action: str) -> None:
         """To'liq ekranli HUD oynasini ochish/yopish.

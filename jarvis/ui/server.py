@@ -231,6 +231,10 @@ class UiServer:
                 # Orb kech ulangan bo'lsa ham band belgisini ko'rsin — aks holda
                 # Jarvis o'z ustida ishlayotgani bilinmay qoladi.
                 "working": self.bus.working,
+                # Kech ulangan oyna ham hozirgi bosqichni va oxirgi
+                # nosozlikni darhol ko'rsatsin.
+                "activity": self.bus.activity_text,
+                "problem": self.bus.problem_text,
             }))
         except websockets.exceptions.ConnectionClosed:
             self._clients.pop(client_id, None)

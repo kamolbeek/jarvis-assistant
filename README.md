@@ -404,6 +404,37 @@ sichqonchani olib borsangiz, sabab yoziladi — jurnal titkilash shart emas.
 
 Butun ranglar tizimi bitta joyda: `ui/renderer/palette.js`.
 
+## Ekranda nima ko'rinadi
+
+Eng ko'p hafsalani buzadigan holat — Jarvis jim qolishi va nima
+bo'layotgani bilinmasligi. Shuning uchun ekranda **doimiy holat qatori**
+turadi, u hech qachon yo'qolmaydi:
+
+```
+ESHITYAPTI    · gapirishingizni kutyapti (6 s)
+O'YLAYAPTI    · Telegram: papka
+GAPIRYAPTI
+KUTMOQDA
+```
+
+Chap tomoni — bosqich, o'ng tomoni — aynan nima qilinyapti. Har bir asbob
+chaqiruvi shu yerga chiqadi: «Telegram: o'qiyapti», «buyruq bajaryapti»,
+«internetdan qidiryapti», «o'z kodi: tekshiryapti». Ya'ni «uxlayaptimi yoki
+ishlayaptimi» degan savol qolmaydi.
+
+Nosozlik esa **qizil qatorda qoladi** — 9 soniyadan keyin so'nmaydi:
+
+```
+Nutqni matnga aylantirib bo'lmadi: RuntimeError: whisper-cli topilmadi
+```
+
+Ilgari bunday xato faqat jurnalga tushardi va tashqaridan Jarvis
+shunchaki jim qolgandek ko'rinardi. Endi sabab ko'rinadi va u
+kamchiliklar daftariga ham tushadi — ya'ni «o'zingni yaxshila»
+deganingizda Jarvis o'sha xatoni ko'radi.
+
+Qatorlar ikkala oynada ham bor: kichik orbda ham, to'liq ekranli HUD'da ham.
+
 ## Suhbat: uyg'otish bir marta
 
 Javob berib bo'lgach Jarvis darhol jim bo'lib qolmaydi — bir necha soniya

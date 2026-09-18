@@ -16,6 +16,8 @@ Sifatni o'z ovozingizda o'lchab, birini tanlang: `voice.stt.provider`.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 import asyncio
 import io
 import logging
@@ -311,18 +313,31 @@ def build_stt(cfg: dict) -> SttProvider:
 
 
 async def transcribe_guarded(
-    provider: SttProvider, audio: np.ndarray, sample_rate: int
+    provider: SttProvider, audio: np.ndarray, sample_rate: int,
+    on_error: Callable[[str], Awaitable[None]] | None = None,
 ) -> str:
-    """Juda qisqa yozuvlarni filtrlaydi va xatoda bo'sh satr qaytaradi."""
+    """Juda qisqa yozuvlarni filtrlaydi va xatoda bo'sh satr qaytaradi.
+
+    `on_error` — nosozlik sababini ekranga chiqarish uchun. Ilgari xato
+    faqat jurnalga tushardi va tashqaridan Jarvis shunchaki JIM qolgandek
+    ko'rinardi: gapirasiz, u «eshitmadim» deydi, sabab esa ko'rinmaydi.
+    Jimlikning sababi har doim ekranda bo'lishi kerak.
+    """
     duration = audio.size / sample_rate if sample_rate else 0.0
     if duration < MIN_AUDIO_SEC:
         log.debug("Yozuv juda qisqa (%.2f s), o'tkazib yuborildi", duration)
         return ""
 
+    reason = ""
     try:
         return await provider.transcribe(audio, sample_rate)
     except httpx.HTTPStatusError as exc:
         log.error("STT xatosi %s: %s", exc.response.status_code, exc.response.text[:200])
-    except Exception:
+        reason = f"Nutqni matnga aylantirib bo'lmadi ({exc.response.status_code})"
+    except Exception as exc:
         log.exception("STT bajarilmadi")
+        reason = f"Nutqni matnga aylantirib bo'lmadi: {type(exc).__name__}: {exc}"[:200]
+
+    if reason and on_error is not None:
+        await on_error(reason)
     return ""

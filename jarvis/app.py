@@ -855,6 +855,7 @@ class Jarvis:
 
     async def _listen(self, patience_sec: float) -> str:
         await self.bus.set_state(State.LISTENING)
+        await self.bus.activity(f"gapirishingizni kutyapti ({patience_sec:.0f} s)")
 
         endpoint_cfg = self.config.section("audio.endpointing")
         endpointer = Endpointer(
@@ -899,15 +900,33 @@ class Jarvis:
                 idle_frames += 1
                 if idle_frames >= silence_budget:
                     log.info("Hech kim gapirmadi, seans bekor qilindi")
+                    await self.bus.activity("")
+                    await self.bus.problem(
+                        "Ovoz eshitilmadi — mikrofon ruxsati yoki qurilmani tekshiring"
+                    )
                     return ""
 
         await self.bus.set_state(State.THINKING)
         audio = endpointer.result()
-        async with self.health.busy(System.STT):
-            text = await transcribe_guarded(self.stt, audio, self.config.sample_rate)
+        # Nima bo'layotgani ekranda ko'rinsin: lokal model bir necha soniya
+        # ishlashi mumkin va bu paytda tashqaridan Jarvis «o'lgandek» ko'rinadi.
+        provider = str(self.config.get("voice.stt.provider", "")) or "STT"
+        await self.bus.activity(f"eshitilganini matnga aylantiryapti ({provider})")
 
+        async def report(reason: str) -> None:
+            await self.bus.problem(reason)
+            selfwork.note("xato", reason)
+
+        async with self.health.busy(System.STT):
+            text = await transcribe_guarded(
+                self.stt, audio, self.config.sample_rate, on_error=report,
+            )
+
+        await self.bus.activity("")
         if text:
             log.info("Eshitildi: %s", text)
+            # Zanjir ishladi — oldingi nosozlik endi eskirdi.
+            await self.bus.clear_problem()
             await self.bus.transcript(text)
         return text
 
@@ -1011,8 +1030,16 @@ class Jarvis:
         try:
             async with self.health.busy(System.TTS):
                 await self.speaker.play(self.tts.stream(text), self.tts.sample_rate, on_level)
-        except Exception:
+        except Exception as exc:
+            # Ovoz chiqmasa, tashqaridan Jarvis «javob bermadi»dek ko'rinadi.
+            # Shuning uchun sabab ekranda qoladi, aytilgan matn esa yozuv
+            # bo'lib chiqadi — hech bo'lmasa o'qib olish mumkin.
             log.exception("Ovozga chiqarib bo'lmadi")
+            provider = str(self.config.get("voice.tts.provider", "")) or "TTS"
+            await self.bus.problem(
+                f"Ovoz chiqmadi ({provider}): {type(exc).__name__}: {exc}"[:200]
+            )
+            selfwork.note("xato", f"TTS: {type(exc).__name__}: {exc}"[:200])
             await self.bus.log_line(f"[ovozsiz] {text}", level="warn")
         finally:
             if watcher is not None:

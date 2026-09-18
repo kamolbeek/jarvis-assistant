@@ -152,6 +152,40 @@
   #work-pill.on { display: block; animation: workbreathe 1.6s ease-in-out infinite; }
   @keyframes workbreathe { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
+  /* Doimiy holat qatori. Eng muhim qoida: u yo'qolmaydi. Izoh (caption)
+     9 soniyadan keyin so'nadi va shundan keyin ekranda hech nima
+     qolmasdi — Jarvis ishlayaptimi yoki qotib qolganmi, bilib bo'lmasdi. */
+  #status-line {
+    left: 50%; bottom: 74px; transform: translateX(-50%);
+    display: flex; align-items: baseline; gap: 10px;
+    max-width: 70vw;
+    padding: 6px 16px; border-radius: 999px;
+    background: rgba(4, 11, 16, 0.72); border: 1px solid var(--edge);
+    font: 700 11px var(--mono); letter-spacing: 0.16em;
+    white-space: nowrap; overflow: hidden;
+  }
+  #status-line b { color: var(--cyan); }
+  #status-line span {
+    font-weight: 500; letter-spacing: 0.04em; text-transform: none;
+    color: rgba(236, 253, 255, 0.6);
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  body[data-state="thinking"] #status-line b,
+  body[data-state="confirm"] #status-line b { color: var(--amber); }
+  body[data-state="error"] #status-line b { color: var(--red); }
+  body[data-state="idle"] #status-line b { color: rgba(34, 227, 255, 0.55); }
+
+  /* Nosozlik — keyingi muvaffaqiyatli qadamgacha turadi */
+  #problem-line {
+    left: 50%; bottom: 112px; transform: translateX(-50%);
+    max-width: 60vw; padding: 7px 16px; border-radius: 10px;
+    background: rgba(255, 68, 58, 0.14); border: 1px solid rgba(255, 68, 58, 0.45);
+    color: #ffd9d6; font: 600 11.5px var(--mono); letter-spacing: 0.04em;
+    text-align: center; white-space: normal;
+    display: none;
+  }
+  #problem-line.on { display: block; }
+
   /* Chiqish yo'li doim ko'rinib turishi kerak. Oyna butun ekranni egallaydi
      va foydalanuvchi qamalib qolgandek his qilmasligi shart. */
   /* Xato yuz bersa — jim qolmasin, ekranda ayting */
@@ -255,6 +289,12 @@
 
   <!-- Jarvis o'z ustida ishlayotganini bildiradi: bu paytda buyruq bermang -->
   <div id="work-pill"></div>
+
+  <!-- Doimiy holat: Jarvis hozir nima qilyapti -->
+  <div class="blk" id="status-line"><b>KUTMOQDA</b><span></span></div>
+
+  <!-- Nosozlik: jimlikning sababi ko'rinib tursin -->
+  <div class="blk" id="problem-line"></div>
 </div>
 
 <script>
@@ -430,10 +470,37 @@ function caption(who, text) {
 }
 
 const workPill = document.getElementById("work-pill");
+const statusLine = document.getElementById("status-line");
+const problemLine = document.getElementById("problem-line");
+
+// Holatning o'zbekcha nomi — ekranda doim shulardan biri turadi.
+const STATE_TEXT = {
+  idle: "KUTMOQDA",
+  wake: "UYG'ONDI",
+  listening: "ESHITYAPTI",
+  thinking: "O'YLAYAPTI",
+  speaking: "GAPIRYAPTI",
+  confirm: "TASDIQ KUTMOQDA",
+  error: "XATO",
+};
 
 function showWork(text) {
   workPill.textContent = text || "";
   workPill.classList.toggle("on", Boolean(text));
+}
+
+function showStatus(next) {
+  statusLine.querySelector("b").textContent = STATE_TEXT[next] || String(next).toUpperCase();
+  document.body.dataset.state = next;
+}
+
+function showActivity(text) {
+  statusLine.querySelector("span").textContent = text ? `· ${text}` : "";
+}
+
+function showProblem(text) {
+  problemLine.textContent = text || "";
+  problemLine.classList.toggle("on", Boolean(text));
 }
 
 // --- Yadro bilan aloqa ---
@@ -458,7 +525,10 @@ function connect() {
       case "state":
         if (data.state === "wake" && state !== "wake") flash = 1;
         state = data.state;
+        showStatus(data.state);
         break;
+      case "activity": showActivity(data.text || ""); break;
+      case "problem": showProblem(data.text || ""); break;
       case "level":
         level = data.value;
         if (state === "listening" && level > SPEAK_LEVEL) engage(t);
@@ -466,7 +536,12 @@ function connect() {
       case "health": systems = data.systems || []; break;
       case "transcript": caption("Siz", data.text); engage(t); break;
       case "say": caption("Jarvis", data.text); break;
-      case "hello": showWork(data.working || ""); break;
+      case "hello":
+        showWork(data.working || "");
+        showActivity(data.activity || "");
+        showProblem(data.problem || "");
+        if (data.state) { state = data.state; showStatus(data.state); }
+        break;
       case "work": showWork(data.active ? data.text : ""); break;
     }
   });
@@ -474,6 +549,8 @@ function connect() {
   socket.addEventListener("close", () => {
     offline.classList.add("on");
     state = "idle"; level = 0;
+    statusLine.querySelector("b").textContent = "ALOQA YO'Q";
+    showActivity("");
     systems = systems.map((s) => ({ ...s, status: "unknown", heat: 0 }));
     setTimeout(connect, 1500);
   });
