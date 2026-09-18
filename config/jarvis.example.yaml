@@ -93,6 +93,12 @@ audio:
     preroll_ms: 300                # uyg'otuvchi so'zdan oldingi audio (kontekst uchun)
 
 conversation:
+  # Hech qanday taraqqiyotsiz shuncha soniya o'tsa, seans to'xtatiladi va
+  # Jarvis kutish holatiga qaytadi. Bu oxirgi himoya chizig'i: qotib
+  # qolishning sabablari xilma-xil, lekin belgisi bitta — vaqt o'tyapti,
+  # hodisa yo'q. Gapirish va tasdiq kutish bunga kirmaydi.
+  stuck_after_sec: 90
+
   # Javobdan keyin Jarvis yana tinglab turadi — «Hey Jarvis» ni har safar
   # takrorlash shart emas. false qilsangiz, har bir savol uchun uyg'otish kerak.
   follow_up: true
@@ -212,6 +218,11 @@ safety:
   # «yo'q» deb aytilgan javobni qabul qiladi. Tugmalar ham ishlashda davom
   # etadi — qaysi biri oldin javob bersa, o'sha hal qiladi. Noaniq javobda
   # hech qachon "ruxsat" deb taxmin qilinmaydi.
+  # Tasdiqni shuncha soniya kutadi. Undan keyin RAD deb hisoblanadi.
+  # Cheksiz kutish mumkin emas: darvoza javob bermaguncha miya ham kutadi,
+  # ya'ni butun yordamchi shu yerda osilib qolardi.
+  confirm_timeout_sec: 45
+
   voice_confirm:
     enabled: true
     listen_sec: 8                  # har urinishda shuncha soniya tinglaydi

@@ -435,6 +435,38 @@ deganingizda Jarvis o'sha xatoni ko'radi.
 
 Qatorlar ikkala oynada ham bor: kichik orbda ham, to'liq ekranli HUD'da ham.
 
+## Qotib qolmaslik
+
+Bir marta shunday bo'ldi: tasdiq berildi, keyin javob kelmadi va ekranda
+«O'YLAYAPTI» turib qoldi. Chaqiruv ham, tugma ham ishlamadi — Jarvisni
+faqat terminaldan o'ldirish mumkin edi. Sababi arxitekturada edi: seans
+tinglash siklining **ichida** kutilardi, ya'ni seans qotsa, uni
+to'xtatadigan kod umuman ishga tushmasdi.
+
+Endi seans alohida vazifada yuritiladi va uch xil chiqish yo'li bor:
+
+1. **Qo'riqchi.** Hech qanday taraqqiyotsiz 90 soniya o'tsa, seans o'zi
+   to'xtatiladi, ekranda sabab yoziladi va Jarvis «javob kelmadi, qaytadan
+   ayting» deydi. Chegara: `conversation.stuck_after_sec`.
+2. **Orbni bosish.** Seans ketayotganda bosilsa, u to'xtaydi. Bu qo'ldagi
+   eng ishonchli tugma va u har doim ishlaydi.
+3. **«To'xta»** buyrug'i (UI orqali) — xuddi shunday.
+
+Qo'riqchi bosqichlarni bilmaydi, u faqat bitta savolga qaraydi: hodisa
+kelyaptimi? Shuning uchun yangi imkoniyat qo'shilganda ham himoya
+o'z-o'zidan ishlaydi — har bir bosqich uchun alohida chegara yozib,
+bittasini unutib qo'yish xavfi yo'q.
+
+Ikkita istisno bor va ular ataylab: **gapirish** (uzun javob normal) va
+**tasdiq kutish** (siz o'ylab turgandirsiz). Lekin ularning ham chegarasi
+bor — ovoz oqimi osilib qolsa 3 daqiqadan keyin, tasdiq esa
+`safety.confirm_timeout_sec` (45 s) dan keyin uziladi.
+
+Halol chegara: seans qotib qolganda **ovozli chaqiruv ishlamaydi** —
+mikrofonni o'sha seans egallab turgan bo'ladi. Shuning uchun orbni bosish
+va avtomatik qo'riqchi bor. Buni to'g'rilash uchun mikrofon oqimini
+bir nechta o'quvchiga bo'lish kerak; u alohida ish va hozircha qilinmagan.
+
 ## Suhbat: uyg'otish bir marta
 
 Javob berib bo'lgach Jarvis darhol jim bo'lib qolmaydi — bir necha soniya

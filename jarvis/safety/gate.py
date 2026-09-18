@@ -161,6 +161,7 @@ class SafetyGate:
     # Har safar alohida so'raladigan amallar — bir marta «ha» degani
     # keyingisiga o'tmaydi.
     _always_ask: set[str] = field(default_factory=set)
+    _confirm_timeout: float = 45.0
     _writable: list[Path] = field(default_factory=list)
     _audit_path: Path | None = None
     # Bitta seansda tasdiqlangan amallar — qayta-qayta so'ramaslik uchun
@@ -171,6 +172,9 @@ class SafetyGate:
         self._default = str(self.config.get("safety.default", "ask")).lower()
         self._forbidden = [str(p) for p in (self.config.get("safety.forbidden_patterns") or [])]
         self._always_ask = {str(t) for t in (self.config.get("safety.always_ask") or [])}
+        # Tasdiqni cheksiz kutib bo'lmaydi: darvoza javob bermaguncha miya
+        # ham kutadi, ya'ni butun yordamchi shu yerda osilib turadi.
+        self._confirm_timeout = float(self.config.get("safety.confirm_timeout_sec", 45))
         self._writable = self.config.writable_roots()
         self._audit_path = self.config.audit_log
         self._audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +248,9 @@ class SafetyGate:
             return Decision(True, "seansda allaqachon tasdiqlangan")
 
         action, detail = self._describe(tool_name, input_data)
-        approved = await self.bus.request_confirm(action, detail)
+        approved = await self.bus.request_confirm(
+            action, detail, timeout=self._confirm_timeout,
+        )
         if approved and not once_only:
             self._session_grants.add(signature)
         return Decision(approved, "" if approved else "Foydalanuvchi rad etdi", asked=True)

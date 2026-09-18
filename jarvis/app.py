@@ -179,6 +179,21 @@ class Jarvis:
         self._vc_attempts = int(vc.get("attempts", 2))
         self._confirm_task: asyncio.Task[None] | None = None
 
+        # Joriy suhbat seansi alohida vazifa sifatida yuritiladi — shunda
+        # uni TO'XTATIB bo'ladi. Ilgari seans tinglash siklining ichida
+        # to'g'ridan-to'g'ri kutilardi: miya javob bermay qolsa, na chaqiruv,
+        # na orbni bosish yordam berardi — Jarvis butunlay qotib qolardi.
+        self._session_task: asyncio.Task[None] | None = None
+        # Oxirgi «taraqqiyot» belgisi: shina orqali o'tgan har qanday mazmunli
+        # hodisa. Qo'riqchi shu vaqtga qarab qotib qolganini aniqlaydi.
+        self._last_progress = time.monotonic()
+        # Ovoz chiqara boshlagan payt — gapirish chegarasini o'lchash uchun.
+        self._speaking_since: float | None = None
+        # Shuncha vaqt hech qanday taraqqiyot bo'lmasa, seans to'xtatiladi.
+        self._stuck_after = float(
+            config.get("conversation.stuck_after_sec", 90)
+        )
+
         # Dinamikka navbat. Tasdiq savoli alohida vazifada boshlanadi va
         # javob hali aytilib turgan paytga to'g'ri kelishi mumkin. Qulfsiz
         # ikkita ovoz oqimi bir vaqtda ochilib, ikki ovoz bir-birining
@@ -217,6 +232,8 @@ class Jarvis:
         # Tasdiq so'rovlarini ovoz bilan ham hal qilish uchun shinani tinglaymiz.
         if self._vc_enabled:
             self.bus.subscribe(self._on_bus_message)
+        # Qotib qolishni sezish uchun har qanday mazmunli hodisa belgilanadi.
+        self.bus.subscribe(self._note_progress)
 
         await self.ui.start()
         await self.brain.start()
@@ -226,6 +243,7 @@ class Jarvis:
         await self._mark_ready()
         self._heartbeat = asyncio.create_task(self.health.heartbeat())
         self._watchdog = asyncio.create_task(self._mic_watchdog())
+        self._stuck_guard = asyncio.create_task(self._stuck_watchdog())
         self._standby.touch(time.monotonic())
         await self.bus.set_state(State.IDLE)
 
@@ -365,6 +383,9 @@ class Jarvis:
             self._confirm_task.cancel()
         if self._heartbeat is not None:
             self._heartbeat.cancel()
+        for task in (getattr(self, "_stuck_guard", None), self._session_task):
+            if task is not None and not task.done():
+                task.cancel()
         if self._watchdog is not None:
             self._watchdog.cancel()
         await self.scheduler.stop()
@@ -385,13 +406,24 @@ class Jarvis:
     # --- UI buyruqlari ---
 
     async def _on_activate(self, message: dict[str, Any]) -> None:
-        """Orb bosildi — uyg'otuvchi so'zsiz ishga tushirish."""
+        """Orb bosildi — uyg'otuvchi so'zsiz ishga tushirish.
+
+        Seans allaqachon ketayotgan bo'lsa, bosish «chiqish yo'li» bo'lib
+        xizmat qiladi: qotib qolgan suhbat uziladi. Foydalanuvchining
+        qo'lidagi yagona ishonchli tugma shu — u har doim ishlashi kerak.
+        """
+        if self._session_task is not None and not self._session_task.done():
+            await self._abort_session("orb bosildi")
+            return
         self._activate.set()
 
     async def _on_stop(self, message: dict[str, Any]) -> None:
         """Foydalanuvchi to'xtatdi."""
         self.speaker.stop()
         await self.brain.interrupt()
+        if self._session_task is not None and not self._session_task.done():
+            await self._abort_session("to'xtatildi")
+            return
         await self.bus.set_state(State.IDLE)
 
     async def _on_standby(self, message: dict[str, Any]) -> None:
@@ -477,7 +509,7 @@ class Jarvis:
             # Rejalashtiruvchidan kelgan eslatmalar — faqat bo'sh vaqtda,
             # foydalanuvchining gapini bo'lmasdan.
             if not self.proactive.empty() and self.bus.state is State.IDLE:
-                await self._deliver_proactive()
+                await self._run_guarded(self._deliver_proactive(), "eslatma")
                 continue
 
             source = ""
@@ -492,7 +524,7 @@ class Jarvis:
                 source = "qarsak"
 
             if source:
-                await self._session(source)
+                await self._run_session(source)
                 # Seansdan keyin buferlarni tozalaymiz — eski audio yangi
                 # seansga o'tib ketmasin.
                 self.mic.drain()
@@ -620,6 +652,135 @@ class Jarvis:
                 return
 
         await self.bus.set_state(State.IDLE)
+
+    # --- Qotib qolishdan himoya ---
+    #
+    # Nazariy jihatdan har bir bosqichning o'z chegarasi bor. Amalda esa
+    # yangi bosqich qo'shilganda uni unutish oson, va bitta unutilgan
+    # chegara butun yordamchini ishlamaydigan qiladi: ekranda «o'ylayapti»
+    # turadi, chaqiruv ham, tugma ham yordam bermaydi. Shuning uchun
+    # pastda umumiy qo'riqchi bor — u bosqichlarni bilmaydi, faqat
+    # «taraqqiyot bormi?» degan savolga qaraydi.
+
+    # Taraqqiyot deb hisoblanadigan hodisalar. `level` bunga kirmaydi: u
+    # mikrofon darajasi va Jarvis qotib qolganda ham kelib turadi.
+    # Bitta javob shuncha soniyadan uzoq aytilmaydi. Uzun javob ham
+    # bunga yetmaydi — bu aniq nosozlik belgisi.
+    MAX_SPEAK_SEC = 180.0
+
+    PROGRESS_EVENTS = frozenset({
+        "state", "activity", "say", "transcript", "confirm", "work", "problem",
+    })
+
+    async def _note_progress(self, event: dict[str, Any]) -> None:
+        if event.get("type") in self.PROGRESS_EVENTS:
+            self._last_progress = time.monotonic()
+
+    async def _run_session(self, source: str) -> None:
+        """Suhbat seansini himoya ostida yuritadi."""
+        await self._run_guarded(self._session(source), f"seans ({source})")
+
+    async def _run_guarded(self, coro: Any, label: str) -> None:
+        """Uzoq ishni to'xtatsa bo'ladigan vazifa sifatida yuritadi.
+
+        Qo'riqchi faqat `_session_task` ga qaraydi, shuning uchun uzoq
+        davom etadigan HAR QANDAY ish shu yerdan o'tishi kerak — aks holda
+        o'sha yo'lda qotib qolish yana ushlanmay qolardi.
+        """
+        self._last_progress = time.monotonic()
+        self._speaking_since = None
+        self._session_task = asyncio.create_task(coro)
+        try:
+            await self._session_task
+        except asyncio.CancelledError:
+            # Seans qo'riqchi yoki foydalanuvchi tomonidan uzildi. Tinglash
+            # sikli davom etishi SHART — aks holda uzish Jarvisni butunlay
+            # o'chirib qo'yardi.
+            if self._shutdown.is_set():
+                raise
+            log.warning("Uzildi: %s", label)
+        finally:
+            self._session_task = None
+
+    async def _abort_session(self, reason: str) -> None:
+        """Joriy seansni uzadi va hammasini kutish holatiga qaytaradi."""
+        task = self._session_task
+        log.warning("Seans to'xtatilmoqda: %s", reason)
+
+        self.speaker.stop()
+        if self._confirm_task is not None and not self._confirm_task.done():
+            self._confirm_task.cancel()
+        with suppress(Exception):
+            await self.brain.interrupt()
+
+        if task is not None and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await task
+        # Havolani DARHOL tozalaymiz. `_run_session` ham buni qiladi, lekin u
+        # keyinroq uyg'onadi — oradagi vaqtda yangi chaqiruv «seans hali
+        # ketyapti» deb hisoblanib, javobsiz qolardi.
+        if self._session_task is task:
+            self._session_task = None
+
+        self.mic.drain()
+        await self.bus.activity("")
+        await self.bus.set_state(State.IDLE)
+        self._last_progress = time.monotonic()
+
+    async def _stuck_watchdog(self) -> None:
+        """Hech qanday taraqqiyotsiz qotib qolgan seansni uzadi.
+
+        Nima uchun umumiy qo'riqchi: qotib qolishning sabablari xilma-xil
+        (tarmoq javob bermadi, provayder osildi, asbob qaytmadi), lekin
+        BELGISI bitta — vaqt o'tyapti, hodisa yo'q. Sababni bilmasdan ham
+        chiqib ketish mumkin, va aynan shu foydalanuvchiga kerak.
+        """
+        while not self._shutdown.is_set():
+            await asyncio.sleep(3.0)
+
+            task = self._session_task
+            if task is None or task.done():
+                continue
+            # Gapirish uzoq davom etishi mumkin — bu qotish emas. Lekin
+            # CHEKSIZ emas: ovoz oqimi osilib qolsa, `speaking` bayrog'i
+            # tushmaydi va qo'riqchi umuman ishga tushmay qolardi. Shuning
+            # uchun gapirishning o'z chegarasi bor.
+            if self.speaker.speaking:
+                now = time.monotonic()
+                if self._speaking_since is None:
+                    self._speaking_since = now
+                elif now - self._speaking_since > self.MAX_SPEAK_SEC:
+                    log.error("Ovoz oqimi osilib qoldi: %.0f s",
+                              now - self._speaking_since)
+                    await self.bus.problem("Ovoz oqimi osilib qoldi — to'xtatildi")
+                    selfwork.note("xato", "TTS oqimi osilib qoldi")
+                    await self._abort_session("ovoz osildi")
+                    continue
+                self._last_progress = now
+                continue
+            self._speaking_since = None
+            # Tasdiq kutilyapti: foydalanuvchi o'ylab turgandir. Darvozaning
+            # o'z chegarasi bor, unga xalaqit bermaymiz.
+            if self.bus.has_pending_confirms():
+                self._last_progress = time.monotonic()
+                continue
+
+            idle_for = time.monotonic() - self._last_progress
+            if idle_for < self._stuck_after:
+                continue
+
+            message = (
+                f"Javob {int(idle_for)} soniya davomida kelmadi — seans "
+                f"to'xtatildi. Qaytadan urinib ko'ring."
+            )
+            log.error("Qotib qolish aniqlandi: %.0f s", idle_for)
+            selfwork.note("xato", f"seans {int(idle_for)} s qotib qoldi",
+                          detail=f"holat: {self.bus.state}, ish: {self.bus.activity_text}")
+            await self.bus.problem(message)
+            await self._abort_session("qotib qoldi")
+            with suppress(Exception):
+                await self._speak("Kechirasiz, javob kelmadi. Qaytadan ayting.")
 
     # Shuncha vaqt kadr kelmasa, mikrofon o'lgan deb hisoblaymiz.
     MIC_STALL_SEC = 6.0
