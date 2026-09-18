@@ -441,7 +441,8 @@ async def check_brain(cfg: Config) -> Result:
         return Result(False, "claude-agent-sdk o'rnatilmagan: pip install -e .")
 
     options = ClaudeAgentOptions(
-        system_prompt="Sen sinov rejimidasan. Faqat o'zbek tilida, bitta qisqa gap bilan javob ber.",
+        system_prompt=("Sen sinov rejimidasan. Faqat o'zbek tilida, "
+                       "bitta qisqa gap bilan javob ber."),
         model=str(cfg.get("brain.model", "claude-opus-5")),
         max_turns=1,
     )
@@ -517,6 +518,42 @@ async def check_telegram() -> Result:
         return Result(False, f"Telegram'ga ulanib bo'lmadi: {exc}")
 
 
+async def check_telegram_account() -> Result:
+    """Telegram HISOBI ulanganmi — bot emas, hisobning o'zi.
+
+    Bot bilan farqi katta: kanal ochish, papka yig'ish, odam qo'shish va
+    suhbatlarni o'qish faqat hisob orqali mumkin. Shuning uchun bu alohida
+    tekshiruv: bot ishlayotgani hali «Telegram to'liq ishlayapti» degani emas.
+    """
+    from .tools import telegram as tg
+
+    if not os.environ.get("TELEGRAM_API_ID") or not os.environ.get("TELEGRAM_API_HASH"):
+        return Result(True,
+                      "Sozlanmagan (ixtiyoriy) — kanal/papka boshqarish ishlamaydi.\n"
+                      "Yoqish: my.telegram.org dan api_id va api_hash olib .env ga\n"
+                      "yozing, so'ng: python -m jarvis telegram-login")
+
+    if not tg.is_linked():
+        return Result(False,
+                      "Kalitlar bor, lekin hisobga kirilmagan.\n"
+                      "Bir marta bajaring: python -m jarvis telegram-login")
+
+    try:
+        who = await tg.me()
+        folders = await tg.folders()
+        chats = await tg.chats(limit=500)
+    except tg.TelegramError as exc:
+        return Result(False, str(exc))
+    except Exception as exc:
+        return Result(False, f"Telegram'ga ulanib bo'lmadi: {exc}")
+    finally:
+        await tg.close()
+
+    names = ", ".join(f["nom"] for f in folders[:5]) or "yo'q"
+    return Result(True, f"{who['ism']} {who['username']} — {len(chats)} ta suhbat, "
+                        f"papkalar: {names}")
+
+
 def check_permissions() -> Result:
     """macOS ruxsatlari haqida eslatma (dasturiy tekshirib bo'lmaydi)."""
     if sys.platform != "darwin":
@@ -579,7 +616,8 @@ async def run_doctor() -> int:
     report("Claude Agent SDK", await check_brain(cfg))
 
     _header("Kanallar")
-    report("Telegram", await check_telegram())
+    report("Telegram (bot)", await check_telegram())
+    report("Telegram (hisob)", await check_telegram_account())
 
     print(f"\n{'─' * 58}")
     if failures == 0:

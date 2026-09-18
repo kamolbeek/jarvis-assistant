@@ -231,7 +231,8 @@ class Agenda:
         repeat: str = "",
     ) -> Task:
         if repeat not in REPEATS:
-            raise ValueError(f"Noma'lum takror: {repeat}. Mumkin: {', '.join(sorted(REPEATS - {''}))}")
+            allowed = ", ".join(sorted(REPEATS - {""}))
+            raise ValueError(f"Noma'lum takror: {repeat}. Mumkin: {allowed}")
 
         project_id = None
         if project:

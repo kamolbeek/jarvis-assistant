@@ -14,6 +14,8 @@ const confirmAction = document.getElementById("confirm-action");
 const confirmDetail = document.getElementById("confirm-detail");
 const offlinePanel = document.getElementById("offline");
 const tooltip = document.getElementById("dial-tip");
+const workBadge = document.getElementById("work");
+const workText = document.getElementById("work-text");
 
 let state = "idle";
 let level = 0;        // yadrodan kelgan xom daraja
@@ -86,6 +88,17 @@ function showCaption(role, text) {
   captionTimer = setTimeout(() => caption.classList.add("hidden"), 9000);
 }
 
+// Uzoq ish belgisi. Vaqt bo'yicha yo'qolmaydi (caption'dan farqi shu):
+// ish tugaganini faqat yadro biladi, shuning uchun o'chirishni ham u aytadi.
+function showWork(text) {
+  if (!text) {
+    workBadge.classList.add("hidden");
+    return;
+  }
+  workText.textContent = text;
+  workBadge.classList.remove("hidden");
+}
+
 function showConfirm(id, action, detail) {
   pendingConfirmId = id;
   confirmAction.textContent = action;
@@ -150,6 +163,14 @@ function connect() {
 
 function handleEvent(data) {
   switch (data.type) {
+    case "hello":
+      // Orb yadrodan keyin ochilgan bo'lishi mumkin — o'sha paytdagi
+      // band holatini ham shu xabardan olamiz.
+      showWork(data.working || "");
+      break;
+    case "work":
+      showWork(data.active ? data.text : "");
+      break;
     case "state":
       setState(data.state);
       if (data.state !== "confirm") hideConfirm();

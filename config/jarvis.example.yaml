@@ -160,6 +160,17 @@ safety:
     enabled: true
     listen_sec: 8                  # har urinishda shuncha soniya tinglaydi
     attempts: 2                    # noaniq javobda necha marta qayta so'raydi
+  # Jarvis o'z kodini o'zgartira olsinmi. Yoqilganda repo papkasi
+  # avtomatik ravishda `writable_roots` ga qo'shiladi — ya'ni «bu menga
+  # yoqmadi» deganingizda u o'zini tuzata oladi.
+  #
+  # Diqqat: bu jiddiy ruxsat. Uni xavfsiz qiladigan uchta narsa:
+  #   - Write/Edit/Bash baribir tasdiq so'raydi (pastdagi `rules`)
+  #   - har o'zgarishdan oldin git'da orqaga qaytish nuqtasi saqlanadi
+  #   - qayta ishga tushirishdan oldin testlar va linter ishlaydi
+  # O'chirish uchun: false.
+  self_edit: true
+
   rules:
     Read: "allow"
     Glob: "allow"
@@ -170,6 +181,51 @@ safety:
     Edit: "ask"
     Bash: "ask"
     NotebookEdit: "ask"
+
+    # --- Telegram ---
+    # Kundalik ishlar so'ramasdan bajariladi: kanal ochish, odam qo'shish,
+    # admin qilish, papka yig'ish, xabar yuborish. Har biriga «ha» deb
+    # o'tirish yordamchini yordamchi emas, tugmaga aylantiradi.
+    mcp__jarvis__tg_send: "allow"
+    mcp__jarvis__tg_forward: "allow"
+    mcp__jarvis__tg_create: "allow"
+    mcp__jarvis__tg_invite: "allow"
+    mcp__jarvis__tg_promote: "allow"
+    mcp__jarvis__tg_demote: "allow"
+    mcp__jarvis__tg_unban: "allow"
+    mcp__jarvis__tg_join: "allow"
+    mcp__jarvis__tg_rename: "allow"
+    mcp__jarvis__tg_link: "allow"
+    mcp__jarvis__tg_pin: "allow"
+    mcp__jarvis__tg_archive: "allow"
+    mcp__jarvis__tg_mute: "allow"
+    mcp__jarvis__tg_folder: "allow"
+
+    # Qaytarib bo'lmaydiganlari — har safar so'raydi (`always_ask` ga ham
+    # kiritilgan, ya'ni bir marta «ha» degani keyingisiga o'tmaydi).
+    mcp__jarvis__tg_kick: "ask"
+    mcp__jarvis__tg_leave: "ask"
+    mcp__jarvis__tg_delete_messages: "ask"
+    mcp__jarvis__tg_delete_chat: "ask"
+    mcp__jarvis__tg_folder_delete: "ask"
+
+    # --- O'z ustida ishlash ---
+    mcp__jarvis__self_note: "allow"
+    mcp__jarvis__self_start: "allow"
+    mcp__jarvis__self_check: "allow"
+    mcp__jarvis__self_finish: "allow"
+    mcp__jarvis__self_restart: "ask"
+    mcp__jarvis__self_revert: "ask"
+
+  # Bu amallar HAR SAFAR alohida so'raladi — seansda bir marta tasdiqlangani
+  # keyingisiga o'tmaydi. O'chirish va qaytarib bo'lmaydigan ishlar uchun.
+  always_ask:
+    - "mcp__jarvis__tg_kick"
+    - "mcp__jarvis__tg_leave"
+    - "mcp__jarvis__tg_delete_messages"
+    - "mcp__jarvis__tg_delete_chat"
+    - "mcp__jarvis__tg_folder_delete"
+    - "mcp__jarvis__self_revert"
 
   # Bu naqshlar hech qachon bajarilmaydi (tasdiq so'ralmaydi ham).
   forbidden_patterns:
@@ -208,6 +264,11 @@ ui:
 
 channels:
   telegram:
+    # Bot (faqat sizga xabar yuborish uchun) — .env dagi TELEGRAM_BOT_TOKEN.
     enabled: false
+    # Hisobning o'zi orqali to'liq boshqaruv: kanal ochish, odam qo'shish,
+    # admin qilish, papka yig'ish, kanallarni o'qish. Buning uchun bir marta
+    # kirish kerak:  python -m jarvis telegram-login
+    account: true
   n8n:
     enabled: false

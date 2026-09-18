@@ -189,7 +189,10 @@ def test_clap_cooldown_blocks_immediate_retrigger():
 
 
 def test_speech_does_not_trigger_clap():
-    """Gapirish qarsak deb qabul qilinmasligi kerak — bu eng ko'p uchraydigan yolg'on ishga tushish."""
+    """Gapirish qarsak deb qabul qilinmasligi kerak.
+
+    Bu eng ko'p uchraydigan yolg'on ishga tushish.
+    """
     detector = ClapDetector(sample_rate=SAMPLE_RATE)
     for frame in _silence(30):
         detector.push(frame)

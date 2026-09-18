@@ -85,6 +85,48 @@ body.dragging #orb-wrap { cursor: grabbing; transform: none; }
   box-shadow: 0 0 8px var(--red);
 }
 
+/* --- «Band» belgisi --- */
+
+/* Jarvis o'z ustida (yoki boshqa uzoq ish ustida) ishlayotganini bildiradi.
+   Panel emas, tasma: u ish tugagunicha turadi va orbni to'sib qo'ymasligi
+   kerak. Sariq — «hozir gapirmang», lekin xato ham emas. */
+#work {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 178, 62, 0.14);
+  border: 1px solid rgba(255, 178, 62, 0.45);
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+#work.hidden {
+  display: none;
+}
+
+#work .pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+  flex-shrink: 0;
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
 /* --- Panellar --- */
 
 .panel {

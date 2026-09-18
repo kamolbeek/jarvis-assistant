@@ -373,7 +373,8 @@ def build_tts(cfg: dict) -> TtsProvider:
         return MohirTts(voice=voice or _default_voice("mohir", gender), speed=speed)
     if provider == "macos":
         return MacosSayTts(
-            voice=voice if voice and not voice.startswith("uz-") else _default_voice("macos", gender),
+            voice=(voice if voice and not voice.startswith("uz-")
+                   else _default_voice("macos", gender)),
             speed=speed,
         )
     raise ValueError(f"Noma'lum TTS provayderi: {provider}")

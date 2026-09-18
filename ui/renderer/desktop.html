@@ -147,6 +147,19 @@
   }
   #offline.on { display: block; }
 
+  /* «Band» tasmasi — Jarvis o'z ustida ishlayotganda. Vaqt bo'yicha
+     yo'qolmaydi: ish tugaganini faqat yadro biladi. */
+  #work-pill {
+    top: 14px; left: 50%; transform: translateX(-50%);
+    padding: 7px 16px; border-radius: 999px;
+    background: rgba(255, 178, 62, 0.14); border: 1px solid rgba(255, 178, 62, 0.5);
+    font: 700 11px var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--amber, #ffb23e);
+    display: none; pointer-events: none;
+  }
+  #work-pill.on { display: block; animation: workbreathe 1.6s ease-in-out infinite; }
+  @keyframes workbreathe { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
   /* Chiqish yo'li doim ko'rinib turishi kerak. Oyna butun ekranni egallaydi
      va foydalanuvchi qamalib qolgandek his qilmasligi shart. */
   #escape-hint {
@@ -227,6 +240,9 @@
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
   <div class="blk" id="offline">YADRO BILAN ALOQA YO'Q</div>
   <div class="blk" id="escape-hint">ESC — YOPISH</div>
+
+  <!-- Jarvis o'z ustida ishlayotganini bildiradi: bu paytda buyruq bermang -->
+  <div id="work-pill"></div>
 </div>
 
 <script src="palette.js"></script>
@@ -351,6 +367,13 @@ function caption(who, text) {
   if (text) captionTimer = setTimeout(() => captionBox.classList.remove("on"), 9000);
 }
 
+const workPill = document.getElementById("work-pill");
+
+function showWork(text) {
+  workPill.textContent = text || "";
+  workPill.classList.toggle("on", Boolean(text));
+}
+
 // --- Yadro bilan aloqa ---
 
 let socket = null;
@@ -381,6 +404,8 @@ function connect() {
       case "health": systems = data.systems || []; break;
       case "transcript": caption("Siz", data.text); engage(t); break;
       case "say": caption("Jarvis", data.text); break;
+      case "hello": showWork(data.working || ""); break;
+      case "work": showWork(data.active ? data.text : ""); break;
     }
   });
 

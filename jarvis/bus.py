@@ -49,6 +49,9 @@ class EventBus:
     _subscribers: list[Subscriber] = field(default_factory=list)
     _pending: dict[str, PendingConfirm] = field(default_factory=dict)
     state: State = State.IDLE
+    # Bo'sh bo'lmasa — Jarvis uzoq, o'zi boshqaradigan ish bilan band
+    # (masalan o'z kodini o'zgartiryapti). Orbda yozuv bo'lib turadi.
+    working: str = ""
 
     def subscribe(self, callback: Subscriber) -> Callable[[], None]:
         """Obuna bo'ladi. Qaytgan funksiyani chaqirib obunani bekor qilish mumkin."""
@@ -61,7 +64,10 @@ class EventBus:
         return unsubscribe
 
     async def emit(self, event: dict[str, Any]) -> None:
-        """Hodisani barcha obunachilarga yuboradi. Bitta obunachi yiqilsa, qolganlari davom etadi."""
+        """Hodisani barcha obunachilarga yuboradi.
+
+        Bitta obunachi yiqilsa, qolganlari davom etadi.
+        """
         for callback in list(self._subscribers):
             try:
                 await callback(event)
@@ -87,6 +93,19 @@ class EventBus:
 
     async def log_line(self, text: str, level: str = "info") -> None:
         await self.emit({"type": "log", "level": level, "text": text})
+
+    async def work(self, text: str) -> None:
+        """«Band» belgisini yoqadi/o'chiradi. Bo'sh matn — ish tugadi.
+
+        Nima uchun alohida hodisa, holat emas: bu ish suhbat holatiga
+        parallel ketadi (Jarvis kod yozayotganda ham savolga javob bera
+        oladi). Holatlar mashinasiga aralashtirsak, ish tugagach qaysi
+        holatga qaytishni bilib bo'lmay qoladi.
+        """
+        self.working = text
+        if text:
+            log.info("Band: %s", text)
+        await self.emit({"type": "work", "active": bool(text), "text": text})
 
     async def hud(self, action: str) -> None:
         """To'liq ekranli HUD oynasini ochish/yopish.

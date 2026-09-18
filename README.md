@@ -56,6 +56,12 @@ flowchart TD
 - **Ertalab kunni tushuntiradi** — belgilangan vaqtda bugungi ishlarni aytib beradi.
 - **Sizning nomingizdan yozadi** — «Alisherga yoz, kechikaman de» desangiz,
   Telegram yoki SMS orqali yuboradi.
+- **Telegramni to'liq boshqaradi** — sizning hisobingiz orqali: kanal va guruh
+  ochadi, odam qo'shadi, admin qiladi, chiqarib yuboradi, kanallarni o'qib
+  saralaydi va papkalarga yig'adi.
+- **O'zini o'zi tuzatadi** — «bu menga yoqmadi» desangiz, o'z kodini o'zgartiradi,
+  testlardan o'tkazadi va qayta ishga tushadi. Bu paytda ekranda
+  «o'z ustida ishlamoqda» yozuvi turadi.
 - **Telefonda ham ishlaydi** — telefon brauzeridan bosib-gapirish sahifasi.
 - **Har bir xavfli amal uchun so'raydi** — HUD'da ✅/❌ chiqadi, hammasi jurnalga yoziladi.
 
@@ -493,6 +499,119 @@ qiymatlarni qaytaring. Rostini aytganda, eng katta farqni yaxshi mikrofon
 beradi: MacBook'ning ichki mikrofoni 1–2 metrgacha yaxshi ishlaydi, undan
 narisiga tashqi mikrofon kerak.
 
+## Telegram — to'liq boshqaruv
+
+Telegramda ikki xil ulanish bor va farqi katta:
+
+| | Bot (`TELEGRAM_BOT_TOKEN`) | Hisob (`TELEGRAM_API_ID`) |
+| --- | --- | --- |
+| Sizga xabar yuborish | ha | ha |
+| Suhbatlaringizni o'qish | yo'q | ha |
+| Kanal/guruh ochish | yo'q | ha |
+| Odam qo'shish, admin qilish | yo'q | ha |
+| **Papkalar** | yo'q | ha |
+
+Papkalar bot API'da umuman mavjud emas — bu mijoz xususiyati. Shuning uchun
+«kanallarni papkaga yig'» degan ish faqat hisob orqali bo'ladi.
+
+**Ulash — bir marta:**
+
+1. [my.telegram.org](https://my.telegram.org) > API development tools >
+   ilova yarating. `api_id` va `api_hash` chiqadi.
+2. `.env` ga yozing:
+
+   ```bash
+   TELEGRAM_API_ID=1234567
+   TELEGRAM_API_HASH=abcdef...
+   ```
+
+3. Terminalda kiring — Telegram ilovangizga kod keladi:
+
+   ```bash
+   source .venv/bin/activate
+   python -m jarvis telegram-login
+   ```
+
+Kirish ataylab terminalda bo'ladi: kod va ikki bosqichli parol hisobingizga
+kalit, ularni modelga aytdirib bo'lmaydi. Natija `~/.jarvis/telegram.session`
+faylida saqlanadi — **u parolingiz bilan bir xil darajada maxfiy**. Uzish:
+`python -m jarvis telegram-logout`.
+
+**Shundan keyin ovoz bilan aytish mumkin:**
+
+| Siz aytasiz | Jarvis nima qiladi |
+| --- | --- |
+| «Ish degan papka och, ichiga Click Jobs va UzDev Jobsni sol» | papka yaratadi va kanallarni qo'shadi |
+| «Yangi kanal och, nomi Loyihalarim» | kanal yaratadi va havolasini beradi |
+| «Alisherni Dev guruhiga qo'sh va admin qil» | qo'shadi, so'ng admin qiladi |
+| «Click Jobsdagi oxirgi yigirmata e'lonni ko'r, frontendga tegishlisini menga yubor» | o'qiydi, saralaydi, Saqlangan xabarlarga yuboradi |
+| «Bu guruhdan falonchini chiqar» | **so'raydi**, «ha» desangiz chiqaradi |
+
+**Nima so'raydi, nima so'ramaydi.** Kundalik ishlar — kanal ochish, odam
+qo'shish, admin qilish, papka yig'ish, xabar yuborish — so'ramasdan
+bajariladi. Qaytarib bo'lmaydiganlari har safar alohida so'raydi:
+
+- suhbat yoki kanalni o'chirish
+- xabarlarni o'chirish
+- odamni chiqarib yuborish / bloklash
+- kanaldan chiqish
+- papkani o'chirish
+
+«Har safar» degani jiddiy: oddiy amallarda bir marta bergan ruxsatingiz
+seans oxirigacha eslab qolinadi, bularda esa — yo'q. Qaysi amal qaysi
+guruhga tushishini `config/jarvis.yaml` dagi `safety.rules` va
+`safety.always_ask` belgilaydi.
+
+**Pul bilan bog'liq hech narsa yo'q.** Sovg'a, Stars, Premium sotib olish
+asboblari umuman yozilmagan — ya'ni Jarvis xato bilan ham pul sarflay olmaydi.
+Kerak bo'lsa, buni o'zi qo'shishi mumkin (pastdagi bo'limga qarang), lekin
+o'shanda ham tasdiqsiz o'tmaydi.
+
+**Halol ogohlantirish.** Avtomatlashtirilgan hisob Telegram cheklovlariga
+tushishi mumkin — ayniqsa qisqa vaqtda ko'p odam qo'shsangiz yoki ko'p xabar
+yuborsangiz. Ommaviy yuborish uchun asbob ataylab qo'shilmagan.
+
+## O'zini o'zi yaxshilash
+
+Odatiy javob — «xo'p, keyingi versiyada tuzatamiz». Bu yerda boshqacha:
+Jarvisning kodi shu kompyuterda, u esa kod yoza oladi.
+
+«Bu menga yoqmadi», «juda sekin javob beryapsan», «bunday emas, anaqa qil» —
+bularning hammasi topshiriq. Jarvis quyidagicha yo'l tutadi:
+
+1. Kamchilikni daftarga yozadi (`~/.jarvis/improvements.jsonl`).
+2. Ekranda **«O'Z USTIDA ISHLAMOQDA»** yozuvi paydo bo'ladi — orbda ham,
+   to'liq ekranli HUD'da ham. Bu yozuv turganida buyruq bermang: u kod
+   ustida, gapingiz behuda ketadi.
+3. Git'da orqaga qaytish nuqtasi saqlanadi.
+4. Kodni o'zgartiradi, so'ng testlar va linterni ishga tushiradi.
+5. Yozuv o'chadi va nima o'zgarganini aytadi. Yangi kod kuchga kirishi uchun
+   qayta ishga tushishni taklif qiladi — «ha» desangiz, o'zini o'zi qayta
+   ishga tushiradi (orb yopilmaydi, bir-ikki soniyada qaytadi).
+
+Yoqmasa: **«orqaga qaytar»** — oxirgi o'zgarishlar bekor qilinadi.
+
+Jarvis o'z xatolarini ham ko'radi: javob berishda yuz bergan har bir xato
+o'sha daftarga tushadi va takrorlangani sanaladi. «O'zingni yaxshila»
+desangiz, ro'yxatdan eng ko'p takrorlanganini oladi.
+
+Bu ruxsat `config/jarvis.yaml` da yoqiladi:
+
+```yaml
+safety:
+  self_edit: true        # repo papkasi yoziladigan joylar ro'yxatiga qo'shiladi
+```
+
+`false` qilsangiz, Jarvis o'z kodiga umuman tegolmaydi va tizim
+ko'rsatmasidan ham bu bo'lim olib tashlanadi.
+
+Uni xavfsiz qiladigan uchta narsa:
+
+- fayl yozish va shell buyruqlari baribir tasdiq so'raydi;
+- har o'zgarishdan oldin git'da surat olinadi;
+- qayta ishga tushirishdan oldin testlar va linter ishlaydi — yiqilsa,
+  qayta ishga tushirish taklif qilinmaydi.
+
 ## O'zbek tili uchun ovoz: qaysi provayderni tanlash
 
 Bu loyihaning eng nozik qismi — o'zbekcha sifat provayderdan provayderga
@@ -612,8 +731,14 @@ jarvis/
 │   ├── memory.py   barqaror faktlar va suhbatlar
 │   └── prompts.py  o'zbekcha tizim ko'rsatmasi
 ├── safety/         xavfsizlik darvozasi va audit
-├── tools/          xotira, agenda, macOS, Telegram, Shortcuts asboblari
+├── tools/
+│   ├── server.py   asboblar MCP serveri (xotira, agenda, macOS, Telegram, o'zi)
+│   ├── telegram.py Telegram hisobi orqali to'liq boshqaruv (MTProto)
+│   ├── macos.py    ilovalar, Messages, Shortcuts
+│   └── channels.py Telegram bot va n8n (chiqish kanallari)
 ├── ui/             orb va telefon uchun HTTP + WebSocket server
+├── selfwork.py     o'z kodini o'zgartirish: daftar, git, tekshiruv, restart
+├── tglogin.py      Telegram hisobiga kirish (`jarvis telegram-login`)
 ├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
 ├── bus.py          hodisa shinasi
 ├── health.py       bo'g'inlar tirikligi — HUD siferblatlari shundan
@@ -636,6 +761,8 @@ python -m jarvis                     # ishga tushirish
 python -m jarvis doctor              # har bir qismni alohida tekshirish
 python -m jarvis wake-test           # chaqiruv ballini o'lchash
 python -m jarvis wake-set 0.33 0.25  # chegarani sozlamaga yozish
+python -m jarvis telegram-login      # Telegram hisobini ulash (bir marta)
+python -m jarvis telegram-logout     # Telegram hisobini uzish
 ```
 
 `wake-set` sozlama faylini o'zi tahrirlaydi va izohlarni saqlaydi. Qo'lda

@@ -21,6 +21,8 @@ Misollar:
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
+  jarvis telegram-login    Telegram hisobini ulash (bir marta, shu terminalda)
+  jarvis telegram-logout   Telegram hisobini uzish
   jarvis -v         Batafsil jurnal bilan
 """
 
@@ -47,10 +49,12 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set", "trust"],
+        choices=["run", "doctor", "wake-test", "wake-set", "trust",
+                 "telegram-login", "telegram-logout"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
-             "trust on|off — tasdiq so'rashni o'chirish/yoqish",
+             "trust on|off — tasdiq so'rashni o'chirish/yoqish; "
+             "telegram-login / telegram-logout — Telegram hisobini ulash/uzish",
     )
     parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
@@ -60,6 +64,16 @@ def main() -> int:
         from .trust import apply
 
         return apply(args.values[0] if args.values else "")
+
+    if args.command in ("telegram-login", "telegram-logout"):
+        # Kirish oqimi kod va parol so'raydi — jurnal ularni to'sib qo'ymasin.
+        logging.basicConfig(level=logging.ERROR)
+        # `.env` dagi api_id/api_hash shu yerda kerak bo'ladi.
+        from .config import load_config
+        from .tglogin import main as telegram_main
+
+        load_config()
+        return telegram_main("logout" if args.command.endswith("logout") else "login")
 
     if args.command == "wake-set":
         from .waketune import apply_thresholds

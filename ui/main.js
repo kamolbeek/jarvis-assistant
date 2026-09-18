@@ -15,7 +15,9 @@ const path = require("node:path");
 // bosishlarni o'tkazib yuboradi.
 const ORB_SIZE = Math.max(80, Math.min(320, Number(process.env.JARVIS_ORB_SIZE) || 150));
 const WINDOW_WIDTH = Math.max(300, ORB_SIZE + 40);
-const WINDOW_HEIGHT = ORB_SIZE + 170;
+// +200: orbdan pastda «band» tasmasi ham, izoh paneli ham joylashishi kerak.
+// Ilgari 170 edi va ikkalasi birga chiqqanda izohning oxirgi qatori kesilardi.
+const WINDOW_HEIGHT = ORB_SIZE + 200;
 const MARGIN = 24;
 
 let win = null;

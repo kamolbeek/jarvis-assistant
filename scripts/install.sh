@@ -61,6 +61,9 @@ Keyingi qadamlar:
        - Mikrofon        -> Terminal (yoki iTerm)
        - Kirish imkoni   -> Terminal  (ilovalarni boshqarish uchun)
        - Avtomatlashtirish -> Terminal (Messages, System Events)
-  3. Ishga tushiring:  ./scripts/run.sh
+  3. Telegramni to'liq boshqarish kerak bo'lsa (kanal ochish, papka yig'ish):
+       my.telegram.org dan api_id/api_hash olib .env ga yozing, so'ng
+       source .venv/bin/activate && python -m jarvis telegram-login
+  4. Ishga tushiring:  ./scripts/run.sh
 
 EOF

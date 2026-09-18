@@ -38,6 +38,19 @@ PATH_ARG_BY_TOOL = {
 # Shell buyruqlaridagi yozish operatorlari — yo'lni tekshirish uchun belgi.
 _REDIRECT_RE = re.compile(r"(?<![0-9<>])>{1,2}\s*(\S+)")
 
+# Tasdiq savoli ovozda beriladi, ya'ni uni QULOQ bilan tushunish kerak.
+# «tg delete chat bajarilsinmi?» degan savolga javob berib bo'lmaydi —
+# shuning uchun xavfli asboblarning odamcha nomi shu yerda.
+TOOL_LABELS = {
+    "mcp__jarvis__tg_delete_chat": "Telegram suhbatini o'chirish",
+    "mcp__jarvis__tg_delete_messages": "Telegram xabarlarini o'chirish",
+    "mcp__jarvis__tg_folder_delete": "Telegram papkasini o'chirish",
+    "mcp__jarvis__tg_kick": "Odamni Telegram guruhidan chiqarish",
+    "mcp__jarvis__tg_leave": "Telegram kanalidan chiqish",
+    "mcp__jarvis__self_restart": "Jarvisni qayta ishga tushirish",
+    "mcp__jarvis__self_revert": "Kod o'zgarishlarini bekor qilish",
+}
+
 
 @dataclass
 class Decision:
@@ -58,6 +71,9 @@ class SafetyGate:
     _rules: dict[str, str] = field(default_factory=dict)
     _default: str = "ask"
     _forbidden: list[str] = field(default_factory=list)
+    # Har safar alohida so'raladigan amallar — bir marta «ha» degani
+    # keyingisiga o'tmaydi.
+    _always_ask: set[str] = field(default_factory=set)
     _writable: list[Path] = field(default_factory=list)
     _audit_path: Path | None = None
     # Bitta seansda tasdiqlangan amallar — qayta-qayta so'ramaslik uchun
@@ -67,6 +83,7 @@ class SafetyGate:
         self._rules = {k: str(v).lower() for k, v in self.config.section("safety.rules").items()}
         self._default = str(self.config.get("safety.default", "ask")).lower()
         self._forbidden = [str(p) for p in (self.config.get("safety.forbidden_patterns") or [])]
+        self._always_ask = {str(t) for t in (self.config.get("safety.always_ask") or [])}
         self._writable = self.config.writable_roots()
         self._audit_path = self.config.audit_log
         self._audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,21 +123,24 @@ class SafetyGate:
                 f"Kerak bo'lsa, uni `safety.writable_roots` ga qo'shing.",
             )
 
-        # 3. Qoidalar jadvali.
+        # 3. Qoidalar jadvali. `always_ask` dagi amal «allow» bo'lsa ham
+        #    so'raladi: o'chirish va shunga o'xshash qaytarib bo'lmaydigan
+        #    ishlarni tasodifan o'tkazib yuborish juda qimmatga tushadi.
+        always = tool_name in self._always_ask
         policy = self._rules.get(tool_name, self._default)
-        if policy == "allow":
+        if policy == "allow" and not always:
             return Decision(True)
         if policy == "deny":
             return Decision(False, f"`{tool_name}` konfiguratsiyada taqiqlangan")
 
         # 4. Tasdiq so'rash — lekin bu seansda allaqachon tasdiqlangan bo'lsa, so'ramaymiz.
         signature = self._signature(tool_name, input_data)
-        if signature in self._session_grants:
+        if not always and signature in self._session_grants:
             return Decision(True, "seansda allaqachon tasdiqlangan")
 
         action, detail = self._describe(tool_name, input_data)
         approved = await self.bus.request_confirm(action, detail)
-        if approved:
+        if approved and not always:
             self._session_grants.add(signature)
         return Decision(approved, "" if approved else "Foydalanuvchi rad etdi", asked=True)
 
@@ -203,7 +223,7 @@ class SafetyGate:
             verb = "yaratilsinmi" if tool_name == "Write" else "o'zgartirilsinmi"
             return f"Fayl {verb}?", path
         if tool_name.startswith("mcp__"):
-            pretty = tool_name.split("__")[-1].replace("_", " ")
+            pretty = TOOL_LABELS.get(tool_name) or tool_name.split("__")[-1].replace("_", " ")
             return f"{pretty} bajarilsinmi?", json.dumps(input_data, ensure_ascii=False)[:400]
         return f"`{tool_name}` ishlatilsinmi?", json.dumps(input_data, ensure_ascii=False)[:400]
 

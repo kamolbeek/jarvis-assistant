@@ -15,6 +15,10 @@ data/
 *.sqlite3
 audit.log
 *.wav
+# Telegram seans fayli — hisobga kalit, hech qachon git'ga tushmasin
+*.session
+*.session-journal
+improvements.jsonl
 
 node_modules/
 ui/dist/

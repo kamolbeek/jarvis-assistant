@@ -19,6 +19,10 @@ dependencies = [
     # Tarmoq
     "httpx>=0.27",
     "websockets>=12.0",
+    # Telegram hisobini to'liq boshqarish (MTProto). Bot API'da papka,
+    # kanal yaratish va suhbatlarni o'qish yo'q — shuning uchun mijoz
+    # kutubxonasi kerak.
+    "telethon>=1.36",
     # Konfiguratsiya
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
@@ -44,6 +48,14 @@ include = ["jarvis*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+# Qoidalarni aniq sanaymiz. Sababi amaliy: ruff 0.16 dan boshlab standart
+# to'plam ancha kengaydi va yangi ruff o'rnatilgan kompyuterda ayni shu kod
+# birdan o'nlab "xato" bera boshladi. Jarvis o'zini o'zi tekshirganda
+# (`self_check`) bu — har safar qizil chiroq degani, ya'ni haqiqiy buzilish
+# ko'rinmay qoladi. Shuning uchun tekshiruv versiyaga bog'liq bo'lmasin.
+[tool.ruff.lint]
+select = ["E", "F", "W"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

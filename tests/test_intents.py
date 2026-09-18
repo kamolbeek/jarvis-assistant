@@ -62,7 +62,7 @@ def test_apostrophes_do_not_matter():
 # etadi; «cancel» — hammasini yop. Aralashib ketsa, foydalanuvchi har
 # «to'xta» deganda qaytadan chaqirishga majbur bo'lardi.
 
-from jarvis.voice.intents import is_stop_speaking
+from jarvis.voice.intents import is_stop_speaking  # noqa: E402 — bo'lim izohidan keyin ataylab
 
 
 @pytest.mark.parametrize("text", ["to'xta", "toxta", "jim bo'l", "bas qil", "gapirma"])

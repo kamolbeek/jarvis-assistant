@@ -7,6 +7,8 @@ ustiga qo'shiladi. To'rt guruh:
     agenda    — nima qilish kerak (loyihalar, vazifalar, eslatmalar)
     aloqalar  — kim bilan bog'lanaman (Telegram, telefon)
     tizim     — macOS, Shortcuts, kanallar
+    telegram  — Telegram hisobini to'liq boshqarish (kanal, guruh, papka, a'zolar)
+    o'zi      — o'z kodini o'zgartirish, tekshirish, qayta ishga tushish
 """
 
 from __future__ import annotations
@@ -17,9 +19,12 @@ from typing import Any, Callable
 
 from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
 
+from .. import selfwork
 from ..brain.agenda import Agenda, format_when, parse_when
 from ..brain.memory import Memory
+from ..bus import EventBus
 from . import channels, macos, media
+from . import telegram as tg
 
 log = logging.getLogger("jarvis.tools")
 
@@ -34,7 +39,41 @@ READ_ONLY_TOOLS = [
     "list_projects", "list_tasks", "daily_brief",
     "list_contacts", "find_contact",
     "frontmost_app", "list_shortcuts",
+    "tg_me", "tg_chats", "tg_read", "tg_search", "tg_members", "tg_folders",
+    "self_issues", "self_status",
 ]
+
+
+def _list_arg(value: Any) -> list[str]:
+    """«a, b, c» ko'rinishidagi qiymatni ro'yxatga aylantiradi.
+
+    Asbob sxemasida ro'yxat turini ishlatmaymiz: model ba'zan JSON massiv,
+    ba'zan oddiy vergul bilan ajratilgan satr yuboradi. Ikkalasini ham
+    qabul qilish — bitta formatni talab qilib, qolganida yiqilishdan afzal.
+    """
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _int_list_arg(value: Any) -> list[int]:
+    out: list[int] = []
+    for part in _list_arg(value):
+        try:
+            out.append(int(part))
+        except ValueError:
+            continue
+    return out
 
 
 def _ok(text: str) -> dict[str, Any]:
@@ -458,8 +497,404 @@ def _system_tools(agenda: Agenda) -> list[Any]:
             list_shortcuts, run_shortcut, call_n8n]
 
 
+def _telegram_tools() -> list[Any]:
+    """Telegram — foydalanuvchining o'z hisobi orqali to'liq boshqaruv.
+
+    Bu yerdagi asboblar `channels.send_telegram` (bot) dan tubdan farq qiladi:
+    bot faqat sizga xabar yuboradi, bular esa siz qila oladigan hamma ishni
+    qiladi — kanal ochish, odam qo'shish, admin qilish, papka yig'ish.
+    """
+
+    async def _text(coro: Any) -> dict[str, Any]:
+        """Natijasi bitta gap bo'lgan amallar uchun umumiy xato ushlagich."""
+        try:
+            return _ok(str(await coro))
+        except tg.TelegramError as exc:
+            return _fail(str(exc))
+        except Exception as exc:
+            log.exception("Telegram amali yiqildi")
+            return _fail(f"Telegram xatosi: {exc}")
+
+    async def _data(coro: Any) -> dict[str, Any]:
+        """Natijasi ro'yxat/jadval bo'lgan amallar uchun."""
+        try:
+            payload = await coro
+        except tg.TelegramError as exc:
+            return _fail(str(exc))
+        except Exception as exc:
+            log.exception("Telegram so'rovi yiqildi")
+            return _fail(f"Telegram xatosi: {exc}")
+        if not payload:
+            return _ok("Hech nima topilmadi")
+        return _json(payload)
+
+    # --- o'qish ---
+
+    @tool("tg_me", "Telegram'da qaysi hisob ulanganini aytadi.", {}, annotations=READ_ONLY)
+    async def tg_me(args: dict[str, Any]) -> dict[str, Any]:
+        return await _data(tg.me())
+
+    @tool(
+        "tg_chats",
+        "Telegram suhbatlari ro'yxati. `qidiruv` — nom bo'yicha filtr, "
+        "`turi` — kanal | guruh | shaxs | bot. Kanal nomini aniqlashtirish "
+        "kerak bo'lganda birinchi shu asbobni ishlating.",
+        {"qidiruv": str, "turi": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def tg_chats(args: dict[str, Any]) -> dict[str, Any]:
+        return await _data(tg.chats(
+            query=str(args.get("qidiruv") or ""),
+            kind=str(args.get("turi") or ""),
+            limit=int(args.get("nechta") or 60),
+        ))
+
+    @tool(
+        "tg_read",
+        "Kanal yoki suhbatdagi oxirgi xabarlarni o'qiydi. Kanallarni ko'rib "
+        "chiqish, e'lonlarni saralash uchun shu ishlatiladi.",
+        {"qayerdan": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def tg_read(args: dict[str, Any]) -> dict[str, Any]:
+        target = str(args.get("qayerdan", "")).strip()
+        if not target:
+            return _fail("`qayerdan` kerak — kanal nomi yoki @username")
+        return await _data(tg.history(target, limit=int(args.get("nechta") or 20)))
+
+    @tool(
+        "tg_search",
+        "Telegram xabarlari ichidan qidiradi. `qayerda` bo'sh bo'lsa — "
+        "barcha suhbatlardan.",
+        {"soz": str, "qayerda": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def tg_search(args: dict[str, Any]) -> dict[str, Any]:
+        query = str(args.get("soz", "")).strip()
+        if not query:
+            return _fail("Qidiruv so'zi kerak")
+        return await _data(tg.search(
+            query, target=str(args.get("qayerda") or ""),
+            limit=int(args.get("nechta") or 20),
+        ))
+
+    @tool(
+        "tg_members", "Guruh yoki kanal a'zolari ro'yxati.",
+        {"qayerda": str, "nechta": int, "qidiruv": str}, annotations=READ_ONLY,
+    )
+    async def tg_members(args: dict[str, Any]) -> dict[str, Any]:
+        return await _data(tg.members(
+            str(args.get("qayerda", "")), limit=int(args.get("nechta") or 50),
+            query=str(args.get("qidiruv") or ""),
+        ))
+
+    @tool(
+        "tg_folders", "Telegram papkalari va ularning ichidagi suhbatlar.",
+        {}, annotations=READ_ONLY,
+    )
+    async def tg_folders(args: dict[str, Any]) -> dict[str, Any]:
+        return await _data(tg.folders())
+
+    # --- yozish ---
+
+    @tool(
+        "tg_send",
+        "Telegram orqali SIZNING nomingizdan xabar yuboradi. `kimga` — "
+        "kanal/guruh nomi, @username yoki «men» (saqlangan xabarlar).",
+        {"kimga": str, "matn": str},
+    )
+    async def tg_send(args: dict[str, Any]) -> dict[str, Any]:
+        text = str(args.get("matn", "")).strip()
+        if not text:
+            return _fail("Xabar matni kerak")
+        return await _text(tg.send(str(args.get("kimga") or "men"), text))
+
+    @tool(
+        "tg_forward",
+        "Xabarlarni bir suhbatdan boshqasiga uzatadi. `idlar` — vergul bilan.",
+        {"qayerdan": str, "idlar": str, "qayerga": str},
+    )
+    async def tg_forward(args: dict[str, Any]) -> dict[str, Any]:
+        ids = _int_list_arg(args.get("idlar"))
+        if not ids:
+            return _fail("Xabar id lari kerak — `tg_read` ularni ko'rsatadi")
+        return await _text(tg.forward(
+            str(args.get("qayerdan", "")), ids, str(args.get("qayerga", "")),
+        ))
+
+    @tool(
+        "tg_create",
+        "Yangi kanal yoki guruh ochadi. `kanalmi` true bo'lsa — kanal (faqat "
+        "siz yozasiz), false bo'lsa — guruh. `azolar` — vergul bilan ajratilgan "
+        "ismlar yoki @username lar.",
+        {"nom": str, "tavsif": str, "kanalmi": bool, "azolar": str},
+    )
+    async def tg_create(args: dict[str, Any]) -> dict[str, Any]:
+        title = str(args.get("nom", "")).strip()
+        if not title:
+            return _fail("Nom kerak")
+        return await _data(tg.create_chat(
+            title,
+            about=str(args.get("tavsif") or ""),
+            broadcast=bool(args.get("kanalmi")),
+            members_=_list_arg(args.get("azolar")),
+        ))
+
+    @tool(
+        "tg_invite", "Guruh yoki kanalga odam qo'shadi. `kimlar` — vergul bilan.",
+        {"qayerga": str, "kimlar": str},
+    )
+    async def tg_invite(args: dict[str, Any]) -> dict[str, Any]:
+        users = _list_arg(args.get("kimlar"))
+        if not users:
+            return _fail("Kimni qo'shish kerakligini ayting")
+        return await _text(tg.invite(str(args.get("qayerga", "")), users))
+
+    @tool(
+        "tg_promote",
+        "Odamni admin qiladi. `unvon` — admin yonida ko'rinadigan yozuv. "
+        "`toliq` true bo'lsa, u boshqalarni ham admin qila oladi.",
+        {"qayerda": str, "kim": str, "unvon": str, "toliq": bool},
+    )
+    async def tg_promote(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.promote(
+            str(args.get("qayerda", "")), str(args.get("kim", "")),
+            rank=str(args.get("unvon") or ""), full=bool(args.get("toliq")),
+        ))
+
+    @tool("tg_demote", "Adminlikdan oladi (guruhdan chiqarmaydi).",
+          {"qayerda": str, "kim": str})
+    async def tg_demote(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.demote(str(args.get("qayerda", "")), str(args.get("kim", ""))))
+
+    @tool(
+        "tg_kick",
+        "Odamni guruh yoki kanaldan chiqarib yuboradi. `bloklansinmi` true "
+        "bo'lsa, u qaytib kira olmaydi.",
+        {"qayerdan": str, "kim": str, "bloklansinmi": bool},
+    )
+    async def tg_kick(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.kick(
+            str(args.get("qayerdan", "")), str(args.get("kim", "")),
+            ban=bool(args.get("bloklansinmi")),
+        ))
+
+    @tool("tg_unban", "Bloklangan odamni blokdan chiqaradi.",
+          {"qayerda": str, "kim": str})
+    async def tg_unban(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.unban(str(args.get("qayerda", "")), str(args.get("kim", ""))))
+
+    @tool(
+        "tg_join",
+        "Kanal yoki guruhga qo'shiladi. @username yoki t.me havolasi "
+        "(maxfiy taklifnoma ham bo'ladi).",
+        {"qayerga": str},
+    )
+    async def tg_join(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.join(str(args.get("qayerga", ""))))
+
+    @tool("tg_leave", "Kanal yoki guruhdan chiqadi.", {"qayerdan": str})
+    async def tg_leave(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.leave(str(args.get("qayerdan", ""))))
+
+    @tool("tg_rename", "Kanal/guruh nomini yoki tavsifini o'zgartiradi.",
+          {"qayerda": str, "nom": str, "tavsif": str})
+    async def tg_rename(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.rename(
+            str(args.get("qayerda", "")),
+            title=str(args.get("nom") or ""), about=str(args.get("tavsif") or ""),
+        ))
+
+    @tool("tg_link", "Kanal/guruhning taklifnoma havolasini beradi.", {"qayerda": str})
+    async def tg_link(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.invite_link(str(args.get("qayerda", ""))))
+
+    @tool("tg_pin", "Xabarni qadaydi yoki qadoqdan oladi.",
+          {"qayerda": str, "id": int, "olinsinmi": bool})
+    async def tg_pin(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.pin(
+            str(args.get("qayerda", "")), int(args.get("id") or 0),
+            unpin=bool(args.get("olinsinmi")),
+        ))
+
+    @tool("tg_archive", "Suhbatni arxivga soladi yoki arxivdan oladi.",
+          {"qayerda": str, "arxivgami": bool})
+    async def tg_archive(args: dict[str, Any]) -> dict[str, Any]:
+        on = args.get("arxivgami")
+        return await _text(
+            tg.archive(str(args.get("qayerda", "")), on=True if on is None else bool(on))
+        )
+
+    @tool("tg_mute", "Suhbat bildirishnomalarini o'chiradi yoki qaytaradi.",
+          {"qayerda": str, "ochirilsinmi": bool})
+    async def tg_mute(args: dict[str, Any]) -> dict[str, Any]:
+        on = args.get("ochirilsinmi")
+        return await _text(
+            tg.mute(str(args.get("qayerda", "")), on=True if on is None else bool(on))
+        )
+
+    @tool(
+        "tg_folder",
+        "Telegram papkasini yaratadi yoki tarkibini o'zgartiradi. `qoshish` va "
+        "`olish` — vergul bilan ajratilgan kanal/guruh nomlari. Papka bo'lmasa "
+        "yaratiladi. Masalan: nom='Ish', qoshish='Click Jobs, UzDev Jobs'.",
+        {"nom": str, "qoshish": str, "olish": str},
+    )
+    async def tg_folder(args: dict[str, Any]) -> dict[str, Any]:
+        name = str(args.get("nom", "")).strip()
+        if not name:
+            return _fail("Papka nomi kerak")
+        return await _text(tg.folder_set(
+            name, add=_list_arg(args.get("qoshish")), remove=_list_arg(args.get("olish")),
+        ))
+
+    @tool("tg_folder_delete", "Papkani o'chiradi. Suhbatlar joyida qoladi.", {"nom": str})
+    async def tg_folder_delete(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.folder_delete(str(args.get("nom", ""))))
+
+    @tool("tg_delete_messages", "Xabarlarni o'chiradi. `idlar` — vergul bilan.",
+          {"qayerda": str, "idlar": str})
+    async def tg_delete_messages(args: dict[str, Any]) -> dict[str, Any]:
+        ids = _int_list_arg(args.get("idlar"))
+        if not ids:
+            return _fail("Xabar id lari kerak")
+        return await _text(tg.delete_messages(str(args.get("qayerda", "")), ids))
+
+    @tool(
+        "tg_delete_chat",
+        "Suhbatni o'chiradi. `hammadanmi` true bo'lsa — kanal/guruh BUTUNLAY "
+        "o'chadi va qaytarib bo'lmaydi (faqat yaratuvchi qila oladi).",
+        {"qayerda": str, "hammadanmi": bool},
+    )
+    async def tg_delete_chat(args: dict[str, Any]) -> dict[str, Any]:
+        return await _text(tg.delete_chat(
+            str(args.get("qayerda", "")), everyone=bool(args.get("hammadanmi")),
+        ))
+
+    return [tg_me, tg_chats, tg_read, tg_search, tg_members, tg_folders,
+            tg_send, tg_forward, tg_create, tg_invite, tg_promote, tg_demote,
+            tg_kick, tg_unban, tg_join, tg_leave, tg_rename, tg_link, tg_pin,
+            tg_archive, tg_mute, tg_folder, tg_folder_delete,
+            tg_delete_messages, tg_delete_chat]
+
+
+def _self_tools(bus: EventBus, memory: Memory) -> list[Any]:
+    """O'z ustida ishlash — Jarvisning o'z kodini o'zgartirishi.
+
+    Tartib ataylab qat'iy: `self_start` → tahrir → `self_check` → `self_finish`
+    → (kerak bo'lsa) `self_restart`. Sababi — `self_start` ikkita ishni qiladi:
+    ekranda «band» yozuvini yoqadi (foydalanuvchi bekorga gapirmasin) va
+    git'da orqaga qaytish nuqtasini qoldiradi.
+    """
+
+    @tool(
+        "self_status",
+        "O'z kodining holati: qaysi shoxda, qaysi fayllar o'zgargan. "
+        "O'zgartirishni boshlashdan oldin shuni ko'ring.",
+        {},
+        annotations=READ_ONLY,
+    )
+    async def self_status(args: dict[str, Any]) -> dict[str, Any]:
+        return _ok(await selfwork.git_status())
+
+    @tool(
+        "self_issues",
+        "Kamchiliklar daftari: foydalanuvchi shikoyat qilgan va Jarvis o'zi "
+        "sezgan muammolar. Bo'sh vaqt bo'lganda shu ro'yxatdan ish oling.",
+        {"nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def self_issues(args: dict[str, Any]) -> dict[str, Any]:
+        rows = selfwork.open_issues(limit=int(args.get("nechta") or 20))
+        return _json(rows) if rows else _ok("Ochiq kamchilik yo'q")
+
+    @tool(
+        "self_note",
+        "Kamchilikni daftarga yozadi. Foydalanuvchi Jarvisning ishidan norozi "
+        "bo'lsa («bu yoqmadi», «sekin», «noto'g'ri tushunding») — darhol shu "
+        "asbob bilan yozib qo'ying, hatto darhol tuzatmasangiz ham.",
+        {"kamchilik": str, "izoh": str},
+    )
+    async def self_note(args: dict[str, Any]) -> dict[str, Any]:
+        text = str(args.get("kamchilik", "")).strip()
+        if not text:
+            return _fail("Kamchilik matni kerak")
+        selfwork.note("shikoyat", text, str(args.get("izoh") or ""))
+        return _ok("Yozib qo'ydim")
+
+    @tool(
+        "self_start",
+        "O'z kodini o'zgartirishni boshlaydi: ekranda «o'z ustida ishlamoqda» "
+        "yozuvi paydo bo'ladi va git'da orqaga qaytish nuqtasi saqlanadi. "
+        "Kodni tahrirlashdan OLDIN chaqiring.",
+        {"nima": str},
+    )
+    async def self_start(args: dict[str, Any]) -> dict[str, Any]:
+        what = str(args.get("nima", "")).strip() or "o'z kodini yaxshilash"
+        await bus.work(f"O'z ustida ishlamoqda — {what}")
+        saved = await selfwork.snapshot(what)
+        return _ok(
+            f"Boshlandi. {saved}. Endi `{selfwork.REPO_ROOT}` ichidagi fayllarni "
+            f"tahrirlang, so'ng `self_check` bilan tekshiring."
+        )
+
+    @tool(
+        "self_check",
+        "O'zgartirilgan kodni tekshiradi: testlar va linter. Qayta ishga "
+        "tushirishdan oldin MAJBURIY — buzuq kod bilan qayta ishga tushish "
+        "Jarvisni butunlay to'xtatib qo'yadi.",
+        {},
+    )
+    async def self_check(args: dict[str, Any]) -> dict[str, Any]:
+        ok, report = await selfwork.run_checks()
+        return _ok(("Hammasi joyida.\n" if ok else "Muammo bor.\n") + report)
+
+    @tool(
+        "self_finish",
+        "O'z ustida ishlashni tugatadi: ekrandagi «band» yozuvi o'chadi. "
+        "`kamchilik` berilsa, daftardagi o'sha yozuv yopiladi.",
+        {"natija": str, "kamchilik": str},
+    )
+    async def self_finish(args: dict[str, Any]) -> dict[str, Any]:
+        await bus.work("")
+        result = str(args.get("natija") or "").strip()
+        issue = str(args.get("kamchilik") or "").strip()
+        if issue:
+            selfwork.close_issue(issue)
+        if result:
+            memory.remember(
+                f"ozgarish_{selfwork.stamp()}", result[:400], "o'zgarishlar"
+            )
+        return _ok("Tugadi")
+
+    @tool(
+        "self_restart",
+        "Jarvisni qayta ishga tushiradi — o'zgartirilgan kod shundan keyin "
+        "kuchga kiradi. Avval `self_check` dan o'ting.",
+        {"sabab": str},
+    )
+    async def self_restart(args: dict[str, Any]) -> dict[str, Any]:
+        reason = str(args.get("sabab") or "yangi kod")
+        await bus.work("Qayta ishga tushmoqda")
+        selfwork.note("bajarildi", f"qayta ishga tushdi: {reason}")
+        selfwork.schedule_restart(3.0)
+        return _ok("Qayta ishga tushyapman — bir necha soniyadan keyin qaytaman")
+
+    @tool(
+        "self_revert",
+        "Saqlanmagan barcha o'zgarishlarni bekor qiladi — «orqaga qaytar». "
+        "Yangi xatti-harakat yoqmasa yoki nimadir buzilsa ishlating.",
+        {},
+    )
+    async def self_revert(args: dict[str, Any]) -> dict[str, Any]:
+        return _ok(await selfwork.revert())
+
+    return [self_status, self_issues, self_note, self_start, self_check,
+            self_finish, self_restart, self_revert]
+
+
 def build_server(
-    memory: Memory, agenda: Agenda, announce: Callable[[str], Any]
+    memory: Memory, agenda: Agenda, announce: Callable[[str], Any], bus: EventBus
 ) -> Any:
     """MCP serverini yaratadi.
 
@@ -471,8 +906,10 @@ def build_server(
         *_agenda_tools(agenda, announce),
         *_contact_tools(agenda),
         *_system_tools(agenda),
+        *_telegram_tools(),
+        *_self_tools(bus, memory),
     ]
-    return create_sdk_mcp_server(name=SERVER_NAME, version="0.2.0", tools=tools)
+    return create_sdk_mcp_server(name=SERVER_NAME, version="0.3.0", tools=tools)
 
 
 def read_only_tool_names() -> list[str]:

@@ -74,6 +74,11 @@ class Config:
 
     def writable_roots(self) -> list[Path]:
         roots = [self.workspace]
+        # O'zini o'zi yaxshilash yoqilgan bo'lsa, Jarvisning o'z kodi ham
+        # yoziladigan joy bo'ladi. Yo'lni qo'lda yozib qo'yish shart emas:
+        # repo ko'chirilsa yoki nomi o'zgarsa, sozlama eskirib qolardi.
+        if bool(self.get("safety.self_edit", False)):
+            roots.append(REPO_ROOT)
         for entry in self.get("safety.writable_roots", []) or []:
             roots.append(expand(entry))
         # Takrorlanmasin
@@ -120,5 +125,7 @@ def require_env(name: str, hint: str = "") -> str:
     value = os.environ.get(name)
     if not value:
         suffix = f" — {hint}" if hint else ""
-        raise RuntimeError(f"`{name}` muhit o'zgaruvchisi o'rnatilmagan{suffix}. .env faylni to'ldiring.")
+        raise RuntimeError(
+            f"`{name}` muhit o'zgaruvchisi o'rnatilmagan{suffix}. .env faylni to'ldiring."
+        )
     return value

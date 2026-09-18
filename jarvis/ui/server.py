@@ -227,6 +227,9 @@ class UiServer:
         try:
             await websocket.send(json.dumps({
                 "type": "hello", "client": client_id, "state": str(self.bus.state),
+                # Orb kech ulangan bo'lsa ham band belgisini ko'rsin — aks holda
+                # Jarvis o'z ustida ishlayotgani bilinmay qoladi.
+                "working": self.bus.working,
             }))
         except websockets.exceptions.ConnectionClosed:
             self._clients.pop(client_id, None)

@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 
+from . import selfwork
 from .audio.bargein import build_barge_in
 from .audio.clap import ClapDetector
 from .audio.mic import MicStream, frame_level
@@ -44,6 +45,7 @@ from .doctor import hint_for
 from .health import Health, Status, System
 from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
+from .tools import telegram as tg
 from .ui.server import UiServer, base64_to_pcm
 from .voice.consent import consent_prompt, parse_consent
 from .voice.intents import is_end_of_conversation, is_stop_speaking
@@ -312,6 +314,9 @@ class Jarvis:
         await self.ui.stop()
         await self.stt.aclose()
         await self.tts.aclose()
+        # Telegram ulanishi ochiq qolsa, qayta ishga tushganda hisob
+        # «ikkita joydan ulangan» bo'lib ko'rinadi va seans chalkashadi.
+        await tg.close()
         if self._wake is not None:
             self._wake.close()
         self.agenda.close()
@@ -745,6 +750,12 @@ class Jarvis:
         except Exception as exc:
             log.exception("Javob olishda xato")
             await self.bus.set_state(State.ERROR)
+            # Xato kamchiliklar daftariga tushadi: Jarvis keyin `self_issues`
+            # bilan o'zining qayerda yiqilayotganini KO'RA oladi. Aks holda
+            # «o'zini o'zi yaxshilash» faqat siz aytgan narsaga bog'liq
+            # bo'lib qolardi — takrorlanuvchi xato esa jimgina qolib ketardi.
+            selfwork.note("xato", f"{type(exc).__name__}: {exc}"[:300],
+                          detail=f"foydalanuvchi so'rovi: {text[:200]}")
             # Xatoning turi ("APIError") foydalanuvchiga hech nima demaydi.
             # Tanish sabab bo'lsa, nima qilish kerakligini aytamiz.
             advice = hint_for(f"{type(exc).__name__}: {exc}")
