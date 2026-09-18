@@ -191,7 +191,7 @@ class Jarvis:
         self._speaking_since: float | None = None
         # Shuncha vaqt hech qanday taraqqiyot bo'lmasa, seans to'xtatiladi.
         self._stuck_after = float(
-            config.get("conversation.stuck_after_sec", 90)
+            config.get("conversation.stuck_after_sec", 45)
         )
 
         # Dinamikka navbat. Tasdiq savoli alohida vazifada boshlanadi va
@@ -225,6 +225,9 @@ class Jarvis:
 
         self.ui.on("activate", self._on_activate)
         self.ui.on("stop", self._on_stop)
+        # To'liq ekranli HUD'dan ham uzish mumkin bo'lsin: qotib qolganda
+        # foydalanuvchining qo'lida hech bo'lmasa bitta tugma bo'lishi kerak.
+        self.ui.on("abort", self._on_stop)
         self.ui.on("standby", self._on_standby)
         self.ui.on("text", self._on_text_input)
         self.ui.on("audio", self._on_phone_audio)
@@ -664,9 +667,13 @@ class Jarvis:
 
     # Taraqqiyot deb hisoblanadigan hodisalar. `level` bunga kirmaydi: u
     # mikrofon darajasi va Jarvis qotib qolganda ham kelib turadi.
-    # Bitta javob shuncha soniyadan uzoq aytilmaydi. Uzun javob ham
-    # bunga yetmaydi — bu aniq nosozlik belgisi.
-    MAX_SPEAK_SEC = 180.0
+    # Bitta javob shuncha soniyadan uzoq aytilmaydi.
+    #
+    # Nega 45 va nega 3 daqiqa emas: Jarvis javobni GAP-GAP aytadi, ya'ni
+    # har bir ijro qisqa bo'ladi. Uzoq kutish esa foydalanuvchi uchun
+    # «yana qotib qoldi» degani — chegara sabr bilan o'lchanishi kerak,
+    # nazariy imkoniyat bilan emas.
+    MAX_SPEAK_SEC = 45.0
 
     PROGRESS_EVENTS = frozenset({
         "state", "activity", "say", "transcript", "confirm", "work", "problem",
@@ -737,7 +744,7 @@ class Jarvis:
         chiqib ketish mumkin, va aynan shu foydalanuvchiga kerak.
         """
         while not self._shutdown.is_set():
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(1.0)
 
             task = self._session_task
             if task is None or task.done():

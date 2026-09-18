@@ -97,7 +97,7 @@ conversation:
   # Jarvis kutish holatiga qaytadi. Bu oxirgi himoya chizig'i: qotib
   # qolishning sabablari xilma-xil, lekin belgisi bitta — vaqt o'tyapti,
   # hodisa yo'q. Gapirish va tasdiq kutish bunga kirmaydi.
-  stuck_after_sec: 90
+  stuck_after_sec: 45
 
   # Javobdan keyin Jarvis yana tinglab turadi — «Hey Jarvis» ni har safar
   # takrorlash shart emas. false qilsangiz, har bir savol uchun uyg'otish kerak.
@@ -266,6 +266,11 @@ safety:
     mcp__jarvis__telegram_profile: "allow"
     mcp__jarvis__telegram_slow_mode: "allow"
     mcp__jarvis__telegram_permissions: "allow"
+
+    # Daftarlar — eslab qolish so'ramasdan bo'ladi. «Buni eslab qol»
+    # deganingizda tasdiq so'rash bu ishni ma'nosiz sekinlashtiradi.
+    mcp__jarvis__eslab_qol: "allow"
+    mcp__jarvis__esdan_chiqar: "allow"
 
     # O'z ustida ishlash — pastdagi `self_edit` ga qarang.
     mcp__jarvis__self_note: "allow"

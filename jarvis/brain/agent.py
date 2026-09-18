@@ -114,6 +114,7 @@ class Brain:
             log.info("Miya uzildi")
 
     def _build_prompt(self) -> str:
+        from .. import notebook
         from ..config import REPO_ROOT
 
         return build_system_prompt(
@@ -121,6 +122,9 @@ class Brain:
             user_name=str(self.config.get("identity.user_name", "foydalanuvchi")),
             workspace=str(self.config.workspace),
             memory_context=self.memory.context_block(),
+            # Daftarlar har suhbat boshida qaytadan o'qiladi — fayl qo'lda
+            # tahrirlangan bo'lsa ham keyingi suhbatda kuchga kiradi.
+            notebook_context=notebook.context_block(),
             # Ruxsat berilmagan bo'lsa, o'z kodi haqidagi bo'lim qo'shilmaydi.
             repo=str(REPO_ROOT) if self.config.get("safety.self_edit", False) else "",
         )

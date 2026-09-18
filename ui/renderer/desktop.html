@@ -471,6 +471,7 @@ function caption(who, text) {
 
 const workPill = document.getElementById("work-pill");
 const statusLine = document.getElementById("status-line");
+const escapeHint = document.getElementById("escape-hint");
 const problemLine = document.getElementById("problem-line");
 
 // Holatning o'zbekcha nomi — ekranda doim shulardan biri turadi.
@@ -492,6 +493,8 @@ function showWork(text) {
 function showStatus(next) {
   statusLine.querySelector("b").textContent = STATE_TEXT[next] || String(next).toUpperCase();
   document.body.dataset.state = next;
+  // Ish ketayotganda chiqish yo'li ko'rinib tursin.
+  escapeHint.textContent = next === "idle" ? "ESC yoki \u2318M — YOPISH" : "ESC — TO'XTATISH";
 }
 
 function showActivity(text) {
@@ -837,7 +840,13 @@ bridge.onDismissed(() => send({ type: "standby" }));
 
 // Esc — oynani yashiradi. Qarsak, «hey jarvis» yoki ⌘⇧J bilan qaytadi.
 window.addEventListener("keydown", async (e) => {
-  if (e.key === "Escape") { bridge.hide(); send({ type: "standby" }); }
+  if (e.key === "Escape") {
+    // Jarvis ish ustida bo'lsa, Esc avval O'SHANI uzadi — oynani yopish
+    // ikkinchi bosishda bo'ladi. Qotib qolganda foydalanuvchining qo'lida
+    // ishlaydigan tugma bo'lishi kerak.
+    if (state !== "idle") { send({ type: "abort" }); showActivity("to'xtatilmoqda"); return; }
+    bridge.hide(); send({ type: "standby" });
+  }
   // O'zingiz qo'ygan rasmni olib tashlash — o'rnatilgan wallpaper qaytadi
   if (e.key === "Backspace" && !bundled) {
     await bridge.clearFigure();

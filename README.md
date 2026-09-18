@@ -1064,6 +1064,46 @@ xato bilan ham pul sarflay olmaydi.
 Diqqat: shaxsiy akkauntni avtomatlashtirish Telegram qoidalari bo'yicha ehtiyot
 talab qiladi. Ommaviy tarqatma yubormang — akkaunt cheklanishi mumkin.
 
+## Daftarlar — Jarvis o'zi yozib boradigan xotira
+
+`~/.jarvis/` ichida to'rtta oddiy Markdown fayl bor. Ularni Jarvis o'zi
+to'ldiradi, siz esa istalgan paytda ochib o'qishingiz, tuzatishingiz yoki
+o'chirishingiz mumkin:
+
+| Fayl | Nima uchun |
+| --- | --- |
+| `men.md` | Siz haqingizda: ishingiz, odatlaringiz, nimani yoqtirmasligingiz, qanday gapirishingiz |
+| `qoidalar.md` | «Bundan keyin shunday qil» / «bunday qilma» — doimiy ko'rsatmalar |
+| `xatolar.md` | Qilgan xatolari va ularni takrorlamaslik uchun xulosa |
+| `lugat.md` | Siz tushunmagan so'zlar va ularning ma'nosi |
+
+Har bir suhbat boshida to'rttasi ham tizim ko'rsatmasiga qo'shiladi —
+ya'ni bu Jarvisning haqiqiy xotirasi, uni «o'qishni unutmaydi».
+
+Ovoz bilan shunday to'ldiriladi:
+
+> — Jarvis, buni eslab qol: menga «albatta» deb gapirma, jonimga tegadi.
+>
+> — Yozib qo'ydim.
+
+Endi bu `qoidalar.md` da turadi va har suhbatda amal qiladi. Xuddi shunday:
+
+- «Bu so'zni tushunmadim, karnaval nima degani?» → javob beradi va
+  `lugat.md` ga yozadi. Keyingi safar o'sha so'zni ishlatishdan oldin
+  izohlab o'tadi.
+- «Bu xato bo'ldi» → `xatolar.md` ga nima qilgani va keyingi safar nima
+  qilish kerakligini yozadi.
+- Suhbat davomida siz haqingizda bilib olgan barqaror narsalarni
+  `men.md` ga o'zi yozib boradi — shu jumladan gapirish uslubingizni.
+
+Eskirgan yozuvni «buni o'chir» yoki «endi bunday emas» deb olib
+tashlatasiz. Fayllarni qo'lda tahrirlash ham mumkin: keyingi suhbatda
+yangi holat kuchga kiradi.
+
+Nima uchun `memory.db` dan tashqari yana shu kerak: baza kalit/qiymat
+juftliklari — mashina uchun qulay, odam uchun yopiq. Daftar esa ochib
+ko'radigan, tuzatadigan va ishonadigan narsa.
+
 ## O'zini o'zi yaxshilash
 
 Odatiy javob — «xo'p, keyingi versiyada tuzatamiz». Bu yerda boshqacha:
@@ -1225,6 +1265,7 @@ jarvis/
 ├── tools/          xotira, agenda, macOS, Telegram, Shortcuts asboblari
 │   └── telegram_user.py  shaxsiy Telegram akkaunt (MTProto)
 ├── ui/             orb va telefon uchun HTTP + WebSocket server
+├── notebook.py     daftarlar: men, qoidalar, xatolar, lug'at (~/.jarvis/*.md)
 ├── selfwork.py     o'z kodini o'zgartirish: daftar, git, tekshiruv, restart
 ├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
 ├── idle.py         sukut holati taymeri

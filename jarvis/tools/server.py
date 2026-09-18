@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 from claude_agent_sdk import ToolAnnotations, create_sdk_mcp_server, tool
 
-from .. import selfwork
+from .. import notebook, selfwork
 from ..brain.agenda import Agenda, format_when, parse_when
 from ..brain.memory import Memory
 from ..bus import EventBus
@@ -41,6 +41,7 @@ READ_ONLY_TOOLS = [
     "telegram_sessions", "telegram_admin_log", "telegram_gifts",
     "frontmost_app", "list_shortcuts",
     "self_issues", "self_status",
+    "daftar_oqi", "daftarlar",
 ]
 
 
@@ -1394,6 +1395,72 @@ def _self_tools(bus: EventBus, memory: Memory) -> list[Any]:
             self_finish, self_restart, self_revert]
 
 
+def _notebook_tools() -> list[Any]:
+    """Daftarlar — Jarvis o'zi yozib boradigan matn fayllari.
+
+    Xotiradagi kalit/qiymat juftliklaridan farqi: bular oddiy Markdown
+    fayllar, `~/.jarvis/` da. Foydalanuvchi ularni ochib o'qishi, tahrirlashi
+    va o'chirishi mumkin — «nima eslab qolgansan?» degan savolga javob
+    ko'rinadigan bo'lsin.
+    """
+
+    @tool(
+        "daftarlar",
+        "Daftarlar ro'yxati va har birida nechta yozuv borligi: men (foydalanuvchi "
+        "haqida), qoidalar, xatolar, lugat.",
+        {},
+        annotations=READ_ONLY,
+    )
+    async def daftarlar(args: dict[str, Any]) -> dict[str, Any]:
+        return _json(notebook.summary())
+
+    @tool(
+        "daftar_oqi",
+        "Daftarni o'qiydi. `daftar`: men | qoidalar | xatolar | lugat.",
+        {"daftar": str},
+        annotations=READ_ONLY,
+    )
+    async def daftar_oqi(args: dict[str, Any]) -> dict[str, Any]:
+        note = notebook.resolve(str(args.get("daftar", "")))
+        if note is None:
+            return _fail("Daftar nomi: men | qoidalar | xatolar | lugat")
+        rows = notebook.entries(note)
+        return _json(rows) if rows else _ok(f"«{note.title}» hozircha bo'sh")
+
+    @tool(
+        "eslab_qol",
+        "Daftarga yozadi — bu ESLAB QOLISH asbobi. Qaysi daftarga:\n"
+        "  men      — foydalanuvchi haqidagi fakt, odat, afzallik, gapirish uslubi\n"
+        "  qoidalar — «bundan keyin shunday qil» / «bunday qilma» ko'rsatmasi\n"
+        "  xatolar  — qilgan xatoing va uni takrorlamaslik uchun xulosa\n"
+        "  lugat    — foydalanuvchi tushunmagan so'z va uning ma'nosi\n"
+        "Foydalanuvchi «buni eslab qol» desa, MAJBURIY chaqiring.",
+        {"daftar": str, "yozuv": str},
+    )
+    async def eslab_qol(args: dict[str, Any]) -> dict[str, Any]:
+        note = notebook.resolve(str(args.get("daftar", "")))
+        if note is None:
+            return _fail("Daftar nomi: men | qoidalar | xatolar | lugat")
+        text = str(args.get("yozuv", "")).strip()
+        if not text:
+            return _fail("Nimani eslab qolishni ayting")
+        return _ok(notebook.add(note, text))
+
+    @tool(
+        "esdan_chiqar",
+        "Daftardagi yozuvni o'chiradi. Foydalanuvchi «bu noto'g'ri», «buni "
+        "o'chir», «endi bunday emas» desa ishlating.",
+        {"daftar": str, "yozuv": str},
+    )
+    async def esdan_chiqar(args: dict[str, Any]) -> dict[str, Any]:
+        note = notebook.resolve(str(args.get("daftar", "")))
+        if note is None:
+            return _fail("Daftar nomi: men | qoidalar | xatolar | lugat")
+        return _ok(notebook.remove(note, str(args.get("yozuv", ""))))
+
+    return [daftarlar, daftar_oqi, eslab_qol, esdan_chiqar]
+
+
 def build_server(
     memory: Memory, agenda: Agenda, announce: Callable[[str], Any], bus: EventBus
 ) -> Any:
@@ -1408,6 +1475,7 @@ def build_server(
         *_contact_tools(agenda),
         *_system_tools(agenda),
         *_self_tools(bus, memory),
+        *_notebook_tools(),
     ]
     return create_sdk_mcp_server(name=SERVER_NAME, version="0.3.0", tools=tools)
 
