@@ -35,6 +35,20 @@ PATH_ARG_BY_TOOL = {
     "Read": "file_path",
 }
 
+# Bu asboblar uchun tasdiq hech qachon "eslab qolinmaydi": har chaqiruv
+# alohida so'raladi — ya'ni bir marta "ha" deyish keyingilariga o'tmaydi.
+#
+# Hozir ro'yxat bo'sh, va bu ongli qaror. Telegram xabari shu yerda edi,
+# lekin har safar «ha yoki yo'q deb ayting» deb turish ish jarayonini
+# buzardi. Uning o'rniga boshqa himoya qo'yildi: yuborishdan oldin Telegram
+# ilovasi o'sha chatda ochiladi (foydalanuvchi xabarni ko'radi), va xato
+# ketsa `telegram_edit` / `telegram_undo` bilan tuzatiladi — o'chirilgan
+# xabar qabul qiluvchida ham yo'qoladi.
+ALWAYS_ASK_SUFFIXES: tuple[str, ...] = ()
+
+# Ro'yxatni sozlamadan ham to'ldirish mumkin: `safety.always_ask`. Qattiq
+# yozilgani kod bilan keladigan qaror, sozlamadagisi — foydalanuvchiniki.
+
 # Shell buyruqlaridagi yozish operatorlari — yo'lni tekshirish uchun belgi.
 _REDIRECT_RE = re.compile(r"(?<![0-9<>])>{1,2}\s*(\S+)")
 
@@ -42,11 +56,11 @@ _REDIRECT_RE = re.compile(r"(?<![0-9<>])>{1,2}\s*(\S+)")
 # «tg delete chat bajarilsinmi?» degan savolga javob berib bo'lmaydi —
 # shuning uchun xavfli asboblarning odamcha nomi shu yerda.
 TOOL_LABELS = {
-    "mcp__jarvis__tg_delete_chat": "Telegram suhbatini o'chirish",
-    "mcp__jarvis__tg_delete_messages": "Telegram xabarlarini o'chirish",
-    "mcp__jarvis__tg_folder_delete": "Telegram papkasini o'chirish",
-    "mcp__jarvis__tg_kick": "Odamni Telegram guruhidan chiqarish",
-    "mcp__jarvis__tg_leave": "Telegram kanalidan chiqish",
+    "mcp__jarvis__telegram_delete_chat": "Telegram chatini o'chirish",
+    "mcp__jarvis__telegram_delete_messages": "Telegram xabarlarini o'chirish",
+    "mcp__jarvis__telegram_folder_delete": "Telegram papkasini o'chirish",
+    "mcp__jarvis__telegram_kick": "Odamni Telegram guruhidan chiqarish",
+    "mcp__jarvis__telegram_leave": "Telegram kanalidan chiqish",
     "mcp__jarvis__self_restart": "Jarvisni qayta ishga tushirish",
     "mcp__jarvis__self_revert": "Kod o'zgarishlarini bekor qilish",
 }
@@ -88,6 +102,18 @@ class SafetyGate:
         self._audit_path = self.config.audit_log
         self._audit_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _once_only(self, tool_name: str) -> bool:
+        """Bu amal uchun tasdiq eslab qolinmasinmi?
+
+        Ikki manba: kod bilan keladigan qo'shimchalar ro'yxati va
+        `safety.always_ask` sozlamasi. Ikkalasi ham «ha» degan javobni bir
+        martalik qiladi — o'chirish kabi qaytarib bo'lmaydigan ishlar uchun.
+        """
+        return bool(
+            (ALWAYS_ASK_SUFFIXES and tool_name.endswith(ALWAYS_ASK_SUFFIXES))
+            or tool_name in self._always_ask
+        )
+
     # --- Claude Agent SDK ulanish nuqtasi ---
 
     async def can_use_tool(
@@ -123,24 +149,26 @@ class SafetyGate:
                 f"Kerak bo'lsa, uni `safety.writable_roots` ga qo'shing.",
             )
 
-        # 3. Qoidalar jadvali. `always_ask` dagi amal «allow» bo'lsa ham
-        #    so'raladi: o'chirish va shunga o'xshash qaytarib bo'lmaydigan
-        #    ishlarni tasodifan o'tkazib yuborish juda qimmatga tushadi.
-        always = tool_name in self._always_ask
+        # 3. Qoidalar jadvali.
         policy = self._rules.get(tool_name, self._default)
-        if policy == "allow" and not always:
+        # `trust on` (default: allow) ham buni yumshata olmaydi — qaytarib
+        # bo'lmaydigan tashqi amal har safar tasdiq so'raydi.
+        once_only = self._once_only(tool_name)
+        if policy != "deny" and once_only:
+            policy = "ask"
+        if policy == "allow":
             return Decision(True)
         if policy == "deny":
             return Decision(False, f"`{tool_name}` konfiguratsiyada taqiqlangan")
 
         # 4. Tasdiq so'rash — lekin bu seansda allaqachon tasdiqlangan bo'lsa, so'ramaymiz.
         signature = self._signature(tool_name, input_data)
-        if not always and signature in self._session_grants:
+        if not once_only and signature in self._session_grants:
             return Decision(True, "seansda allaqachon tasdiqlangan")
 
         action, detail = self._describe(tool_name, input_data)
         approved = await self.bus.request_confirm(action, detail)
-        if approved and not always:
+        if approved and not once_only:
             self._session_grants.add(signature)
         return Decision(approved, "" if approved else "Foydalanuvchi rad etdi", asked=True)
 
@@ -222,6 +250,12 @@ class SafetyGate:
             path = str(input_data.get("file_path", "?"))
             verb = "yaratilsinmi" if tool_name == "Write" else "o'zgartirilsinmi"
             return f"Fayl {verb}?", path
+        if tool_name.endswith("telegram_send"):
+            # Eng xavfli tasdiq — shuning uchun kimga va nima yozilishi to'liq
+            # ko'rinadi, JSON ichida yashirinib qolmaydi.
+            who = str(input_data.get("kimga", "?"))
+            text = str(input_data.get("matn", ""))
+            return (f"Telegramda {who} ga sizning nomingizdan yuborilsinmi?", text[:400])
         if tool_name.startswith("mcp__"):
             pretty = TOOL_LABELS.get(tool_name) or tool_name.split("__")[-1].replace("_", " ")
             return f"{pretty} bajarilsinmi?", json.dumps(input_data, ensure_ascii=False)[:400]

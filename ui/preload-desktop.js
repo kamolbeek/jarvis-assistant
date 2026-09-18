@@ -10,16 +10,28 @@ contextBridge.exposeInMainWorld("desk", {
   // Ob-havo — main jarayoni open-meteo dan oladi (bo'lmasa null).
   onWeather: (callback) => ipcRenderer.on("weather", (_e, weather) => callback(weather)),
 
+  // Ijro etilayotgan musiqa (Spotify/Music ochiq bo'lsa).
+  onMedia: (callback) => ipcRenderer.on("media", (_e, media) => callback(media)),
+
   // Ilova/papka/havola ochish — nomlar main tomonda oq ro'yxat bilan tekshiriladi.
   openApp: (name) => ipcRenderer.send("desk-open-app", String(name)),
   openFolder: (key) => ipcRenderer.send("desk-open-folder", String(key)),
   openUrl: (url) => ipcRenderer.send("desk-open-url", String(url)),
+  openTrash: () => ipcRenderer.send("desk-open-trash"),
+
+  // Tizim ovozi va media tugmalari — HUD'dagi ustun va tugmachalar.
+  setVolume: (level) => ipcRenderer.send("desk-set-volume", Number(level)),
+  media: (action) => ipcRenderer.send("desk-media", String(action)),
 
   // Oynani ko'rsatish/yashirish. Chaqirilganda renderer o'zi so'raydi —
   // yadro faqat holatni biladi, oyna boshqaruvi main jarayonida.
   show: () => ipcRenderer.send("desk-show"),
   hide: () => ipcRenderer.send("desk-hide"),
   onVisible: (callback) => ipcRenderer.on("desk-visible", () => callback()),
+
+  // Foydalanuvchi oynani ataylab yopdi (Esc / ⌘W / ⌘⇧J) — renderer buni
+  // yadroga aytadi, yadro sukut holatiga o'tadi.
+  onDismissed: (callback) => ipcRenderer.on("desk-dismissed", () => callback()),
 
   // Markaziy rasm: olish / saqlash / o'chirish.
   getFigure: () => ipcRenderer.invoke("figure-get"),

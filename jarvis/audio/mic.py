@@ -46,6 +46,11 @@ class MicStream:
         self._stream: Any = None
         self._dropped = 0
         self._last_drop_warn = 0.0
+        # Oxirgi kadr qachon kelgani. macOS audio qurilmani almashtirsa
+        # (quloqchin ulandi, ilova chiqish qurilmasini o'zgartirdi), PortAudio
+        # oqimi jimgina o'lib qolishi mumkin: xato ham, kadr ham kelmaydi.
+        # Tashqaridan bu «Jarvis to'satdan kar bo'lib qoldi» bo'lib ko'rinadi.
+        self._last_frame_at = 0.0
 
         frame_ms = frame_samples * 1000 // sample_rate
         self._frame_ms = max(1, frame_ms)
@@ -76,18 +81,56 @@ class MicStream:
             if self._loop is not None and not self._loop.is_closed():
                 self._loop.call_soon_threadsafe(self._push, frame)
 
+        # Sozlamadagi qurilma nomini indeksga aylantiramiz. Topilmasa — ish
+        # to'xtamasin: tizim standarti bilan davom etamiz va sababini aytamiz.
+        # Mikrofonsiz Jarvis umuman ishlamaydi, noto'g'ri nom esa tuzatiladigan
+        # mayda xato — shuning uchun butun ishni yiqitmaydi.
+        from .devices import resolve_input_device
+
+        device = self.device
+        try:
+            device = resolve_input_device(self.device)
+        except ValueError as exc:
+            log.warning("%s\nTizim standart mikrofoni bilan davom etamiz.", exc)
+            device = None
+
         self._stream = sd.InputStream(
             samplerate=self.sample_rate,
             blocksize=self.frame_samples,
             channels=1,
             dtype="int16",
-            device=self.device,
+            device=device,
             callback=callback,
         )
         self._stream.start()
+        self._last_frame_at = time.monotonic()
         log.info("Mikrofon ochildi: %d Hz, %d namunali kadr", self.sample_rate, self.frame_samples)
 
+    @property
+    def silent_for(self) -> float:
+        """Oxirgi kadrdan beri necha soniya o'tdi."""
+        if self._last_frame_at == 0.0:
+            return 0.0
+        return max(0.0, time.monotonic() - self._last_frame_at)
+
+    async def restart(self) -> bool:
+        """Oqimni yopib, qaytadan ochadi. Muvaffaqiyatli bo'lsa True."""
+        log.warning("Mikrofon oqimi qayta ochilmoqda (%.0f s kadr kelmadi)",
+                    self.silent_for)
+        try:
+            await self.stop()
+        except Exception:  # noqa: BLE001 — yopishdagi xato qayta ochishga to'siq emas
+            log.debug("Eski oqim yopilmadi", exc_info=True)
+            self._stream = None
+        try:
+            await self.start()
+            return True
+        except Exception:  # noqa: BLE001 — sabab jurnalda qolsin
+            log.exception("Mikrofonni qayta ochib bo'lmadi")
+            return False
+
     def _push(self, frame: np.ndarray) -> None:
+        self._last_frame_at = time.monotonic()
         self._preroll.append(frame)
         self._recent.append(frame)
         try:
@@ -126,10 +169,23 @@ class MicStream:
 
     # --- O'qish ---
 
+    # Kadr kelmasa, shuncha kutib jim kadr beramiz.
+    IDLE_TIMEOUT_SEC = 1.0
+
     async def frames(self) -> AsyncIterator[np.ndarray]:
-        """Kadrlarni cheksiz oqim sifatida beradi."""
+        """Kadrlarni cheksiz oqim sifatida beradi.
+
+        Oqim o'lib qolsa `queue.get()` abadiy kutib qolardi — va u bilan
+        birga butun yadro: tugma bosilishi ham, qayta ochish urinishi ham
+        navbatga tushmasdi. Shuning uchun kadr kelmasa jim kadr beramiz:
+        sikl aylanishda davom etadi, qo'riqchi esa oqimni qayta ochadi.
+        """
+        silence = np.zeros(self.frame_samples, dtype=np.int16)
         while True:
-            yield await self._queue.get()
+            try:
+                yield await asyncio.wait_for(self._queue.get(), self.IDLE_TIMEOUT_SEC)
+            except (TimeoutError, asyncio.TimeoutError):
+                yield silence
 
     def take_preroll(self) -> np.ndarray:
         """Uyg'otishdan oldingi saqlangan audioni qaytaradi va buferni tozalaydi."""

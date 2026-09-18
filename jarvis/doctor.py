@@ -58,6 +58,30 @@ HINTS: list[tuple[tuple[str, ...], str]] = [
         "yangi kalit yarating va o'sha paytdagi `sk_...` qiymatini nusxalang.",
     ),
     (
+        ("quota_exceeded", "credits remaining", "quota of"),
+        "ElevenLabs kreditlari tugagan (hisobda 0 kredit qolgan).\n"
+        "Kalit to'g'ri — muammo balansda. Ikki yo'l bor:\n"
+        "  1) elevenlabs.io > Subscription — tarifni to'ldiring;\n"
+        "  2) BEPUL lokal ovozga o'ting — kalit ham, internet ham kerak emas.\n"
+        "     config/jarvis.yaml ga shuni yozing:\n"
+        "         voice:\n"
+        "           stt:\n"
+        "             provider: \"whisper_local\"\n"
+        "           tts:\n"
+        "             provider: \"macos\"\n"
+        "     va lokal STT'ni o'rnating:\n"
+        "         pip install -e \".[local-stt]\"\n"
+        "     (birinchi ishga tushirishda model ~1.5 GB yuklab olinadi)",
+    ),
+    (
+        ("returned an error result",),
+        "Claude Code javob qaytarmadi. Terminalda o'zini tekshiring:\n"
+        "    claude -p \"salom\"\n"
+        "Kirish so'ralsa yoki xato chiqsa — `claude` deb yozib obunangiz\n"
+        "bilan kiring. Obuna limiti tugagan bo'lsa, limit tiklanishini\n"
+        "kutish kerak (yoki .env ga ANTHROPIC_API_KEY qo'yish).",
+    ),
+    (
         ("401",),
         "Kalit qabul qilinmadi — .env dagi qiymatni qaytadan tekshiring.",
     ),
@@ -519,39 +543,33 @@ async def check_telegram() -> Result:
 
 
 async def check_telegram_account() -> Result:
-    """Telegram HISOBI ulanganmi — bot emas, hisobning o'zi.
+    """Shaxsiy Telegram akkauntga kirilganmi?
 
-    Bot bilan farqi katta: kanal ochish, papka yig'ish, odam qo'shish va
-    suhbatlarni o'qish faqat hisob orqali mumkin. Shuning uchun bu alohida
-    tekshiruv: bot ishlayotgani hali «Telegram to'liq ishlayapti» degani emas.
+    Bot bilan bir xil emas: bot sizning chatlaringizni ko'rmaydi. Xabarlarni
+    o'qish va tanishlarga sizning nomingizdan yozish faqat shu ulanish orqali
+    ishlaydi.
     """
-    from .tools import telegram as tg
+    from .tools import telegram_user
 
-    if not os.environ.get("TELEGRAM_API_ID") or not os.environ.get("TELEGRAM_API_HASH"):
-        return Result(True,
-                      "Sozlanmagan (ixtiyoriy) — kanal/papka boshqarish ishlamaydi.\n"
-                      "Yoqish: my.telegram.org dan api_id va api_hash olib .env ga\n"
-                      "yozing, so'ng: python -m jarvis telegram-login")
-
-    if not tg.is_linked():
-        return Result(False,
-                      "Kalitlar bor, lekin hisobga kirilmagan.\n"
-                      "Bir marta bajaring: python -m jarvis telegram-login")
-
+    if not telegram_user.is_logged_in():
+        return Result(True, "Kirilmagan (ixtiyoriy) — xabarlarni o'qish va sizning\n"
+                            "nomingizdan yozish ishlamaydi. Yoqish uchun:\n"
+                            "  python -m jarvis telegram-login")
     try:
-        who = await tg.me()
-        folders = await tg.folders()
-        chats = await tg.chats(limit=500)
-    except tg.TelegramError as exc:
+        who = await telegram_user.me()
+    except telegram_user.TelegramUserError as exc:
         return Result(False, str(exc))
-    except Exception as exc:
-        return Result(False, f"Telegram'ga ulanib bo'lmadi: {exc}")
+    except Exception as exc:  # noqa: BLE001 — sabab foydalanuvchiga kerak
+        return Result(False, f"Telegram akkaunt tekshirilmadi: {exc}")
     finally:
-        await tg.close()
+        try:
+            await telegram_user.close()
+        except Exception:  # noqa: BLE001 — yopishdagi xato muhim emas
+            pass
 
-    names = ", ".join(f["nom"] for f in folders[:5]) or "yo'q"
-    return Result(True, f"{who['ism']} {who['username']} — {len(chats)} ta suhbat, "
-                        f"papkalar: {names}")
+    return Result(True, f"Shaxsiy akkaunt: {who} — o'qiy oladi va sizning "
+                        f"nomingizdan yoza oladi\n(yuborishdan oldin har safar "
+                        f"tasdiq so'raydi)")
 
 
 def check_permissions() -> Result:
@@ -617,7 +635,7 @@ async def run_doctor() -> int:
 
     _header("Kanallar")
     report("Telegram (bot)", await check_telegram())
-    report("Telegram (hisob)", await check_telegram_account())
+    report("Telegram (shaxsiy akkaunt)", await check_telegram_account())
 
     print(f"\n{'─' * 58}")
     if failures == 0:

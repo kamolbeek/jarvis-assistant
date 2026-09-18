@@ -152,6 +152,7 @@ function connect() {
     offlinePanel.classList.remove("hidden");
     setState("idle");
     level = 0;
+    applyStandby(false);
     // Aloqa yo'q — bo'g'inlar holati endi ishonchsiz, siferblatlar so'nsin.
     systems = systems.map((s) => ({ ...s, status: "unknown", heat: 0 }));
     // Yadro qayta ishga tushsa, o'zi ulanib olsin.
@@ -159,6 +160,11 @@ function connect() {
   });
 
   socket.addEventListener("error", () => socket.close());
+}
+
+function applyStandby(on) {
+  document.body.classList.toggle("standby", on);
+  if (window.orb && window.orb.setVisible) window.orb.setVisible(!on);
 }
 
 function handleEvent(data) {
@@ -197,6 +203,16 @@ function handleEvent(data) {
       if (data.level === "error" || data.level === "warn") {
         showCaption("Tizim", data.text);
       }
+      break;
+    // Sukut holati: yadro baribir tinglab turadi, orb esa ekrandan
+    // butunlay ketadi. Chaqirilganda qaytadi.
+    case "standby":
+      applyStandby(!!data.on);
+      break;
+    // Yangi ulanish: yadro allaqachon sukutda bo'lishi mumkin (masalan
+    // kompyuter endi yoqildi) — orb chiqib qolmasligi kerak.
+    case "hello":
+      applyStandby(!!data.standby);
       break;
   }
 }

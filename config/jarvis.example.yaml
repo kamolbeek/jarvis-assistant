@@ -70,13 +70,25 @@ audio:
   # Aks sadoni dasturiy yo'q qilish og'ir ish; ovozni pasaytirish esa
   # arzon va aynan shu muammoni yechadi. Tinglash tugagach qaytariladi.
   duck_while_listening: true
-  duck_volume: 20                # foizda
+  # 0 — tinglash paytida musiqa BUTUNLAY jim bo'ladi. Pasaytirish yetarli
+  # emas: mikrofon baribir musiqani eshitadi va u sizning gapingiz bilan
+  # aralashib, matnga aylantirishni buzadi. Gapirib bo'lganingizdan keyin
+  # eski daraja qaytariladi — ya'ni ish bajarilayotganda musiqa chalinaveradi.
+  duck_volume: 0                 # foizda
 
   # Gapirishni tugatganini aniqlash
   endpointing:
     backend: "webrtcvad"           # webrtcvad | energy
     aggressiveness: 2              # 0..3
-    silence_ms: 900                # shuncha jimlikdan keyin yozib olish tugaydi
+    # Shuncha jimlikdan keyin yozib olish tugaydi.
+    #
+    # Bu qiymat qasddan qisqa: nuqta qo'yilgan gap darhol javob olishi
+    # kerak. Odam o'ylanib qolgani gapni bo'lib yubormasligi uchun esa
+    # boshqa yo'l ishlatiladi — pastdagi `continue_wait_sec` ga qarang:
+    # gap «...va», «...keyin», «aaa» bilan tugagan bo'lsa, Jarvis davomini
+    # kutadi. Ya'ni qaror jimlik uzunligi bilan emas, aytilgan gap bilan
+    # qabul qilinadi.
+    silence_ms: 1000
     max_utterance_sec: 30
     preroll_ms: 300                # uyg'otuvchi so'zdan oldingi audio (kontekst uchun)
 
@@ -88,11 +100,45 @@ conversation:
   follow_up_sec: 8                 # javobdan keyingi tinglash oynasi
   max_turns: 12                    # bitta suhbatdagi eng ko'p navbat
 
+  # Chaqirilganda aytiladigan javob — ro'yxatdan tasodifiy bittasi.
+  # Bu javob emas, «eshitdim» degan belgi: kuniga o'nlab marta
+  # eshitiladi, shuning uchun qisqa bo'lgani ma'qul.
+  greetings: ["Aha.", "Labbay.", "Ha."]
+
+  # Sukut holati. Suhbat jimlik bilan tugasa, sahna ataylab ochiq qoladi —
+  # foydalanuvchi davom ettirishi mumkin. Lekin hech kim qaytmasa, u shu
+  # holida soatlab turmasligi kerak: shuncha soniyadan keyin sahna yopiladi
+  # va orb xiralashadi.
+  #
+  # Bu "o'chish" emas: mikrofon ishlashda davom etadi va «Hey Jarvis»
+  # deyilishi bilan hammasi qaytadi. 0 — hech qachon so'nmasin.
+  #
+  # «Bekor qil» (yoki «cancel», «bo'ldi bas») deyilsa, vaqt tugashi
+  # kutilmaydi — Jarvis darhol sukutga o'tadi. Tugmalar ham xuddi shunday:
+  # Esc, ⌘M, ⌘W, ⌘⇧J.
+  #
+  # Sukutda orb ekranda umuman ko'rinmaydi. Kompyuter yoqilganda ham
+  # shu holatda boshlanadi: hech narsa turmaydi, lekin tinglaydi.
+  # 0 qilsangiz, sukut butunlay o'chadi va orb doim ko'rinib turadi.
+  standby_after_sec: 300           # 5 daqiqa
+
   # Jarvis gapirayotganda uni bo'lish. Chegara o'zi moslashadi: quloqchinda
   # sezgir, baland dinamikda esa o'z ovozidan bo'linib ketmaydi.
   barge_in: true
   barge_in_min_speech_ms: 350       # shuncha uzluksiz nutqdan keyin to'xtaydi
   barge_in_margin: 2.0              # foniga nisbatan shuncha baland bo'lishi kerak
+
+  # Gap bo'lingandan keyin qancha orqaga qarab audio olinadi. Bo'lish
+  # qarori ~350 ms nutqdan keyin qabul qilinadi va undan keyin ham ijroni
+  # to'xtatishga vaqt ketadi — shu oyna bo'lmasa, «to'xta, Instagramga
+  # kirib...» degan gapning boshi yo'qolib, Jarvis o'rtasidan eshitadi.
+  interrupt_lookback_ms: 1200
+
+  # Gap tugamagan bo'lsa (masalan «...keyin», «...va», «aaa» bilan
+  # tugasa), Jarvis javob bermasdan davomini kutadi. Shuncha soniya va
+  # shuncha marta — undan keyin baribir javob beradi.
+  continue_wait_sec: 2.0
+  continue_tries: 2
 
 # Eshitish va gapirish ALOHIDA tanlanadi — har biri uchun eng yaxshisini
 # olish mumkin. O'zbek tili uchun tavsiya:
@@ -101,10 +147,20 @@ conversation:
 # ElevenLabs ovozi tabiiyroq, lekin inglizcha aksent bilan gapiradi.
 voice:
   stt:
-    provider: "elevenlabs"         # elevenlabs | mohir | whisper_local
+    provider: "elevenlabs"         # elevenlabs | mohir | whisper_local | whisper_cpp
     language: "uz"
     # whisper_local uchun:
     model: "mlx-community/whisper-large-v3-turbo"
+
+    # whisper_cpp (yoki "rubai") — internetsiz, kalitsiz, bepul. Aynan
+    # o'zbekchaga o'rgatilgan rubaiSTT modelini shu yo'l bilan ulash mumkin
+    # (RubaiSTT Dictation ilovasi ham xuddi shu modelni ishlatadi):
+    #   brew install whisper-cpp
+    #   provider: "rubai"
+    #   model: "~/Library/Application Support/uzbek-dictation/ggml-rubaistt_v2_medium-q8_0.bin"
+    # `model` ko'rsatilmasa, odatdagi joylardan o'zi qidiradi.
+    # binary: "whisper-cli"        # boshqa nom bilan o'rnatilgan bo'lsa
+    # threads: 0                   # 0 — whisper.cpp o'zi tanlaydi
 
   tts:
     provider: "elevenlabs"         # elevenlabs | azure | mohir | macos
@@ -160,17 +216,6 @@ safety:
     enabled: true
     listen_sec: 8                  # har urinishda shuncha soniya tinglaydi
     attempts: 2                    # noaniq javobda necha marta qayta so'raydi
-  # Jarvis o'z kodini o'zgartira olsinmi. Yoqilganda repo papkasi
-  # avtomatik ravishda `writable_roots` ga qo'shiladi — ya'ni «bu menga
-  # yoqmadi» deganingizda u o'zini tuzata oladi.
-  #
-  # Diqqat: bu jiddiy ruxsat. Uni xavfsiz qiladigan uchta narsa:
-  #   - Write/Edit/Bash baribir tasdiq so'raydi (pastdagi `rules`)
-  #   - har o'zgarishdan oldin git'da orqaga qaytish nuqtasi saqlanadi
-  #   - qayta ishga tushirishdan oldin testlar va linter ishlaydi
-  # O'chirish uchun: false.
-  self_edit: true
-
   rules:
     Read: "allow"
     Glob: "allow"
@@ -181,35 +226,28 @@ safety:
     Edit: "ask"
     Bash: "ask"
     NotebookEdit: "ask"
+    # Telegramda sizning nomingizdan yozish tasdiq so'ramaydi: uning
+    # o'rniga Telegram ilovasi o'sha chatda ochiladi va xabar ko'z
+    # oldingizda paydo bo'ladi. Xato ketsa «tahrirla» yoki «o'chir»
+    # deysiz. Tasdiq qaytishini xohlasangiz:
+    #   mcp__jarvis__telegram_send: "ask"
 
-    # --- Telegram ---
-    # Kundalik ishlar so'ramasdan bajariladi: kanal ochish, odam qo'shish,
-    # admin qilish, papka yig'ish, xabar yuborish. Har biriga «ha» deb
-    # o'tirish yordamchini yordamchi emas, tugmaga aylantiradi.
-    mcp__jarvis__tg_send: "allow"
-    mcp__jarvis__tg_forward: "allow"
-    mcp__jarvis__tg_create: "allow"
-    mcp__jarvis__tg_invite: "allow"
-    mcp__jarvis__tg_promote: "allow"
-    mcp__jarvis__tg_demote: "allow"
-    mcp__jarvis__tg_unban: "allow"
-    mcp__jarvis__tg_join: "allow"
-    mcp__jarvis__tg_rename: "allow"
-    mcp__jarvis__tg_link: "allow"
-    mcp__jarvis__tg_pin: "allow"
-    mcp__jarvis__tg_archive: "allow"
-    mcp__jarvis__tg_mute: "allow"
-    mcp__jarvis__tg_folder: "allow"
+    # Telegramda kundalik ishlar so'ramasdan bajariladi: kanal ochish,
+    # odam qo'shish, admin qilish, papka yig'ish, qo'shilish. Har biriga
+    # «ha» deb o'tirish yordamchini tugmaga aylantiradi.
+    mcp__jarvis__telegram_folder: "allow"
+    mcp__jarvis__telegram_promote: "allow"
+    mcp__jarvis__telegram_demote: "allow"
+    mcp__jarvis__telegram_unban: "allow"
+    mcp__jarvis__telegram_join: "allow"
+    mcp__jarvis__telegram_link: "allow"
+    mcp__jarvis__telegram_rename: "allow"
+    mcp__jarvis__telegram_pin: "allow"
+    mcp__jarvis__telegram_archive: "allow"
+    mcp__jarvis__telegram_mute: "allow"
+    mcp__jarvis__telegram_forward: "allow"
 
-    # Qaytarib bo'lmaydiganlari — har safar so'raydi (`always_ask` ga ham
-    # kiritilgan, ya'ni bir marta «ha» degani keyingisiga o'tmaydi).
-    mcp__jarvis__tg_kick: "ask"
-    mcp__jarvis__tg_leave: "ask"
-    mcp__jarvis__tg_delete_messages: "ask"
-    mcp__jarvis__tg_delete_chat: "ask"
-    mcp__jarvis__tg_folder_delete: "ask"
-
-    # --- O'z ustida ishlash ---
+    # O'z ustida ishlash — pastdagi `self_edit` ga qarang.
     mcp__jarvis__self_note: "allow"
     mcp__jarvis__self_start: "allow"
     mcp__jarvis__self_check: "allow"
@@ -217,15 +255,27 @@ safety:
     mcp__jarvis__self_restart: "ask"
     mcp__jarvis__self_revert: "ask"
 
-  # Bu amallar HAR SAFAR alohida so'raladi — seansda bir marta tasdiqlangani
-  # keyingisiga o'tmaydi. O'chirish va qaytarib bo'lmaydigan ishlar uchun.
+  # Bu amallar HAR SAFAR alohida so'raydi: bir marta «ha» degani keyingisiga
+  # o'tmaydi va `trust on` ham ularni yumshata olmaydi. Sababi oddiy —
+  # ularni qaytarib bo'lmaydi.
   always_ask:
-    - "mcp__jarvis__tg_kick"
-    - "mcp__jarvis__tg_leave"
-    - "mcp__jarvis__tg_delete_messages"
-    - "mcp__jarvis__tg_delete_chat"
-    - "mcp__jarvis__tg_folder_delete"
+    - "mcp__jarvis__telegram_kick"
+    - "mcp__jarvis__telegram_leave"
+    - "mcp__jarvis__telegram_delete_messages"
+    - "mcp__jarvis__telegram_delete_chat"
+    - "mcp__jarvis__telegram_folder_delete"
     - "mcp__jarvis__self_revert"
+
+  # Jarvis o'z kodini o'zgartira olsinmi. Yoqilganda repo papkasi
+  # avtomatik ravishda `writable_roots` ga qo'shiladi — ya'ni «bu menga
+  # yoqmadi» deganingizda u o'zini tuzata oladi.
+  #
+  # Diqqat: bu jiddiy ruxsat. Uni xavfsiz qiladigan uchta narsa:
+  #   - har o'zgarishdan oldin git'da orqaga qaytish nuqtasi saqlanadi
+  #   - qayta ishga tushirishdan oldin testlar va linter ishlaydi
+  #   - «orqaga qaytar» desangiz hammasi bekor bo'ladi
+  # O'chirish uchun: false.
+  self_edit: true
 
   # Bu naqshlar hech qachon bajarilmaydi (tasdiq so'ralmaydi ham).
   forbidden_patterns:
@@ -264,11 +314,12 @@ ui:
 
 channels:
   telegram:
-    # Bot (faqat sizga xabar yuborish uchun) — .env dagi TELEGRAM_BOT_TOKEN.
     enabled: false
-    # Hisobning o'zi orqali to'liq boshqaruv: kanal ochish, odam qo'shish,
-    # admin qilish, papka yig'ish, kanallarni o'qish. Buning uchun bir marta
-    # kirish kerak:  python -m jarvis telegram-login
-    account: true
+    # Shaxsiy akkaunt (bot emas): Jarvis chatlaringizni o'qiy oladi va
+    # tanishlaringizga sizning nomingizdan yoza oladi.
+    # Yoqish: `python -m jarvis telegram-login` (bir marta, qo'lda).
+    # Seans `~/.jarvis/telegram.session` da — repozitoriyga tushmaydi.
+    account:
+      enabled: false
   n8n:
     enabled: false

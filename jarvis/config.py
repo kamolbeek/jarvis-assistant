@@ -93,6 +93,33 @@ class Config:
             path.mkdir(parents=True, exist_ok=True)
 
 
+def load_env() -> None:
+    """`.env` ni muhitga qo'yadi.
+
+    Sozlamani o'qimaydigan buyruqlar ham kalitlar borligini tekshiradi
+    (`stt`, `tts`). `.env` yuklanmasa, ular «kalit yo'q» deb bekorga
+    ogohlantiradi — va odam mavjud kalitni qidirib vaqt yo'qotadi.
+    """
+    load_dotenv(REPO_ROOT / ".env")
+
+
+def ensure_config() -> Path:
+    """Sozlama faylini qaytaradi, bo'lmasa namunadan yaratadi.
+
+    Sozlamani o'zgartiruvchi buyruqlar (`trust`, `stt`, `tts`) fayl yo'qligida
+    xato berib to'xtardi. Amalda bu shunday ko'rinardi: buyruq berilgan,
+    ekranda bir qator xato chiqib yo'qolgan, foydalanuvchi esa sozlama
+    o'zgardi deb o'ylagan va «hech narsa o'zgarmadi» degan holatga kelgan.
+    Fayl yo'qligi — to'siq emas, uni yaratib qo'yish yetadi.
+    """
+    if not CONFIG_PATH.exists():
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(
+            EXAMPLE_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    return CONFIG_PATH
+
+
 def load_config(path: Path | None = None) -> Config:
     """Konfiguratsiyani yuklaydi.
 

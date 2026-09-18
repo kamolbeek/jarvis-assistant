@@ -66,6 +66,18 @@ body.dragging #orb-wrap { cursor: grabbing; transform: none; }
   display: block;
 }
 
+/* Sukut holati: uzoq vaqt muloqot bo'lmadi. Orb so'nadi, lekin yo'qolmaydi —
+   Jarvis tinglashda davom etayotgani ko'rinib tursin. So'nish sekin bo'ladi:
+   keskin o'chish ko'z bilan "yiqildi" deb o'qiladi. */
+body.standby #orb-wrap {
+  opacity: 0.28;
+  transition: opacity 1.6s ease;
+}
+
+body.standby #orb-wrap:hover {
+  opacity: 0.85;
+}
+
 /* Kichik holat nuqtasi — ulanish bor-yo'qligini bildiradi */
 #status-dot {
   position: absolute;

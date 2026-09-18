@@ -64,7 +64,7 @@ class Endpointer:
 
     Ishlatilishi::
 
-        ep = Endpointer(detector, frame_ms=20, silence_ms=900, max_sec=30)
+        ep = Endpointer(detector, frame_ms=20, silence_ms=1000, max_sec=30)
         for frame in frames:
             ep.push(frame)
             if ep.finished:
@@ -74,7 +74,7 @@ class Endpointer:
 
     detector: SpeechDetector
     frame_ms: int = 20
-    silence_ms: int = 900
+    silence_ms: int = 1000
     max_utterance_sec: float = 30.0
     # Yozib olishni boshlash uchun kerakli ketma-ket nutq kadrlari (chertishlarni filtrlaydi)
     speech_onset_frames: int = 2

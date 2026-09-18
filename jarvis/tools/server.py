@@ -7,8 +7,6 @@ ustiga qo'shiladi. To'rt guruh:
     agenda    — nima qilish kerak (loyihalar, vazifalar, eslatmalar)
     aloqalar  — kim bilan bog'lanaman (Telegram, telefon)
     tizim     — macOS, Shortcuts, kanallar
-    telegram  — Telegram hisobini to'liq boshqarish (kanal, guruh, papka, a'zolar)
-    o'zi      — o'z kodini o'zgartirish, tekshirish, qayta ishga tushish
 """
 
 from __future__ import annotations
@@ -23,8 +21,7 @@ from .. import selfwork
 from ..brain.agenda import Agenda, format_when, parse_when
 from ..brain.memory import Memory
 from ..bus import EventBus
-from . import channels, macos, media
-from . import telegram as tg
+from . import channels, macos, media, telegram_user
 
 log = logging.getLogger("jarvis.tools")
 
@@ -38,42 +35,11 @@ READ_ONLY_TOOLS = [
     "recall", "search_memory",
     "list_projects", "list_tasks", "daily_brief",
     "list_contacts", "find_contact",
+    "telegram_chats", "telegram_read", "telegram_search", "telegram_overview",
+    "telegram_folders", "telegram_members",
     "frontmost_app", "list_shortcuts",
-    "tg_me", "tg_chats", "tg_read", "tg_search", "tg_members", "tg_folders",
     "self_issues", "self_status",
 ]
-
-
-def _list_arg(value: Any) -> list[str]:
-    """«a, b, c» ko'rinishidagi qiymatni ro'yxatga aylantiradi.
-
-    Asbob sxemasida ro'yxat turini ishlatmaymiz: model ba'zan JSON massiv,
-    ba'zan oddiy vergul bilan ajratilgan satr yuboradi. Ikkalasini ham
-    qabul qilish — bitta formatni talab qilib, qolganida yiqilishdan afzal.
-    """
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value or "").strip()
-    if not text:
-        return []
-    if text.startswith("["):
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, list):
-                return [str(item).strip() for item in parsed if str(item).strip()]
-        except json.JSONDecodeError:
-            pass
-    return [part.strip() for part in text.split(",") if part.strip()]
-
-
-def _int_list_arg(value: Any) -> list[int]:
-    out: list[int] = []
-    for part in _list_arg(value):
-        try:
-            out.append(int(part))
-        except ValueError:
-            continue
-    return out
 
 
 def _ok(text: str) -> dict[str, Any]:
@@ -447,6 +413,466 @@ def _system_tools(agenda: Agenda) -> list[Any]:
             return _fail(str(exc))
 
     @tool(
+        "telegram_chats",
+        "Shaxsiy Telegram akkauntdagi oxirgi chatlar: kim yozgan, nechta o'qilmagan "
+        "xabar bor. «Telegramda nima yangilik?» degan savolga shu bilan javob bering. "
+        "`faqat_oqilmagan` = ha bo'lsa, faqat o'qilmaganlar ko'rsatiladi.",
+        {"nechta": int, "faqat_oqilmagan": str},
+        annotations=READ_ONLY,
+    )
+    async def telegram_chats(args: dict[str, Any]) -> dict[str, Any]:
+        flag = str(args.get("faqat_oqilmagan") or "").strip().lower()
+        unread = flag in ("ha", "yes", "true", "1")
+        try:
+            chats = await telegram_user.list_chats(
+                limit=int(args.get("nechta") or 15), unread_only=unread
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(chats) if chats else _ok("Yangi xabar yo'q")
+
+    @tool(
+        "telegram_read",
+        "Bitta Telegram chatidagi oxirgi xabarlarni o'qiydi. `kim` — ism, @username "
+        "yoki telefon raqam. Javob yozishdan oldin shu bilan kontekstni oling.",
+        {"kim": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def telegram_read(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            chat = await telegram_user.read_chat(
+                str(args.get("kim", "")), limit=int(args.get("nechta") or 15)
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(chat)
+
+    @tool(
+        "telegram_send",
+        "Telegramda **foydalanuvchining o'z nomidan** xabar yuboradi. `kimga` — ism, "
+        "@username yoki telefon raqam. Matnni foydalanuvchi aytgandek yuboring; "
+        "o'zingizdan qo'shimcha yozmang. Telegram ilovasi o'sha chatda ochiladi, "
+        "ya'ni foydalanuvchi xabarni ko'rib turadi. Xato ketsa u aytadi — "
+        "shunda `telegram_edit` yoki `telegram_undo` ni ishlating.",
+        {"kimga": str, "matn": str},
+    )
+    async def telegram_send(args: dict[str, Any]) -> dict[str, Any]:
+        target = str(args.get("kimga", "")).strip()
+        text = str(args.get("matn", "")).strip()
+        if not target or not text:
+            return _fail("`kimga` va `matn` kerak")
+
+        # Saqlangan aloqada @username bo'lsa, undan foydalanamiz — ism bo'yicha
+        # qidirishdan ko'ra aniqroq.
+        contact = agenda.find_contact(target) if not target.startswith(("@", "+")) else None
+        if contact and contact.get("telegram"):
+            target = contact["telegram"]
+
+        try:
+            name = await telegram_user.send_as_me(target, text)
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Yuborildi: {name}")
+
+    @tool(
+        "telegram_search",
+        "Telegram yozishmalari ichidan matn bo'yicha qidiradi — sana va chat "
+        "esda bo'lmasa ham topadi. `kim` berilsa faqat o'sha chatda qidiradi "
+        "(saqlangan xabarlar uchun: kim='men'). «Asadga tashlagan edim», "
+        "«saqlangan xabarlarimda bor edi» kabi so'rovlarda shuni ishlating.",
+        {"soz": str, "kim": str, "nechta": int},
+        annotations=READ_ONLY,
+    )
+    async def telegram_search(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            result = await telegram_user.search(
+                str(args.get("soz", "")),
+                chat=str(args.get("kim") or ""),
+                limit=int(args.get("nechta") or 20),
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(result) if result["topildi"] else _ok("Hech narsa topilmadi")
+
+    @tool(
+        "telegram_overview",
+        "Telegram akkauntining qisqa tahlili: nechta chat, qaysilari o'qilmagan, "
+        "nechta guruh va kanal, qaysi kanallar uzoq vaqtdan beri jim. «Telegramni "
+        "analiz qilib ber», «qaysi kanallar keraksiz?» degan so'rovlarda ishlating.",
+        {"jim_kunlar": int},
+        annotations=READ_ONLY,
+    )
+    async def telegram_overview(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _json(await telegram_user.overview(
+                quiet_days=int(args.get("jim_kunlar") or 30)
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_send_file",
+        "Telegramga fayl yuboradi: rasm, video, hujjat. `fayl` — kompyuterdagi "
+        "to'liq yo'l (avval Glob/Bash bilan toping). `dumaloq_video` = ha bo'lsa "
+        "dumaloq video sifatida yuboriladi (kvadrat, 60 soniyagacha mp4 kerak).",
+        {"kimga": str, "fayl": str, "izoh": str, "dumaloq_video": str},
+    )
+    async def telegram_send_file(args: dict[str, Any]) -> dict[str, Any]:
+        target = str(args.get("kimga", "")).strip()
+        path = str(args.get("fayl", "")).strip()
+        if not target or not path:
+            return _fail("`kimga` va `fayl` kerak")
+
+        round_video = str(args.get("dumaloq_video") or "").lower() in ("ha", "yes", "true", "1")
+        try:
+            name = await telegram_user.send_file(
+                target, path, str(args.get("izoh") or ""), video_note=round_video
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Yuborildi: {name}")
+
+    @tool(
+        "telegram_poll",
+        "Guruh yoki kanalga so'rovnoma yuboradi. `variantlar` — javoblar, "
+        "vergul bilan ajratilgan (kamida ikkita).",
+        {"kimga": str, "savol": str, "variantlar": str, "kop_tanlov": str},
+    )
+    async def telegram_poll(args: dict[str, Any]) -> dict[str, Any]:
+        options = [p.strip() for p in str(args.get("variantlar", "")).split(",") if p.strip()]
+        multiple = str(args.get("kop_tanlov") or "").lower() in ("ha", "yes", "true", "1")
+        try:
+            name = await telegram_user.send_poll(
+                str(args.get("kimga", "")), str(args.get("savol", "")), options, multiple
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"So'rovnoma yuborildi: {name}")
+
+    @tool(
+        "telegram_create",
+        "Telegramda guruh yoki kanal yaratadi. `turi`: guruh | kanal. `azolar` — "
+        "qo'shiladigan odamlar, vergul bilan (ixtiyoriy).",
+        {"nom": str, "turi": str, "azolar": str, "tavsif": str},
+    )
+    async def telegram_create(args: dict[str, Any]) -> dict[str, Any]:
+        members = [p.strip() for p in str(args.get("azolar") or "").split(",") if p.strip()]
+        broadcast = str(args.get("turi") or "guruh").strip().lower() in ("kanal", "channel")
+        try:
+            return _ok(await telegram_user.create_group(
+                str(args.get("nom", "")), members,
+                about=str(args.get("tavsif") or ""), broadcast=broadcast,
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_add_members",
+        "Guruh yoki kanalga odam qo'shadi. `kimlar` — vergul bilan ajratilgan "
+        "ismlar yoki @username lar.",
+        {"guruh": str, "kimlar": str},
+    )
+    async def telegram_add_members(args: dict[str, Any]) -> dict[str, Any]:
+        members = [p.strip() for p in str(args.get("kimlar") or "").split(",") if p.strip()]
+        try:
+            return _ok(await telegram_user.add_members(str(args.get("guruh", "")), members))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_leave",
+        "Guruh yoki kanaldan chiqadi. Chiqishdan oldin nomini aniq aytib bering — "
+        "adashib boshqasidan chiqib ketmang.",
+        {"kim": str},
+    )
+    async def telegram_leave(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            name = await telegram_user.leave(str(args.get("kim", "")))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Chiqildi: {name}")
+
+    # --- Papkalar, huquqlar va chatni boshqarish ---
+    #
+    # Bular akkaunt orqali ishlaydigan qismning qolgan yarmi: papka yig'ish,
+    # admin qilish, chiqarib yuborish, qo'shilish. Papkalar bot API'da umuman
+    # yo'q, shuning uchun ularni faqat shu yerda qilish mumkin.
+
+    @tool(
+        "telegram_folders",
+        "Telegram papkalari va ularning ichidagi chatlar ro'yxati.",
+        {},
+        annotations=READ_ONLY,
+    )
+    async def telegram_folders(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.folders()
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Papkalar yo'q")
+
+    @tool(
+        "telegram_folder",
+        "Telegram papkasini yaratadi yoki tarkibini o'zgartiradi. `qoshish` va "
+        "`olish` — vergul bilan ajratilgan kanal/guruh nomlari. Papka bo'lmasa "
+        "o'zi yaratiladi. Masalan: nom='Ish', qoshish='Click Jobs, UzDev Jobs'.",
+        {"nom": str, "qoshish": str, "olish": str},
+    )
+    async def telegram_folder(args: dict[str, Any]) -> dict[str, Any]:
+        add = [p.strip() for p in str(args.get("qoshish") or "").split(",") if p.strip()]
+        drop = [p.strip() for p in str(args.get("olish") or "").split(",") if p.strip()]
+        try:
+            return _ok(await telegram_user.folder_set(
+                str(args.get("nom", "")), add=add, remove=drop,
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_folder_delete",
+        "Telegram papkasini o'chiradi. Chatlarning o'zi joyida qoladi.",
+        {"nom": str},
+    )
+    async def telegram_folder_delete(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.folder_delete(str(args.get("nom", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_members",
+        "Guruh yoki kanal a'zolari ro'yxati.",
+        {"guruh": str, "nechta": int, "qidiruv": str},
+        annotations=READ_ONLY,
+    )
+    async def telegram_members(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.members(
+                str(args.get("guruh", "")), limit=int(args.get("nechta") or 50),
+                query=str(args.get("qidiruv") or ""),
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("A'zolar ko'rinmadi")
+
+    @tool(
+        "telegram_promote",
+        "Odamni guruh yoki kanalda admin qiladi. `unvon` — admin yonida "
+        "ko'rinadigan yozuv. `toliq` true bo'lsa, u boshqalarni ham admin qila oladi.",
+        {"guruh": str, "kim": str, "unvon": str, "toliq": bool},
+    )
+    async def telegram_promote(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.promote(
+                str(args.get("guruh", "")), str(args.get("kim", "")),
+                rank=str(args.get("unvon") or ""), full=bool(args.get("toliq")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_demote",
+        "Adminlikdan oladi. Guruhdan chiqarmaydi.",
+        {"guruh": str, "kim": str},
+    )
+    async def telegram_demote(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.demote(
+                str(args.get("guruh", "")), str(args.get("kim", "")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_kick",
+        "Odamni guruh yoki kanaldan chiqarib yuboradi. `bloklansinmi` true "
+        "bo'lsa, u qaytib kira olmaydi. Kimni chiqarayotganingizni aniq bilib turing.",
+        {"guruh": str, "kim": str, "bloklansinmi": bool},
+    )
+    async def telegram_kick(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.kick(
+                str(args.get("guruh", "")), str(args.get("kim", "")),
+                ban=bool(args.get("bloklansinmi")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_unban",
+        "Bloklangan odamni blokdan chiqaradi.",
+        {"guruh": str, "kim": str},
+    )
+    async def telegram_unban(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.unban(
+                str(args.get("guruh", "")), str(args.get("kim", "")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_join",
+        "Kanal yoki guruhga qo'shiladi. @username yoki t.me havolasi "
+        "(maxfiy taklifnoma ham bo'ladi).",
+        {"qayerga": str},
+    )
+    async def telegram_join(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.join(str(args.get("qayerga", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_link",
+        "Guruh yoki kanalning taklifnoma havolasini beradi. Odam qo'shib "
+        "bo'lmaganda (maxfiylik sozlamasi) shuni yuboring.",
+        {"guruh": str},
+    )
+    async def telegram_link(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.invite_link(str(args.get("guruh", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_rename",
+        "Guruh yoki kanalning nomini yoki tavsifini o'zgartiradi.",
+        {"guruh": str, "nom": str, "tavsif": str},
+    )
+    async def telegram_rename(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.rename(
+                str(args.get("guruh", "")),
+                title=str(args.get("nom") or ""), about=str(args.get("tavsif") or ""),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_pin",
+        "Xabarni qadaydi yoki qadoqdan oladi. `id` — `telegram_read` ko'rsatgan raqam.",
+        {"chat": str, "id": int, "olinsinmi": bool},
+    )
+    async def telegram_pin(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.pin(
+                str(args.get("chat", "")), int(args.get("id") or 0),
+                unpin=bool(args.get("olinsinmi")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_archive",
+        "Chatni arxivga soladi yoki arxivdan oladi.",
+        {"chat": str, "arxivgami": bool},
+    )
+    async def telegram_archive(args: dict[str, Any]) -> dict[str, Any]:
+        wanted = args.get("arxivgami")
+        try:
+            return _ok(await telegram_user.archive(
+                str(args.get("chat", "")), on=True if wanted is None else bool(wanted),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_mute",
+        "Chat bildirishnomalarini o'chiradi yoki qaytaradi.",
+        {"chat": str, "ochirilsinmi": bool},
+    )
+    async def telegram_mute(args: dict[str, Any]) -> dict[str, Any]:
+        wanted = args.get("ochirilsinmi")
+        try:
+            return _ok(await telegram_user.mute(
+                str(args.get("chat", "")), on=True if wanted is None else bool(wanted),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_forward",
+        "Xabarlarni bir chatdan boshqasiga uzatadi. `idlar` — vergul bilan "
+        "ajratilgan raqamlar (`telegram_read` ularni ko'rsatadi).",
+        {"qayerdan": str, "idlar": str, "qayerga": str},
+    )
+    async def telegram_forward(args: dict[str, Any]) -> dict[str, Any]:
+        ids = []
+        for part in str(args.get("idlar") or "").split(","):
+            part = part.strip()
+            if part.isdigit():
+                ids.append(int(part))
+        try:
+            return _ok(await telegram_user.forward(
+                str(args.get("qayerdan", "")), ids, str(args.get("qayerga", "")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_delete_messages",
+        "Xabarlarni o'chiradi — qabul qiluvchida ham yo'qoladi. `idlar` — "
+        "vergul bilan ajratilgan raqamlar.",
+        {"chat": str, "idlar": str},
+    )
+    async def telegram_delete_messages(args: dict[str, Any]) -> dict[str, Any]:
+        ids = []
+        for part in str(args.get("idlar") or "").split(","):
+            part = part.strip()
+            if part.isdigit():
+                ids.append(int(part))
+        try:
+            return _ok(await telegram_user.delete_messages(str(args.get("chat", "")), ids))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_delete_chat",
+        "Chatni o'chiradi. `hammadanmi` true bo'lsa — guruh/kanal BUTUNLAY "
+        "o'chadi va qaytarib bo'lmaydi (faqat yaratuvchi qila oladi).",
+        {"chat": str, "hammadanmi": bool},
+    )
+    async def telegram_delete_chat(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.delete_chat(
+                str(args.get("chat", "")), everyone=bool(args.get("hammadanmi")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_edit",
+        "Telegramda oxirgi yuborilgan xabarni tuzatadi. Foydalanuvchi «unday emas», "
+        "«tahrirla», «o'zgartir» desa shuni ishlating. `matn` — xabarning to'liq "
+        "yangi matni (qo'shimcha emas, o'rniga yoziladi).",
+        {"matn": str},
+    )
+    async def telegram_edit(args: dict[str, Any]) -> dict[str, Any]:
+        text = str(args.get("matn", "")).strip()
+        if not text:
+            return _fail("Yangi matn kerak")
+        try:
+            name = await telegram_user.edit_last(text)
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Tuzatildi: {name}")
+
+    @tool(
+        "telegram_undo",
+        "Telegramda oxirgi yuborilgan xabarni olib tashlaydi — qabul qiluvchida ham "
+        "yo'qoladi. Foydalanuvchi «o'chir», «bekor qil», «yuborma edi» desa shuni "
+        "ishlating.",
+        {},
+    )
+    async def telegram_undo(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            name = await telegram_user.undo_last()
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok(f"Olib tashlandi: {name}")
+
+    @tool(
         "list_shortcuts",
         "Mavjud macOS Shortcuts qisqa yo'llari ro'yxati. Telefonda amal bajarish "
         "uchun avval shu ro'yxatdan mos qisqa yo'lni toping.",
@@ -494,288 +920,16 @@ def _system_tools(agenda: Agenda) -> list[Any]:
 
     return [notify, open_app, open_url, play_youtube, close_youtube, playpause,
             frontmost_app, send_message, send_telegram,
+            telegram_chats, telegram_read, telegram_search, telegram_overview,
+            telegram_send, telegram_send_file, telegram_poll,
+            telegram_create, telegram_add_members, telegram_leave,
+            telegram_edit, telegram_undo,
+            telegram_folders, telegram_folder, telegram_folder_delete,
+            telegram_members, telegram_promote, telegram_demote,
+            telegram_kick, telegram_unban, telegram_join, telegram_link,
+            telegram_rename, telegram_pin, telegram_archive, telegram_mute,
+            telegram_forward, telegram_delete_messages, telegram_delete_chat,
             list_shortcuts, run_shortcut, call_n8n]
-
-
-def _telegram_tools() -> list[Any]:
-    """Telegram — foydalanuvchining o'z hisobi orqali to'liq boshqaruv.
-
-    Bu yerdagi asboblar `channels.send_telegram` (bot) dan tubdan farq qiladi:
-    bot faqat sizga xabar yuboradi, bular esa siz qila oladigan hamma ishni
-    qiladi — kanal ochish, odam qo'shish, admin qilish, papka yig'ish.
-    """
-
-    async def _text(coro: Any) -> dict[str, Any]:
-        """Natijasi bitta gap bo'lgan amallar uchun umumiy xato ushlagich."""
-        try:
-            return _ok(str(await coro))
-        except tg.TelegramError as exc:
-            return _fail(str(exc))
-        except Exception as exc:
-            log.exception("Telegram amali yiqildi")
-            return _fail(f"Telegram xatosi: {exc}")
-
-    async def _data(coro: Any) -> dict[str, Any]:
-        """Natijasi ro'yxat/jadval bo'lgan amallar uchun."""
-        try:
-            payload = await coro
-        except tg.TelegramError as exc:
-            return _fail(str(exc))
-        except Exception as exc:
-            log.exception("Telegram so'rovi yiqildi")
-            return _fail(f"Telegram xatosi: {exc}")
-        if not payload:
-            return _ok("Hech nima topilmadi")
-        return _json(payload)
-
-    # --- o'qish ---
-
-    @tool("tg_me", "Telegram'da qaysi hisob ulanganini aytadi.", {}, annotations=READ_ONLY)
-    async def tg_me(args: dict[str, Any]) -> dict[str, Any]:
-        return await _data(tg.me())
-
-    @tool(
-        "tg_chats",
-        "Telegram suhbatlari ro'yxati. `qidiruv` — nom bo'yicha filtr, "
-        "`turi` — kanal | guruh | shaxs | bot. Kanal nomini aniqlashtirish "
-        "kerak bo'lganda birinchi shu asbobni ishlating.",
-        {"qidiruv": str, "turi": str, "nechta": int},
-        annotations=READ_ONLY,
-    )
-    async def tg_chats(args: dict[str, Any]) -> dict[str, Any]:
-        return await _data(tg.chats(
-            query=str(args.get("qidiruv") or ""),
-            kind=str(args.get("turi") or ""),
-            limit=int(args.get("nechta") or 60),
-        ))
-
-    @tool(
-        "tg_read",
-        "Kanal yoki suhbatdagi oxirgi xabarlarni o'qiydi. Kanallarni ko'rib "
-        "chiqish, e'lonlarni saralash uchun shu ishlatiladi.",
-        {"qayerdan": str, "nechta": int},
-        annotations=READ_ONLY,
-    )
-    async def tg_read(args: dict[str, Any]) -> dict[str, Any]:
-        target = str(args.get("qayerdan", "")).strip()
-        if not target:
-            return _fail("`qayerdan` kerak — kanal nomi yoki @username")
-        return await _data(tg.history(target, limit=int(args.get("nechta") or 20)))
-
-    @tool(
-        "tg_search",
-        "Telegram xabarlari ichidan qidiradi. `qayerda` bo'sh bo'lsa — "
-        "barcha suhbatlardan.",
-        {"soz": str, "qayerda": str, "nechta": int},
-        annotations=READ_ONLY,
-    )
-    async def tg_search(args: dict[str, Any]) -> dict[str, Any]:
-        query = str(args.get("soz", "")).strip()
-        if not query:
-            return _fail("Qidiruv so'zi kerak")
-        return await _data(tg.search(
-            query, target=str(args.get("qayerda") or ""),
-            limit=int(args.get("nechta") or 20),
-        ))
-
-    @tool(
-        "tg_members", "Guruh yoki kanal a'zolari ro'yxati.",
-        {"qayerda": str, "nechta": int, "qidiruv": str}, annotations=READ_ONLY,
-    )
-    async def tg_members(args: dict[str, Any]) -> dict[str, Any]:
-        return await _data(tg.members(
-            str(args.get("qayerda", "")), limit=int(args.get("nechta") or 50),
-            query=str(args.get("qidiruv") or ""),
-        ))
-
-    @tool(
-        "tg_folders", "Telegram papkalari va ularning ichidagi suhbatlar.",
-        {}, annotations=READ_ONLY,
-    )
-    async def tg_folders(args: dict[str, Any]) -> dict[str, Any]:
-        return await _data(tg.folders())
-
-    # --- yozish ---
-
-    @tool(
-        "tg_send",
-        "Telegram orqali SIZNING nomingizdan xabar yuboradi. `kimga` — "
-        "kanal/guruh nomi, @username yoki «men» (saqlangan xabarlar).",
-        {"kimga": str, "matn": str},
-    )
-    async def tg_send(args: dict[str, Any]) -> dict[str, Any]:
-        text = str(args.get("matn", "")).strip()
-        if not text:
-            return _fail("Xabar matni kerak")
-        return await _text(tg.send(str(args.get("kimga") or "men"), text))
-
-    @tool(
-        "tg_forward",
-        "Xabarlarni bir suhbatdan boshqasiga uzatadi. `idlar` — vergul bilan.",
-        {"qayerdan": str, "idlar": str, "qayerga": str},
-    )
-    async def tg_forward(args: dict[str, Any]) -> dict[str, Any]:
-        ids = _int_list_arg(args.get("idlar"))
-        if not ids:
-            return _fail("Xabar id lari kerak — `tg_read` ularni ko'rsatadi")
-        return await _text(tg.forward(
-            str(args.get("qayerdan", "")), ids, str(args.get("qayerga", "")),
-        ))
-
-    @tool(
-        "tg_create",
-        "Yangi kanal yoki guruh ochadi. `kanalmi` true bo'lsa — kanal (faqat "
-        "siz yozasiz), false bo'lsa — guruh. `azolar` — vergul bilan ajratilgan "
-        "ismlar yoki @username lar.",
-        {"nom": str, "tavsif": str, "kanalmi": bool, "azolar": str},
-    )
-    async def tg_create(args: dict[str, Any]) -> dict[str, Any]:
-        title = str(args.get("nom", "")).strip()
-        if not title:
-            return _fail("Nom kerak")
-        return await _data(tg.create_chat(
-            title,
-            about=str(args.get("tavsif") or ""),
-            broadcast=bool(args.get("kanalmi")),
-            members_=_list_arg(args.get("azolar")),
-        ))
-
-    @tool(
-        "tg_invite", "Guruh yoki kanalga odam qo'shadi. `kimlar` — vergul bilan.",
-        {"qayerga": str, "kimlar": str},
-    )
-    async def tg_invite(args: dict[str, Any]) -> dict[str, Any]:
-        users = _list_arg(args.get("kimlar"))
-        if not users:
-            return _fail("Kimni qo'shish kerakligini ayting")
-        return await _text(tg.invite(str(args.get("qayerga", "")), users))
-
-    @tool(
-        "tg_promote",
-        "Odamni admin qiladi. `unvon` — admin yonida ko'rinadigan yozuv. "
-        "`toliq` true bo'lsa, u boshqalarni ham admin qila oladi.",
-        {"qayerda": str, "kim": str, "unvon": str, "toliq": bool},
-    )
-    async def tg_promote(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.promote(
-            str(args.get("qayerda", "")), str(args.get("kim", "")),
-            rank=str(args.get("unvon") or ""), full=bool(args.get("toliq")),
-        ))
-
-    @tool("tg_demote", "Adminlikdan oladi (guruhdan chiqarmaydi).",
-          {"qayerda": str, "kim": str})
-    async def tg_demote(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.demote(str(args.get("qayerda", "")), str(args.get("kim", ""))))
-
-    @tool(
-        "tg_kick",
-        "Odamni guruh yoki kanaldan chiqarib yuboradi. `bloklansinmi` true "
-        "bo'lsa, u qaytib kira olmaydi.",
-        {"qayerdan": str, "kim": str, "bloklansinmi": bool},
-    )
-    async def tg_kick(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.kick(
-            str(args.get("qayerdan", "")), str(args.get("kim", "")),
-            ban=bool(args.get("bloklansinmi")),
-        ))
-
-    @tool("tg_unban", "Bloklangan odamni blokdan chiqaradi.",
-          {"qayerda": str, "kim": str})
-    async def tg_unban(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.unban(str(args.get("qayerda", "")), str(args.get("kim", ""))))
-
-    @tool(
-        "tg_join",
-        "Kanal yoki guruhga qo'shiladi. @username yoki t.me havolasi "
-        "(maxfiy taklifnoma ham bo'ladi).",
-        {"qayerga": str},
-    )
-    async def tg_join(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.join(str(args.get("qayerga", ""))))
-
-    @tool("tg_leave", "Kanal yoki guruhdan chiqadi.", {"qayerdan": str})
-    async def tg_leave(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.leave(str(args.get("qayerdan", ""))))
-
-    @tool("tg_rename", "Kanal/guruh nomini yoki tavsifini o'zgartiradi.",
-          {"qayerda": str, "nom": str, "tavsif": str})
-    async def tg_rename(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.rename(
-            str(args.get("qayerda", "")),
-            title=str(args.get("nom") or ""), about=str(args.get("tavsif") or ""),
-        ))
-
-    @tool("tg_link", "Kanal/guruhning taklifnoma havolasini beradi.", {"qayerda": str})
-    async def tg_link(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.invite_link(str(args.get("qayerda", ""))))
-
-    @tool("tg_pin", "Xabarni qadaydi yoki qadoqdan oladi.",
-          {"qayerda": str, "id": int, "olinsinmi": bool})
-    async def tg_pin(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.pin(
-            str(args.get("qayerda", "")), int(args.get("id") or 0),
-            unpin=bool(args.get("olinsinmi")),
-        ))
-
-    @tool("tg_archive", "Suhbatni arxivga soladi yoki arxivdan oladi.",
-          {"qayerda": str, "arxivgami": bool})
-    async def tg_archive(args: dict[str, Any]) -> dict[str, Any]:
-        on = args.get("arxivgami")
-        return await _text(
-            tg.archive(str(args.get("qayerda", "")), on=True if on is None else bool(on))
-        )
-
-    @tool("tg_mute", "Suhbat bildirishnomalarini o'chiradi yoki qaytaradi.",
-          {"qayerda": str, "ochirilsinmi": bool})
-    async def tg_mute(args: dict[str, Any]) -> dict[str, Any]:
-        on = args.get("ochirilsinmi")
-        return await _text(
-            tg.mute(str(args.get("qayerda", "")), on=True if on is None else bool(on))
-        )
-
-    @tool(
-        "tg_folder",
-        "Telegram papkasini yaratadi yoki tarkibini o'zgartiradi. `qoshish` va "
-        "`olish` — vergul bilan ajratilgan kanal/guruh nomlari. Papka bo'lmasa "
-        "yaratiladi. Masalan: nom='Ish', qoshish='Click Jobs, UzDev Jobs'.",
-        {"nom": str, "qoshish": str, "olish": str},
-    )
-    async def tg_folder(args: dict[str, Any]) -> dict[str, Any]:
-        name = str(args.get("nom", "")).strip()
-        if not name:
-            return _fail("Papka nomi kerak")
-        return await _text(tg.folder_set(
-            name, add=_list_arg(args.get("qoshish")), remove=_list_arg(args.get("olish")),
-        ))
-
-    @tool("tg_folder_delete", "Papkani o'chiradi. Suhbatlar joyida qoladi.", {"nom": str})
-    async def tg_folder_delete(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.folder_delete(str(args.get("nom", ""))))
-
-    @tool("tg_delete_messages", "Xabarlarni o'chiradi. `idlar` — vergul bilan.",
-          {"qayerda": str, "idlar": str})
-    async def tg_delete_messages(args: dict[str, Any]) -> dict[str, Any]:
-        ids = _int_list_arg(args.get("idlar"))
-        if not ids:
-            return _fail("Xabar id lari kerak")
-        return await _text(tg.delete_messages(str(args.get("qayerda", "")), ids))
-
-    @tool(
-        "tg_delete_chat",
-        "Suhbatni o'chiradi. `hammadanmi` true bo'lsa — kanal/guruh BUTUNLAY "
-        "o'chadi va qaytarib bo'lmaydi (faqat yaratuvchi qila oladi).",
-        {"qayerda": str, "hammadanmi": bool},
-    )
-    async def tg_delete_chat(args: dict[str, Any]) -> dict[str, Any]:
-        return await _text(tg.delete_chat(
-            str(args.get("qayerda", "")), everyone=bool(args.get("hammadanmi")),
-        ))
-
-    return [tg_me, tg_chats, tg_read, tg_search, tg_members, tg_folders,
-            tg_send, tg_forward, tg_create, tg_invite, tg_promote, tg_demote,
-            tg_kick, tg_unban, tg_join, tg_leave, tg_rename, tg_link, tg_pin,
-            tg_archive, tg_mute, tg_folder, tg_folder_delete,
-            tg_delete_messages, tg_delete_chat]
 
 
 def _self_tools(bus: EventBus, memory: Memory) -> list[Any]:
@@ -862,9 +1016,7 @@ def _self_tools(bus: EventBus, memory: Memory) -> list[Any]:
         if issue:
             selfwork.close_issue(issue)
         if result:
-            memory.remember(
-                f"ozgarish_{selfwork.stamp()}", result[:400], "o'zgarishlar"
-            )
+            memory.remember(f"ozgarish_{selfwork.stamp()}", result[:400], "o'zgarishlar")
         return _ok("Tugadi")
 
     @tool(
@@ -906,7 +1058,6 @@ def build_server(
         *_agenda_tools(agenda, announce),
         *_contact_tools(agenda),
         *_system_tools(agenda),
-        *_telegram_tools(),
         *_self_tools(bus, memory),
     ]
     return create_sdk_mcp_server(name=SERVER_NAME, version="0.3.0", tools=tools)

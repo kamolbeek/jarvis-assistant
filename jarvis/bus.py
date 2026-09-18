@@ -49,6 +49,10 @@ class EventBus:
     _subscribers: list[Subscriber] = field(default_factory=list)
     _pending: dict[str, PendingConfirm] = field(default_factory=dict)
     state: State = State.IDLE
+    # Sukut holati holatlar qatoriga kirmaydi (yadro baribir IDLE da
+    # tinglaydi), lekin yangi ulangan mijoz uni bilishi kerak — aks holda
+    # orb yashiringan bo'lsa ham qaytadan chiqib qolardi.
+    standby_on: bool = False
     # Bo'sh bo'lmasa — Jarvis uzoq, o'zi boshqaradigan ish bilan band
     # (masalan o'z kodini o'zgartiryapti). Orbda yozuv bo'lib turadi.
     working: str = ""
@@ -116,6 +120,17 @@ class EventBus:
         """
         log.info("HUD: %s", action)
         await self.emit({"type": "hud", "action": action})
+
+    async def standby(self, on: bool) -> None:
+        """Sukut holati yoqildi/o'chirildi.
+
+        Bu holat emas, ustidagi qatlam: yadro baribir IDLE da tinglab
+        turadi, faqat ko'rinish so'nadi. Shuning uchun `State` ga yangi
+        qiymat qo'shilmaydi — eski UI'lar buni e'tiborsiz qoldiradi va
+        hech narsa buzilmaydi.
+        """
+        self.standby_on = bool(on)
+        await self.emit({"type": "standby", "on": self.standby_on})
 
     # --- Tasdiq oqimi ---
 

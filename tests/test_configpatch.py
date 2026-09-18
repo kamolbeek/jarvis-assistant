@@ -10,6 +10,10 @@ natija diskka tushmasligi kerak.
 
 from __future__ import annotations
 
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -156,3 +160,145 @@ def test_trust_rejects_a_bad_mode(tmp_path, monkeypatch):
     monkeypatch.setattr("jarvis.config.CONFIG_PATH", tmp_path / "jarvis.yaml")
 
     assert trust.apply("maybe") == 2
+
+
+def test_nested_block_is_found_by_path():
+    """«activation.wake_word» — ichma-ich yozilgan bo'lim ham topiladi."""
+    out = set_in_block(SAMPLE, "activation.wake_word", {"threshold": 0.42})
+    assert yaml.safe_load(out)["activation"]["wake_word"]["threshold"] == 0.42
+
+
+def test_missing_block_is_created_when_asked():
+    """Qisqartirilgan sozlamada bo'lim bo'lmasligi mumkin — yaratiladi.
+
+    Aynan shu holat foydalanuvchida bo'ldi: `jarvis wake-set` faqat
+    `audio:` va `voice:` yozilgan faylda «bloki topilmadi» deb yiqilardi.
+    """
+    text = 'audio:\n  input_device: "Mikrofon"\n\nvoice:\n  tts:\n    provider: "macos"\n'
+    out = set_in_block(text, "activation.wake_word",
+                       {"threshold": 0.3, "candidate_threshold": 0.08}, create=True)
+    data = yaml.safe_load(out)
+    assert data["activation"]["wake_word"] == {"threshold": 0.3, "candidate_threshold": 0.08}
+    # Boshqa bo'limlar tegilmagan
+    assert data["audio"]["input_device"] == "Mikrofon"
+    assert data["voice"]["tts"]["provider"] == "macos"
+
+
+def test_existing_parent_gets_the_new_child_block():
+    """`activation:` bor, `wake_word:` yo'q — bola blok o'sha yerga qo'shiladi."""
+    text = "activation:\n  clap:\n    enabled: true\n\naudio:\n  input_gain: 1.0\n"
+    out = set_in_block(text, "activation.wake_word", {"threshold": 0.3}, create=True)
+    data = yaml.safe_load(out)
+    assert data["activation"]["wake_word"]["threshold"] == 0.3
+    assert data["activation"]["clap"]["enabled"] is True
+    assert data["audio"]["input_gain"] == 1.0
+
+
+# --- `jarvis stt` almashtirishi -----------------------------------------------
+
+
+def test_stt_provider_is_switched_without_touching_anything_else():
+    """Provayderni almashtirish qolgan sozlamalarni va izohlarni buzmasin."""
+    from jarvis.configpatch import patch_file
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "jarvis.yaml"
+        shutil.copy(Path("config/jarvis.example.yaml"), path)
+
+        patch_file(path, "voice.stt", {"provider": "whisper_local"}, create=True)
+
+        text = path.read_text(encoding="utf-8")
+        data = yaml.safe_load(text)
+        assert data["voice"]["stt"]["provider"] == "whisper_local"
+        assert data["voice"]["tts"]["provider"] == "elevenlabs", "TTS tegilmasin"
+        assert data["identity"]["name"] == "Jarvis"
+        assert "rubai" in text, "izohlar joyida qolsin"
+
+
+def test_stt_aliases_point_at_real_providers():
+    """«rubai» kabi odam aytadigan nomlar haqiqiy provayderga olib borsin."""
+    from jarvis.sttswitch import ALIASES, PROVIDERS
+
+    for alias, target in ALIASES.items():
+        assert target in PROVIDERS, f"{alias} -> {target} mavjud emas"
+
+
+# --- Sozlama fayli yo'qligi to'siq bo'lmasin -----------------------------------
+
+
+def test_missing_config_is_created_from_the_example(monkeypatch):
+    """`trust on` / `tts azure` fayl yo'qligida jimgina yiqilmasin.
+
+    Amalda shunday bo'lgan: buyruq berilgan, ekranda bir qator xato chiqib
+    yo'qolgan, foydalanuvchi esa sozlama o'zgardi deb o'ylagan.
+    """
+    from jarvis import config as config_module
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "config" / "jarvis.yaml"
+        monkeypatch.setattr(config_module, "CONFIG_PATH", target)
+
+        created = config_module.ensure_config()
+
+        assert created == target
+        assert target.exists()
+        data = yaml.safe_load(target.read_text(encoding="utf-8"))
+        assert data["identity"]["name"] == "Jarvis"
+
+
+def test_existing_config_is_left_alone(monkeypatch):
+    from jarvis import config as config_module
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "jarvis.yaml"
+        target.write_text("identity:\n  name: \"Meniki\"\n", encoding="utf-8")
+        monkeypatch.setattr(config_module, "CONFIG_PATH", target)
+
+        config_module.ensure_config()
+
+        assert "Meniki" in target.read_text(encoding="utf-8"), "mavjud sozlama o'chmasin"
+
+
+# --- `trust on` qisqa sozlama faylida ham ishlasin ----------------------------
+
+
+def test_trust_can_be_enabled_on_a_minimal_config():
+    """Foydalanuvchi faylida `safety:` bo'limi bo'lmasligi mumkin.
+
+    Ilgari bu «`safety:` bloki topilmadi» xatosi bilan tugardi — ya'ni
+    ishonch rejimini umuman yoqib bo'lmasdi va Jarvis har safar tasdiq
+    so'rayverardi.
+    """
+    from jarvis.configpatch import patch_file
+    from jarvis.trust import GATED_TOOLS
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "jarvis.yaml"
+        path.write_text(
+            'identity:\n  name: "Jarvis"\n\nvoice:\n  tts:\n    provider: "azure"\n',
+            encoding="utf-8",
+        )
+
+        patch_file(path, "safety", {"default": "allow"}, create=True)
+        patch_file(path, "safety.rules", dict.fromkeys(GATED_TOOLS, "allow"), create=True)
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert data["safety"]["default"] == "allow"
+        assert data["safety"]["rules"]["Bash"] == "allow"
+        assert data["voice"]["tts"]["provider"] == "azure", "boshqa bo'limlar tegilmasin"
+
+
+def test_trust_rules_land_inside_safety():
+    """Qoidalar ildizga emas, `safety:` ichiga tushishi kerak."""
+    from jarvis.configpatch import patch_file
+    from jarvis.trust import GATED_TOOLS
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "jarvis.yaml"
+        shutil.copy(Path("config/jarvis.example.yaml"), path)
+
+        patch_file(path, "safety.rules", dict.fromkeys(GATED_TOOLS, "allow"), create=True)
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert data["safety"]["rules"]["Write"] == "allow"
+        assert "rules" not in data, "ildizda ikkinchi `rules:` paydo bo'lmasin"

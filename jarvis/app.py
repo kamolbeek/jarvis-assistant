@@ -16,6 +16,7 @@ import logging
 import random
 import signal
 import sys
+import time
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
@@ -43,14 +44,16 @@ from .bus import EventBus, State
 from .config import Config, load_config
 from .doctor import hint_for
 from .health import Health, Status, System
+from .idle import StandbyWatch
 from .safety.gate import SafetyGate
 from .scheduler import Announcement, Scheduler
-from .tools import telegram as tg
+from .tools import telegram_user
 from .ui.server import UiServer, base64_to_pcm
 from .voice.consent import consent_prompt, parse_consent
 from .voice.intents import is_end_of_conversation, is_stop_speaking
 from .voice.stt import build_stt, transcribe_guarded
 from .voice.tts import Speaker, build_tts
+from .voice.unfinished import looks_unfinished
 
 log = logging.getLogger("jarvis")
 
@@ -121,7 +124,12 @@ class Jarvis:
             device=config.get("audio.input_device"),
             preroll_ms=int(config.get("audio.endpointing.preroll_ms", 300)),
             gain=float(config.get("audio.input_gain", 1.0)),
-            recent_ms=int(config.get("activation.wake_word.verify_window_ms", 2000)) + 500,
+            # Bufer ikki ishni qoplashi kerak: chaqiruvni matn bilan
+            # tekshirish va gap bo'lingandagi orqaga qarash.
+            recent_ms=max(
+                int(config.get("activation.wake_word.verify_window_ms", 2000)) + 500,
+                int(config.section("conversation").get("interrupt_lookback_ms", 1200)) + 500,
+            ),
         )
 
         wake_cfg = config.section("activation.wake_word")
@@ -158,7 +166,11 @@ class Jarvis:
         # Tinglayotganda tizim ovozini pasaytirish — musiqa ustidan
         # eshitilishi uchun.
         self._duck_enabled = bool(config.get("audio.duck_while_listening", True))
-        self._duck_level = int(config.get("audio.duck_volume", 20))
+        # Standart 0 — ya'ni tinglash paytida musiqa butunlay jim bo'ladi.
+        # Pasaytirish yetarli emas edi: mikrofon baribir musiqani eshitadi va
+        # u sizning gapingiz bilan aralashib, matnga aylantirishni buzadi.
+        self._duck_level = int(config.get("audio.duck_volume", 0))
+        self._duck_depth = 0
 
         # Ovozli tasdiq: tugma bosish shart emas, «ha» / «yo'q» deyish yetadi.
         vc = config.section("safety.voice_confirm")
@@ -167,11 +179,29 @@ class Jarvis:
         self._vc_attempts = int(vc.get("attempts", 2))
         self._confirm_task: asyncio.Task[None] | None = None
 
+        # Dinamikka navbat. Tasdiq savoli alohida vazifada boshlanadi va
+        # javob hali aytilib turgan paytga to'g'ri kelishi mumkin. Qulfsiz
+        # ikkita ovoz oqimi bir vaqtda ochilib, ikki ovoz bir-birining
+        # ustidan gapiradi — eshitib bo'lmaydigan aralashma chiqadi.
+        self._speech_lock = asyncio.Lock()
+
+        # Gap bo'lingandan keyin qancha orqaga qarab audio olinadi.
+        self._interrupt_lookback_ms = int(self._talk.get("interrupt_lookback_ms", 1200))
+
+        # Gap tugamagan bo'lsa, davomini shuncha kutamiz (necha marta).
+        self._continue_wait_sec = float(self._talk.get("continue_wait_sec", 2.0))
+        self._continue_tries = int(self._talk.get("continue_tries", 2))
+
+        # Uzoq jimlikdan keyin sahna yopiladi, orb xiralashadi. Chaqiruv
+        # ishlashda davom etadi — bu "o'chish" emas, "o'zini bosish".
+        self._standby = StandbyWatch(float(self._talk.get("standby_after_sec", 300)))
+
         self._activate = asyncio.Event()
         self._shutdown = asyncio.Event()
         self._greeted = False
         self._interrupted = False
         self._heartbeat: asyncio.Task[None] | None = None
+        self._watchdog: asyncio.Task[None] | None = None
 
     # --- Hayot sikli ---
 
@@ -180,6 +210,7 @@ class Jarvis:
 
         self.ui.on("activate", self._on_activate)
         self.ui.on("stop", self._on_stop)
+        self.ui.on("standby", self._on_standby)
         self.ui.on("text", self._on_text_input)
         self.ui.on("audio", self._on_phone_audio)
 
@@ -191,10 +222,35 @@ class Jarvis:
         await self.brain.start()
         await self.scheduler.start()
         await self.mic.start()
-        await self._check_mic_delivers_audio()
+        mic_ok = await self._check_mic_delivers_audio()
         await self._mark_ready()
         self._heartbeat = asyncio.create_task(self.health.heartbeat())
+        self._watchdog = asyncio.create_task(self._mic_watchdog())
+        self._standby.touch(time.monotonic())
         await self.bus.set_state(State.IDLE)
+
+        # Kompyuter yoqilganda ekranda hech narsa turmasin: Jarvis jimgina
+        # tinglab turadi, chaqirilganda paydo bo'ladi. Taymer o'chirilgan
+        # bo'lsa (standby_after_sec: 0), demak orb doim ko'rinishi kerak.
+        #
+        # Lekin mikrofon ishlamayotgan bo'lsa — yashirinmaymiz. Aks holda
+        # eng yomon holat chiqadi: ekranda hech narsa yo'q, chaqiruvga javob
+        # yo'q va sababni ko'rsatadigan joy ham yo'q. Shunday paytda orb
+        # ekranda qolib, qizil siferblat bilan nima buzilganini aytadi.
+        if self._standby.enabled and mic_ok:
+            await self._enter_standby("ishga tushdi")
+        elif not mic_ok:
+            log.warning("Mikrofon ishlamayapti — orb ekranda qoldirildi "
+                        "(sabab ko'rinib tursin)")
+
+        # Tasdiq so'ralishi/so'ralmasligi jurnalda ko'rinib tursin. Bu
+        # sozlama sukut bilan ishlaydi, ya'ni «nega yana so'rayapti?» degan
+        # savolga javobni faqat shu qator beradi.
+        policy = str(self.config.get("safety.default", "ask")).lower()
+        log.info("Ishonch rejimi: %s",
+                 "yoqilgan — tasdiq so'ralmaydi" if policy == "allow"
+                 else "o'chirilgan — xavfli amallar tasdiq so'raydi "
+                      "(yoqish: python -m jarvis trust on)")
 
         stats = self.memory.stats()
         log.info(
@@ -209,8 +265,8 @@ class Jarvis:
 
         await self.bus.log_line("Jarvis tayyor. «Hey Jarvis» deb chaqiring.")
 
-    async def _check_mic_delivers_audio(self, seconds: float = 1.0) -> None:
-        """Mikrofon ochildi — lekin ovoz kelyaptimi?
+    async def _check_mic_delivers_audio(self, seconds: float = 1.0) -> bool:
+        """Mikrofon ochildi — lekin ovoz kelyaptimi? Ovoz kelsa True.
 
         macOS mikrofon ruxsatini ishga tushiruvchi dastur bo'yicha beradi.
         Terminaldan ishga tushirilganda javobgar Terminal bo'ladi va ruxsat
@@ -238,7 +294,7 @@ class Jarvis:
             pass
 
         if loudest > 0:
-            return
+            return True
 
         reason = "macOS mikrofonni bloklayapti (faqat nol keladi)"
         log.error(
@@ -252,6 +308,7 @@ class Jarvis:
         )
         await self.health.mark(System.MIC, Status.DOWN, reason)
         await self.bus.log_line(f"Mikrofon: {reason}", level="error")
+        return False
 
     async def _mark_ready(self) -> None:
         """Ishga tushgach har bir bo'g'inning boshlang'ich holatini belgilaydi.
@@ -308,6 +365,8 @@ class Jarvis:
             self._confirm_task.cancel()
         if self._heartbeat is not None:
             self._heartbeat.cancel()
+        if self._watchdog is not None:
+            self._watchdog.cancel()
         await self.scheduler.stop()
         await self.mic.stop()
         await self.brain.stop()
@@ -316,7 +375,7 @@ class Jarvis:
         await self.tts.aclose()
         # Telegram ulanishi ochiq qolsa, qayta ishga tushganda hisob
         # «ikkita joydan ulangan» bo'lib ko'rinadi va seans chalkashadi.
-        await tg.close()
+        await telegram_user.close()
         if self._wake is not None:
             self._wake.close()
         self.agenda.close()
@@ -333,6 +392,17 @@ class Jarvis:
         """Foydalanuvchi to'xtatdi."""
         self.speaker.stop()
         await self.brain.interrupt()
+        await self.bus.set_state(State.IDLE)
+
+    async def _on_standby(self, message: dict[str, Any]) -> None:
+        """Oyna tugma bilan yopildi (Esc / ⌘W / ⌘⇧J).
+
+        Ovozdagi «bekor qil» bilan bir xil ma'no: sahna yopiladi, orb
+        xiralashadi, lekin tinglash to'xtamaydi — «Hey Jarvis» hammasini
+        qaytaradi.
+        """
+        self.speaker.stop()
+        await self._enter_standby("tugma bilan yopildi")
         await self.bus.set_state(State.IDLE)
 
     async def _on_text_input(self, message: dict[str, Any]) -> None:
@@ -398,6 +468,11 @@ class Jarvis:
             # deb ko'rsatmaslik uchun faqat ovoz bo'lganda chaqnaydi.
             if frame_count % 10 == 0 and frame_level(frame) > 0.04:
                 await self.health.ping(System.MIC)
+
+            # Muloqotsiz uzoq vaqt o'tgan bo'lsa, sahnani yopamiz. Sekundiga
+            # bir marta tekshiramiz — bu kadr sikliga sezilarli yuk bermaydi.
+            if frame_count % 50 == 0 and self.bus.state is State.IDLE:
+                await self._maybe_standby()
 
             # Rejalashtiruvchidan kelgan eslatmalar — faqat bo'sh vaqtda,
             # foydalanuvchining gapini bo'lmasdan.
@@ -546,8 +621,58 @@ class Jarvis:
 
         await self.bus.set_state(State.IDLE)
 
+    # Shuncha vaqt kadr kelmasa, mikrofon o'lgan deb hisoblaymiz.
+    MIC_STALL_SEC = 6.0
+
+    async def _mic_watchdog(self) -> None:
+        """Mikrofon oqimi o'lib qolsa, uni qaytadan ochadi.
+
+        macOS audio qurilmani almashtirsa (quloqchin ulandi, boshqa ilova
+        chiqishni o'zgartirdi), PortAudio oqimi jimgina to'xtaydi: na xato,
+        na kadr keladi. Tashqaridan bu «Jarvis to'satdan kar bo'lib qoldi»
+        bo'lib ko'rinadi — chaqiruv ham, tugma ham ishlamaydi. Buni
+        foydalanuvchi emas, dastur o'zi sezishi kerak.
+        """
+        while not self._shutdown.is_set():
+            await asyncio.sleep(2.0)
+            if self.speaker.speaking or self.mic.silent_for < self.MIC_STALL_SEC:
+                continue
+
+            await self.health.mark(System.MIC, Status.DOWN, "kadr kelmayapti")
+            if await self.mic.restart():
+                await self.health.mark(System.MIC, Status.READY, quiet=True)
+                await self.bus.log_line("Mikrofon qayta ochildi", level="warn")
+            else:
+                await self.bus.log_line(
+                    "Mikrofon ochilmadi — Jarvisni qayta ishga tushiring", level="error"
+                )
+                # Qayta-qayta urinib jurnalni to'ldirmaymiz.
+                await asyncio.sleep(20.0)
+
+    async def _maybe_standby(self) -> None:
+        """Vaqti kelgan bo'lsa, sukut holatiga o'tadi."""
+        if self._standby.due(time.monotonic()):
+            await self._enter_standby(
+                f"{self._standby.after_sec / 60:.0f} daqiqa muloqot bo'lmadi"
+            )
+
+    async def _enter_standby(self, reason: str) -> None:
+        """Sahnani yopib, orbni xiralashtiradi. Tinglash davom etadi."""
+        if not self._standby.force(time.monotonic()):
+            return
+        log.info("Sukut holati: %s", reason)
+        await self.bus.hud("hide")
+        await self.bus.standby(True)
+
+    async def _wake_from_standby(self) -> None:
+        """Har qanday muloqot — sukutdan chiqish uchun sabab."""
+        if self._standby.touch(time.monotonic()):
+            log.info("Sukut holatidan qaytdi")
+            await self.bus.standby(False)
+
     async def _session(self, source: str = "so'z") -> None:
         """Uyg'onish: signal, salomlashish, so'ng suhbat."""
+        await self._wake_from_standby()
         await self.bus.set_state(State.WAKE)
         # To'liq ekranli sahnani aniq buyruq bilan ochamiz — chaqiruv qanday
         # kelganidan qat'i nazar (so'z, qarsak yoki tugma).
@@ -563,11 +688,21 @@ class Jarvis:
                 )
             )
         else:
-            # Qarsak bilan chaqirilganda kinodagidek rasmiyroq javob beramiz.
-            pool = CLAP_GREETINGS if source == "qarsak" else GREETINGS
-            await self._speak(random.choice(pool))
+            await self._speak(random.choice(self._greetings(source)))
 
         await self._converse()
+
+    def _greetings(self, source: str) -> list[str]:
+        """Chaqirilganda aytiladigan javoblar.
+
+        Sozlamadagi ro'yxat ustun turadi — bu eng ko'p eshitiladigan jumla,
+        shuning uchun uni o'zgartirish uchun kodga tegish kerak emas.
+        """
+        custom = self._talk.get("greetings")
+        if isinstance(custom, list) and custom:
+            return [str(item) for item in custom]
+        # Qarsak bilan chaqirilganda kinodagidek biroz boshqacha javob.
+        return list(CLAP_GREETINGS if source == "qarsak" else GREETINGS)
 
     async def _converse(self) -> None:
         """Tinglash -> javob -> yana tinglash.
@@ -623,8 +758,11 @@ class Jarvis:
         # Sahna faqat aniq yakunlanganda yopiladi. Jimlik bilan tugagan
         # suhbatdan keyin oyna ochiq qoladi — foydalanuvchi davom ettirishi
         # mumkin va u har safar qaytadan ochilib-yopilib turmasligi kerak.
+        #
+        # «Bekor qil» esa aniq buyruq: taymer tugashini kutmasdan darhol
+        # sukutga o'tamiz. Chaqiruv baribir eshitilaveradi.
         if closed:
-            await self.bus.hud("hide")
+            await self._enter_standby("bekor qilindi")
         await self.bus.set_state(State.IDLE)
 
     def _patience(self, turn: int) -> float:
@@ -658,26 +796,62 @@ class Jarvis:
 
         from .tools import macos
 
+        # Ichma-ich chaqirilishi mumkin (suhbat ichida yana tinglash).
+        # Hisobsiz ikkinchi chaqiruv "eski daraja" sifatida allaqachon
+        # pasaytirilgan qiymatni saqlab qo'yardi va musiqa jim bo'lib
+        # qolardi.
+        self._duck_depth += 1
+        if self._duck_depth > 1:
+            try:
+                yield
+            finally:
+                self._duck_depth -= 1
+            return
+
+        # `previous` faqat haqiqatan pasaytirgan bo'lsak saqlanadi: ovoz
+        # allaqachon past bo'lsa, uni qaytarish uchun `osascript` chaqirish
+        # ham keraksiz — har bir navbatda ~100 ms bekorga ketardi.
         previous: int | None = None
         try:
-            previous = await macos.get_volume()
-            if previous > self._duck_level:
+            current = await macos.get_volume()
+            if current > self._duck_level:
                 await macos.set_volume(self._duck_level)
+                previous = current
         except macos.MacOsError:
             log.debug("Ovoz balandligi boshqarilmadi", exc_info=True)
-            previous = None
 
         try:
             yield
         finally:
+            self._duck_depth -= 1
             if previous is not None:
                 with suppress(Exception):
                     await macos.set_volume(previous)
 
     async def _capture_utterance(self, patience_sec: float = 6.0) -> str:
-        """Foydalanuvchini tinglaydi va aytganini matnga aylantiradi."""
+        """Foydalanuvchini tinglaydi va aytganini matnga aylantiradi.
+
+        Jimlik taymeri qisqa — javob tez boshlanishi uchun. Lekin gap
+        tugamagan bo'lsa («...va», «...keyin», «aaa»), yana tinglaymiz va
+        aytilganini birinchisiga qo'shamiz. Shunday qilib odam o'ylanib
+        turgani gapni bo'lib yubormaydi, nuqta qo'yilgan gap esa darhol
+        javob oladi.
+        """
         async with self._ducked():
-            return await self._listen(patience_sec)
+            text = await self._listen(patience_sec)
+            if not text:
+                return ""
+
+            for _ in range(self._continue_tries):
+                if not looks_unfinished(text):
+                    break
+                log.info("Gap tugamaganga o'xshaydi, davomini kutamiz: «%s»", text)
+                more = await self._listen(self._continue_wait_sec)
+                if not more:
+                    break
+                text = f"{text} {more}".strip()
+
+            return text
 
     async def _listen(self, patience_sec: float) -> str:
         await self.bus.set_state(State.LISTENING)
@@ -686,12 +860,25 @@ class Jarvis:
         endpointer = Endpointer(
             detector=build_speech_detector(endpoint_cfg, self.config.sample_rate),
             frame_ms=int(self.config.get("audio.frame_ms", 20)),
-            silence_ms=int(endpoint_cfg.get("silence_ms", 900)),
+            silence_ms=int(endpoint_cfg.get("silence_ms", 1000)),
             max_utterance_sec=float(endpoint_cfg.get("max_utterance_sec", 30)),
         )
-        # Gapni bo'lgan bo'lsa, aytilgan birinchi so'zlar shu buferda —
-        # ular yo'qolmasligi kerak.
-        endpointer.prime(self.mic.take_preroll())
+        if self._interrupted:
+            # Gapni bo'lish qarori ~350 ms nutqdan keyin qabul qilinadi, va
+            # undan keyin ham ijroni to'xtatish, ovozni pasaytirish uchun
+            # vaqt ketadi. 300 ms lik preroll bunga yetmaydi: «to'xta,
+            # Instagramga kirib...» degan gapning boshi yo'qolib, Jarvis
+            # o'rtasidan eshitardi. Shuning uchun uzunroq oyna olamiz.
+            #
+            # `drain` shart: o'sha audio navbatda ham turibdi va tozalamasak
+            # ikki marta tushib, so'zlar takrorlanib ketardi.
+            endpointer.prime(self.mic.recent(self._interrupt_lookback_ms))
+            self.mic.take_preroll()
+            self.mic.drain()
+        else:
+            # Uyg'otuvchi so'zdan oldingi audio — «Hey Jarvis, ob-havo
+            # qanday?» bir nafasda aytilsa, savol qismi yo'qolmasin.
+            endpointer.prime(self.mic.take_preroll())
         self._interrupted = False
 
         # Foydalanuvchi umuman gapirmasa, cheksiz kutib qolmaymiz.
@@ -730,6 +917,9 @@ class Jarvis:
         `remote` berilgan bo'lsa, javob o'sha mijozga (telefonga) yuboriladi,
         kompyuter dinamigidan chiqmaydi.
         """
+        # Telefondan yoki matn orqali kelgan murojaat ham muloqot — sukut
+        # taymeri shundan ham qaytadan boshlanadi.
+        await self._wake_from_standby()
         await self.bus.set_state(State.THINKING)
         spoke_anything = False
         answer = self.brain.ask(text)
@@ -786,13 +976,24 @@ class Jarvis:
         if not text:
             return
 
+        if remote is not None:
+            await self.bus.set_state(State.SPEAKING)
+            await self.bus.say(text)
+            log.info("Jarvis: %s", text)
+            await self._speak_remote(text, remote)
+            return
+
+        # Navbat kutish shu yerda. Holat va matn ham qulf ichida yuboriladi —
+        # aks holda ekranda keyingi jumla oldinroq chiqib, aytilayotgan gapga
+        # mos kelmay qolardi.
+        async with self._speech_lock:
+            await self._speak_now(text)
+
+    async def _speak_now(self, text: str) -> None:
+        """Dinamikdan chiqarish — faqat `_speak` chaqiradi, navbat ichida."""
         await self.bus.set_state(State.SPEAKING)
         await self.bus.say(text)
         log.info("Jarvis: %s", text)
-
-        if remote is not None:
-            await self._speak_remote(text, remote)
-            return
 
         def on_level(value: float) -> None:
             # `Speaker` buni event loop oqimidan chaqiradi, shuning uchun bu yerda
@@ -851,13 +1052,14 @@ class Jarvis:
             await self.ui.send_audio(client, audio, self.tts.sample_rate)
 
     async def _play_chime(self) -> None:
-        """Uyg'onish signalini chaladi."""
+        """Uyg'onish signalini chaladi — u ham dinamik navbatida."""
 
         async def one_chunk():
             yield chime(self.tts.sample_rate)
 
         try:
-            await self.speaker.play(one_chunk(), self.tts.sample_rate)
+            async with self._speech_lock:
+                await self.speaker.play(one_chunk(), self.tts.sample_rate)
         except Exception:
             log.debug("Signal chalinmadi", exc_info=True)
 

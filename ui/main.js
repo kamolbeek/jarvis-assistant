@@ -100,6 +100,11 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Orb sukut holatida yashiriladi, lekin uning JS'i ishlashda davom
+      // etishi SHART: aynan o'sha yadro bilan WebSocket'ni ushlab turadi va
+      // chaqiruvni eshitib, orbni qaytaradi. Electron ko'rinmaydigan
+      // oynaning taymerlarini bo'g'adi — buni o'chiramiz.
+      backgroundThrottling: false,
     },
   });
 
@@ -178,25 +183,59 @@ function createDesktopWindow() {
     },
   });
 
-  deskWin.loadFile(path.join(__dirname, "renderer", "desktop.html"));
+  const page = path.join(__dirname, "renderer", "desktop.html");
+  deskWin.loadFile(page);
   deskWin.on("closed", () => { deskWin = null; });
+
+  // Sahifadagi xato terminalda ko'rinsin. Aks holda HUD "yarim ishlagan"
+  // holatda qoladi va sababini faqat DevTools bilan topsa bo'ladi.
+  console.log(`Ish stoli sahifasi: ${page}`);
+  deskWin.webContents.on("console-message", (...args) => {
+    // Electron 33 da imzo (event, level, message, line, source),
+    // yangiroq versiyalarda (event, details) — ikkalasini ham qo'llaymiz.
+    const d = args[1] && typeof args[1] === "object" ? args[1] : null;
+    const level = d ? d.level : args[1];
+    const message = d ? d.message : args[2];
+    if (level === 3 || level === "error" || level === "warning") {
+      console.warn(`[HUD] ${message}`);
+    }
+  });
+  deskWin.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error(`[HUD] sahifa yuklanmadi (${code}): ${desc} — ${url}`);
+  });
+  deskWin.webContents.on("render-process-gone", (_e, details) => {
+    console.error(`[HUD] renderer to'xtadi: ${details.reason}`);
+  });
+
+  if (process.argv.includes("--dev")) {
+    deskWin.webContents.openDevTools({ mode: "detach" });
+  }
 
   if (DESK_AMBIENT) {
     deskWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     deskWin.showInactive();
   } else {
     // Fokus boshqa ilovaga o'tsa — yashiramiz. Bu eng ishonchli chiqish yo'li:
-    // foydalanuvchi Cmd+Tab bosса yoki boshqa oynaga bossa, HUD yo'qoladi.
-    deskWin.on("blur", hideDesktop);
+    // foydalanuvchi Cmd+Tab bossa yoki boshqa oynaga bossa, HUD yo'qoladi.
+    //
+    // Lekin ochilish paytidagi blur'ni sanamaymiz. macOS'da Dock ikonkasi
+    // yashirin ilova (accessory) oynasi ko'rsatilganda darhol bir marta
+    // fokusni yo'qotishi mumkin — o'sha payt yashirsak, oyna "ochilmagandek"
+    // ko'rinadi: aynan shu sabab HUD chaqirilganda chaqnab yo'qolardi.
+    deskWin.on("blur", () => {
+      if (Date.now() < showGuardUntil) return;
+      hideDesktop();
+    });
 
     // Sahifadan mustaqil klaviatura yo'li: bu hodisa main jarayonida,
     // sahifa JS'i ishga tushmasa ham keladi.
     deskWin.webContents.on("before-input-event", (event, input) => {
       if (input.type !== "keyDown") return;
-      const quit = input.key === "Escape" || (input.meta && input.key.toLowerCase() === "w");
+      const key = input.key.toLowerCase();
+      const quit = input.key === "Escape" || (input.meta && (key === "w" || key === "m"));
       if (quit) {
         event.preventDefault();
-        hideDesktop();
+        dismissDesktop();
       }
     });
   }
@@ -205,55 +244,112 @@ function createDesktopWindow() {
   startWeather();
 }
 
-// Esc faqat HUD ochiq turganda global tugma bo'ladi. Global — chunki oyna
-// fokusda bo'lmasligi yoki sahifa javob bermasligi mumkin.
-let escapeBound = false;
+// Yopish tugmalari FAQAT HUD ochiq turganda global bo'ladi. Global —
+// chunki oyna fokusda bo'lmasligi yoki sahifa javob bermasligi mumkin.
+//
+// Nega faqat o'shanda: ⌘M — macOS'ning "oynani yig'ish" tugmasi. Uni doimiy
+// egallab olsak, butun tizimda o'sha tugma buzilardi. HUD ochiq turganda
+// esa yig'ishning ma'nosi yo'q, shuning uchun vaqtincha o'zimizga olamiz.
+const DISMISS_KEYS = ["Escape", "Command+M"];
+let boundKeys = [];
 
-function bindEscape() {
-  if (escapeBound) return;
-  escapeBound = globalShortcut.register("Escape", hideDesktop);
-  if (!escapeBound) console.warn("Esc ro'yxatdan o'tmadi — oynani ⌘⇧J bilan yoping");
+function bindDismissKeys() {
+  if (boundKeys.length) return;
+  for (const key of DISMISS_KEYS) {
+    if (globalShortcut.register(key, dismissDesktop)) boundKeys.push(key);
+    else console.warn(`${key} ro'yxatdan o'tmadi`);
+  }
+  if (!boundKeys.length) console.warn("Yopish tugmalari band — oynani ⌘⇧J bilan yoping");
 }
 
-function releaseEscape() {
-  if (!escapeBound) return;
-  globalShortcut.unregister("Escape");
-  escapeBound = false;
+function releaseDismissKeys() {
+  for (const key of boundKeys) globalShortcut.unregister(key);
+  boundKeys = [];
 }
+
+// Ochilgandan keyin shuncha vaqt ichida kelgan blur e'tiborga olinmaydi.
+let showGuardUntil = 0;
 
 function showDesktop() {
-  if (!deskWin || DESK_AMBIENT) return;
+  if (!deskWin || deskWin.isDestroyed() || DESK_AMBIENT) return;
   const wasHidden = !deskWin.isVisible();
+  showGuardUntil = Date.now() + 1200;
+
+  // Dock ikonkasi yashirin ilova o'zi old planga chiqmaydi — buni aniq
+  // so'rash kerak, aks holda oyna ochiladi-yu, boshqa ilova ustida qolib
+  // ketadi yoki darhol fokusni yo'qotib yashirinadi.
+  if (process.platform === "darwin") app.focus({ steal: true });
+
   // Ko'rinib turgan bo'lsa ham `show()` — oynani oldinga chiqaradi.
   deskWin.show();
   deskWin.focus();
+  deskWin.moveTop();
   if (wasHidden) {
     // Renderer yoqilish animatsiyasini noldan boshlaydi.
     deskWin.webContents.send("desk-visible");
   }
-  bindEscape();
+  bindDismissKeys();
 }
 
 function hideDesktop() {
-  releaseEscape();
+  releaseDismissKeys();
   if (deskWin && !DESK_AMBIENT && deskWin.isVisible()) deskWin.hide();
 }
 
 function toggleDesktop() {
   if (!deskWin || DESK_AMBIENT) return;
-  if (deskWin.isVisible()) hideDesktop();
+  if (deskWin.isVisible()) dismissDesktop();
   else showDesktop();
 }
+
+// Oynani yopishning ikki xili bor va ular bir xil emas:
+//
+//   hideDesktop  — oyna ko'rinmay qoldi (masalan boshqa ilovaga o'tildi).
+//                  Jarvis suhbatni davom ettirishga tayyor turaveradi.
+//   dismissDesktop — foydalanuvchi ATAYLAB yopdi (Esc, ⌘W, ⌘⇧J). Bu
+//                  ovozdagi «bekor qil» bilan bir xil ma'no: yadro sukut
+//                  holatiga o'tadi. Renderer buni yadroga yetkazadi.
+function dismissDesktop() {
+  hideDesktop();
+  if (deskWin && !deskWin.isDestroyed()) deskWin.webContents.send("desk-dismissed");
+}
+
+// Sukut holatida orb ekranda umuman turmaydi. Oyna yopilmaydi — faqat
+// yashiriladi, chunki uning ichidagi WebSocket chaqiruvni kutib turadi.
+ipcMain.on("orb-visible", (_event, visible) => {
+  if (!win || win.isDestroyed()) return;
+  // `showInactive` — orb fokus tortmasligi kerak, siz ishlayotgan oyna
+  // oldinda qolsin.
+  if (visible) win.showInactive();
+  else win.hide();
+});
 
 ipcMain.on("desk-show", showDesktop);
 ipcMain.on("desk-hide", hideDesktop);
 
-// --- Tizim ko'rsatkichlari: CPU (o'lchovlar farqidan), RAM, disk, ish vaqti ---
+// --- Tizim ko'rsatkichlari ---
+//
+// HUD'dagi har bir raqam shu yerdan keladi: CPU, RAM, SWAP, disklar,
+// batareya, tarmoq tezligi, ovoz balandligi, axlat qutisi. Sekin
+// o'lchovlar (disk, batareya, ijro) alohida, siyrak taymerlarda yangilanadi —
+// har ikki soniyada `df` chaqirish kompyuterni bekorga bezovta qiladi.
 
 const os = require("node:os");
 const fs = require("node:fs");
 const { execFile } = require("node:child_process");
 const { shell } = require("electron");
+
+const MAC = process.platform === "darwin";
+
+// Tashqi buyruq. Xato bo'lsa bo'sh satr — ko'rsatkich yo'qligi HUD uchun
+// halokat emas, o'sha katak "—" bo'lib turadi.
+function run(cmd, args, timeout = 4000) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout, maxBuffer: 1 << 20 }, (err, stdout) => {
+      resolve(err ? "" : String(stdout));
+    });
+  });
+}
 
 let prevCpu = null;
 
@@ -274,26 +370,271 @@ function cpuPercent() {
   return percent;
 }
 
-function startStats() {
-  const send = () => {
-    if (!deskWin) return;
-    let disk = null;
-    try {
-      // Node 18+: statfsSync. Ba'zi tizimlarda yo'q bo'lishi mumkin.
-      const s = fs.statfsSync("/");
-      const totalB = s.blocks * s.bsize;
-      const freeB = s.bavail * s.bsize;
-      disk = { percent: (1 - freeB / totalB) * 100, usedGb: (totalB - freeB) / 1e9, freeGb: freeB / 1e9 };
-    } catch { /* disk ko'rsatkichisiz davom etamiz */ }
+// --- SWAP ---
 
+async function swapPercent() {
+  if (MAC) {
+    // "total = 2048.00M  used = 1024.00M  free = 1024.00M"
+    const out = await run("sysctl", ["-n", "vm.swapusage"]);
+    const total = /total\s*=\s*([\d.]+)M/.exec(out);
+    const used = /used\s*=\s*([\d.]+)M/.exec(out);
+    if (!total || !used || Number(total[1]) === 0) return 0;
+    return (Number(used[1]) / Number(total[1])) * 100;
+  }
+  try {
+    const info = fs.readFileSync("/proc/meminfo", "utf8");
+    const total = /SwapTotal:\s+(\d+)/.exec(info);
+    const free = /SwapFree:\s+(\d+)/.exec(info);
+    if (!total || !free || Number(total[1]) === 0) return 0;
+    return (1 - Number(free[1]) / Number(total[1])) * 100;
+  } catch {
+    return 0;
+  }
+}
+
+// --- Disklar ---
+//
+// `df -k` — barcha tizimlarda bor. Faqat haqiqiy tomlarni olamiz: tizim
+// bo'limlari (devfs, map, overlay) foydalanuvchiga hech nima aytmaydi.
+
+async function diskList() {
+  // -P (POSIX) — macOS va Linux'da ustunlar bir xil: oxirgisi ulanish nuqtasi
+  const out = await run("df", ["-kP"]);
+  const disks = [];
+  for (const line of out.split("\n").slice(1)) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 6) continue;
+    const source = parts[0];
+    const mount = parts.slice(5).join(" ");
+    if (!source.startsWith("/dev/")) continue;
+    if (mount !== "/" && !mount.startsWith("/Volumes/") && !mount.startsWith("/mnt/") &&
+        !mount.startsWith("/media/") && mount !== "/home") continue;
+    const totalGb = (Number(parts[1]) * 1024) / 1e9;
+    const usedGb = (Number(parts[2]) * 1024) / 1e9;
+    if (!Number.isFinite(totalGb) || totalGb < 1) continue;
+    const name = mount === "/" ? (MAC ? "Macintosh HD" : "System") : mount.split("/").pop();
+    if (disks.some((d) => d.name === name)) continue;
+    disks.push({ name, usedGb, totalGb, percent: (usedGb / totalGb) * 100 });
+  }
+  return disks.slice(0, 4);
+}
+
+// --- Batareya ---
+
+async function batteryInfo() {
+  if (MAC) {
+    // "Now drawing from 'Battery Power' ... -InternalBattery-0 ... 84%; discharging"
+    const out = await run("pmset", ["-g", "batt"]);
+    const pct = /(\d+)%/.exec(out);
+    if (!pct) return null;
+    return {
+      percent: Number(pct[1]),
+      charging: /AC Power/.test(out) || /charging/.test(out),
+    };
+  }
+  try {
+    const base = "/sys/class/power_supply";
+    const bat = fs.readdirSync(base).find((n) => n.startsWith("BAT"));
+    if (!bat) return null;
+    return {
+      percent: Number(fs.readFileSync(`${base}/${bat}/capacity`, "utf8").trim()),
+      charging: fs.readFileSync(`${base}/${bat}/status`, "utf8").trim() !== "Discharging",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// --- Tarmoq tezligi ---
+//
+// Umumiy hisoblagichlar farqidan o'lchaymiz: bir o'lchov o'zi hech nima
+// bermaydi, ikkitasining farqi esa aynan tezlik.
+
+let prevNet = null;
+let netTotal = 0; // ishga tushgandan beri qabul qilingan baytlar
+let netTotalUp = 0;
+
+async function netRates() {
+  let rx = 0, tx = 0;
+  if (MAC) {
+    const out = await run("netstat", ["-ib"]);
+    const seen = new Set();
+    for (const line of out.split("\n").slice(1)) {
+      const p = line.trim().split(/\s+/);
+      // Faqat <Link#N> qatorlari — qolganlari o'sha interfeysning takrori
+      if (p.length < 10 || !p[2].startsWith("<Link#")) continue;
+      if (p[0].startsWith("lo") || seen.has(p[0])) continue;
+      seen.add(p[0]);
+      rx += Number(p[6]) || 0;
+      tx += Number(p[9]) || 0;
+    }
+  } else {
+    try {
+      for (const line of fs.readFileSync("/proc/net/dev", "utf8").split("\n").slice(2)) {
+        const [name, rest] = line.split(":");
+        if (!rest || name.trim().startsWith("lo")) continue;
+        const p = rest.trim().split(/\s+/);
+        rx += Number(p[0]) || 0;
+        tx += Number(p[8]) || 0;
+      }
+    } catch { /* tarmoq ko'rsatkichisiz davom etamiz */ }
+  }
+  const now = Date.now();
+  let rates = { down: 0, up: 0 };
+  if (prevNet && now > prevNet.at) {
+    const dt = (now - prevNet.at) / 1000;
+    const dRx = Math.max(0, rx - prevNet.rx);
+    rates = { down: dRx / dt, up: Math.max(0, (tx - prevNet.tx) / dt) };
+    netTotal += dRx;
+    netTotalUp += Math.max(0, tx - prevNet.tx);
+  }
+  prevNet = { rx, tx, at: now };
+  return { ...rates, totalGb: netTotal / 1e9, upTotalGb: netTotalUp / 1e9 };
+}
+
+// --- Ovoz balandligi ---
+
+async function outputVolume() {
+  if (!MAC) return null;
+  const out = await run("osascript", ["-e", "output volume of (get volume settings)"]);
+  const value = Number(out.trim());
+  return Number.isFinite(value) ? value : null;
+}
+
+async function setOutputVolume(level) {
+  if (!MAC) return;
+  const value = Math.max(0, Math.min(100, Math.round(Number(level) || 0)));
+  await run("osascript", ["-e", `set volume output volume ${value}`]);
+}
+
+// --- Axlat qutisi ---
+
+function trashPath() {
+  return MAC
+    ? path.join(os.homedir(), ".Trash")
+    : path.join(os.homedir(), ".local", "share", "Trash", "files");
+}
+
+// Axlat qutisi: nechta fayl va qancha joy egallaydi. Hajmni `du` aytadi —
+// u ruxsat bermasa, faqat sonini ko'rsatamiz.
+async function trashInfo() {
+  let count = null;
+  try {
+    count = fs.readdirSync(trashPath()).filter((n) => !n.startsWith(".")).length;
+  } catch {
+    return null;
+  }
+  let sizeGb = null;
+  const out = await run("du", ["-sk", trashPath()], 5000);
+  const kb = Number((out.trim().split(/\s+/)[0] || "").replace(/[^0-9]/g, ""));
+  if (Number.isFinite(kb) && kb > 0) sizeGb = (kb * 1024) / 1e9;
+  return { count, sizeGb };
+}
+
+// --- Ijro etilayotgan musiqa ---
+//
+// Yopiq ilovaga AppleScript bilan murojaat qilish uni OCHIB yuboradi —
+// shuning uchun avval jarayonlar ro'yxatini tekshiramiz.
+
+const TRACK_QUERY = (player) => `
+if apps contains "${player}" then
+  try
+    tell application "${player}"
+      if player state is not stopped then
+        set out to (name of current track) & linefeed & (artist of current track) ¬
+          & linefeed & (player state as text)
+      end if
+    end tell
+  end try
+end if`;
+
+const PLAYER_SCRIPT = `
+set out to ""
+tell application "System Events" to set apps to name of processes
+${TRACK_QUERY("Spotify")}
+if out is "" then ${TRACK_QUERY("Music")}
+end if
+return out`;
+
+async function nowPlaying() {
+  if (!MAC) return null;
+  const out = (await run("osascript", ["-e", PLAYER_SCRIPT], 6000)).trim();
+  if (!out) return null;
+  const [title, artist, state] = out.split("\n");
+  return { title, artist, playing: (state || "").trim() === "playing" };
+}
+
+async function mediaCommand(action) {
+  if (!MAC) return;
+  const verb = { playpause: "playpause", next: "next track", prev: "previous track" }[action];
+  if (!verb) return;
+  const script = `
+tell application "System Events" to set apps to name of processes
+if apps contains "Spotify" then
+  tell application "Spotify" to ${verb}
+else if apps contains "Music" then
+  tell application "Music" to ${verb}
+end if`;
+  await run("osascript", ["-e", script]);
+}
+
+// --- Mahalliy IP ---
+
+function localIp() {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const iface of list || []) {
+      if (iface.family === "IPv4" && !iface.internal) return iface.address;
+    }
+  }
+  return null;
+}
+
+// --- Yig'ish va yuborish ---
+//
+// Sekin o'lchovlar shu obyektda saqlanadi va o'z sur'atida yangilanadi.
+const slow = { disks: [], battery: null, volume: null, trash: null, swap: 0, media: null };
+
+function every(ms, fn) {
+  const tick = async () => {
+    try { await fn(); } catch { /* bitta o'lchov yiqilsa, qolgani ishlayveradi */ }
+  };
+  tick();
+  return setInterval(tick, ms);
+}
+
+function startStats() {
+  every(30_000, async () => { slow.disks = await diskList(); });
+  every(15_000, async () => { slow.battery = await batteryInfo(); });
+  every(60_000, async () => { slow.trash = await trashInfo(); });
+  every(10_000, async () => { slow.swap = await swapPercent(); });
+  every(5_000, async () => { slow.volume = await outputVolume(); });
+  every(8_000, async () => { slow.media = await nowPlaying(); });
+
+  const send = async () => {
+    if (!deskWin || deskWin.isDestroyed()) return;
+    const net = await netRates();
+    const totalRam = os.totalmem();
+    const freeRam = os.freemem();
+    const primary = slow.disks[0];
     deskWin.webContents.send("stats", {
       cpu: cpuPercent(),
-      ram: (1 - os.freemem() / os.totalmem()) * 100,
-      disk: disk ? disk.percent : 0,
-      diskUsedGb: disk ? disk.usedGb : null,
-      diskFreeGb: disk ? disk.freeGb : null,
+      ram: (1 - freeRam / totalRam) * 100,
+      ramUsedGb: (totalRam - freeRam) / 1e9,
+      ramTotalGb: totalRam / 1e9,
+      swap: slow.swap,
+      disk: primary ? primary.percent : 0,
+      disks: slow.disks,
+      battery: slow.battery,
+      volume: slow.volume,
+      trash: slow.trash,
+      net,
       uptimeSec: os.uptime(),
+      user: os.userInfo().username,
+      host: os.hostname().replace(/\.local$/, ""),
+      ip: localIp(),
+      city: process.env.JARVIS_CITY || "TOSHKENT",
     });
+    if (deskWin && !deskWin.isDestroyed()) deskWin.webContents.send("media", slow.media);
   };
   send();
   setInterval(send, 2000);
@@ -386,6 +727,24 @@ ipcMain.handle("figure-clear", () => {
   return null;
 });
 
+ipcMain.on("desk-open-trash", () => {
+  try {
+    shell.openPath(trashPath());
+  } catch { /* axlat qutisi topilmadi — e'tiborsiz */ }
+});
+
+// Ovoz balandligi: HUD'dagi ustunga bosilsa shu daraja qo'yiladi.
+ipcMain.on("desk-set-volume", (_e, level) => {
+  const value = Number(level);
+  if (!Number.isFinite(value)) return;
+  setOutputVolume(value);
+});
+
+// Media tugmalari — faqat ochiq turgan pleyerga (Spotify/Music).
+ipcMain.on("desk-media", (_e, action) => {
+  mediaCommand(String(action));
+});
+
 ipcMain.on("desk-open-url", (_e, url) => {
   // Faqat https va aniq ro'yxat — renderer buzilsa ham ixtiyoriy manzil ochilmasin
   const ALLOWED_URLS = new Set([
@@ -447,14 +806,31 @@ app.whenReady().then(() => {
 
   // Global tugma: uyg'otuvchi so'zsiz chaqirish. Ikkinchi marta bosilsa
   // oynani yopadi — ochish va yopish bitta tugmada bo'lishi kerak.
-  const combo = process.env.JARVIS_HOTKEY || "CommandOrControl+Shift+J";
-  const registered = globalShortcut.register(combo, () => {
+  const onHotkey = () => {
     const opening = !deskWin || DESK_AMBIENT || !deskWin.isVisible();
     if (opening) win?.webContents.send("hotkey");
     toggleDesktop();
-  });
-  if (!registered) {
-    console.warn(`Global tugmani (${combo}) ro'yxatdan o'tkazib bo'lmadi`);
+  };
+
+  // Tugma band bo'lsa (boshqa ilova egallagan) — jimgina ishlamay qolmasin,
+  // zaxira kombinatsiyani sinab ko'ramiz va qaysi biri ishlaganini aytamiz.
+  const combos = [
+    process.env.JARVIS_HOTKEY || "CommandOrControl+Shift+J",
+    "CommandOrControl+Alt+J",
+    "CommandOrControl+Shift+F12",
+  ];
+  const combo = combos.find((c) => globalShortcut.register(c, onHotkey));
+  if (combo) {
+    console.log(`Ish stoli HUD tugmasi: ${combo}`);
+  } else {
+    console.warn(`Global tugmani ro'yxatdan o'tkazib bo'lmadi: ${combos.join(", ")}`);
+  }
+
+  // Tekshirish uchun: `npm start -- --desk` HUD'ni darhol ochadi. Chaqiruv
+  // zanjiri (mikrofon -> yadro -> WebSocket) ishlamayotganida muammo
+  // oynadami yoki chaqiruvdami — shu bilan ajratiladi.
+  if (process.argv.includes("--desk")) {
+    setTimeout(showDesktop, 800);
   }
 
   app.on("activate", () => {

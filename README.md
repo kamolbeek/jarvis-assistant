@@ -56,12 +56,6 @@ flowchart TD
 - **Ertalab kunni tushuntiradi** — belgilangan vaqtda bugungi ishlarni aytib beradi.
 - **Sizning nomingizdan yozadi** — «Alisherga yoz, kechikaman de» desangiz,
   Telegram yoki SMS orqali yuboradi.
-- **Telegramni to'liq boshqaradi** — sizning hisobingiz orqali: kanal va guruh
-  ochadi, odam qo'shadi, admin qiladi, chiqarib yuboradi, kanallarni o'qib
-  saralaydi va papkalarga yig'adi.
-- **O'zini o'zi tuzatadi** — «bu menga yoqmadi» desangiz, o'z kodini o'zgartiradi,
-  testlardan o'tkazadi va qayta ishga tushadi. Bu paytda ekranda
-  «o'z ustida ishlamoqda» yozuvi turadi.
 - **Telefonda ham ishlaydi** — telefon brauzeridan bosib-gapirish sahifasi.
 - **Har bir xavfli amal uchun so'raydi** — HUD'da ✅/❌ chiqadi, hammasi jurnalga yoziladi.
 
@@ -118,6 +112,29 @@ voice:
 Kamchiligi — o'zbekcha aniqligi ElevenLabs'dan pastroq va birinchi ishga
 tushirishda model yuklab olinadi (~1.5 GB). Lekin hech qanday to'lov yo'q.
 
+**Eng yaxshi o'zbekcha — rubaiSTT (ham lokal, ham bepul).** Bu model aynan
+o'zbek tiliga o'rgatilgan va whisper.cpp orqali ishlaydi:
+
+```bash
+brew install whisper-cpp
+```
+
+```yaml
+voice:
+  stt:
+    provider: "rubai"             # = whisper_cpp
+    # model ko'rsatilmasa, odatdagi joylardan o'zi qidiradi
+    model: "~/Library/Application Support/uzbek-dictation/ggml-rubaistt_v2_medium-q8_0.bin"
+```
+
+Agar Mac'ingizda [RubaiSTT Dictation](https://github.com/MuhammadMirrr/uzbek-dictation)
+ilovasi bo'lsa, model allaqachon yuklangan — Jarvis o'sha faylni ishlatadi,
+ilovaning o'zini ochish shart emas. Modelni topish:
+
+```bash
+find ~ /Applications -iname "*.bin" -size +100M 2>/dev/null | head
+```
+
 macOS ruxsatlarini bering — **Tizim sozlamalari → Maxfiylik va xavfsizlik**:
 
 | Ruxsat | Nima uchun |
@@ -164,22 +181,53 @@ qolsa, tizim o'zi qayta ko'taradi.
 tail -f ~/.jarvis/logs/jarvis.log   # nima bo'layotganini ko'rish
 ```
 
-**Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *ishga tushiruvchi
-dastur* bo'yicha beradi. Terminaldan ishga tushirsangiz javobgar Terminal
-bo'ladi va ruxsat ishlaydi; `launchd` ostida esa javobgar boshqa va macOS
-**so'ramaydi ham, xato ham bermaydi** — oqim ochiladi, ichida faqat nol
-keladi. Tashqaridan qaraganda Jarvis ishlab turadi, lekin hech nima
-eshitmaydi.
+**Terminalga qaytmaslik uchun** `scripts` papkasida ikkita ikki marta
+bosiladigan fayl bor:
+
+| Fayl | Nima qiladi |
+|---|---|
+| **Jarvis yangilash.command** | yangilanishni oladi va Jarvis'ni qayta ko'taradi |
+| **Jarvis holati.command** | ishlayaptimi, ishlamasa sababi nimada |
+| **Jarvis ishga tushirish.command** | Terminal orqali ishga tushiradi (mikrofon ruxsati muammosida) |
+| **Jarvis ishonch rejimi.command** | tasdiq so'rashni yoqadi/o'chiradi |
+
+(Birinchi marta macOS ochishdan bosh tortsa: faylni o'ng tugma bilan bosib
+«Open» ni tanlang — bir martalik tasdiq.)
+
+Mikrofon bloklangan bo'lsa, orb **yashirilmaydi**: u ekranda qolib, qizil
+siferblat bilan sababni ko'rsatadi. Ekranda hech narsa yo'q va sabab ham
+yo'q degan holat bo'lmasligi kerak.
+
+**Mikrofon ruxsati — bu yerda tuzoq bor.** macOS ruxsatni *javobgar jarayon*
+bo'yicha beradi, ya'ni `launchd` ko'targan birinchi dastur bo'yicha.
+Terminaldan ishga tushirsangiz javobgar Terminal bo'ladi va ruxsat ishlaydi.
+
+Shu sababli LaunchAgent bevosita `\.venv/bin/python` ni ishga tushiradi,
+oraliqda `bash` yo'q: aks holda ruxsat bashga tegishli bo'lib qolardi, tizim
+binarysiga esa mikrofon berib bo'lmaydi va macOS **so'ramaydi ham, xato ham
+bermaydi** — oqim ochiladi, ichida faqat nol keladi. Tashqaridan qaraganda
+Jarvis ishlab turadi, lekin hech nima eshitmaydi.
+
+Shu sababdan HUD ham alohida agent (`com.jarvis.orb`): uning yiqilishi
+yadroni yiqitmasligi kerak.
 
 Jarvis buni o'zi sezadi: ishga tushganda bir soniya tinglaydi va mutlaq nol
 kelsa, HUD'da mikrofon siferblati qizarib, jurnalga sabab yoziladi (haqiqiy
 jimlikda ham fon shovqini bo'ladi — mutlaq nol aynan bloklanganning
 belgisi).
 
-Tuzatish: **Tizim sozlamalari → Maxfiylik va xavfsizlik → Mikrofon** ro'yxatiga
-Python'ni qo'shing. Ro'yxatda `+` bo'lmasa, Finder'da `⌘⇧G` bilan yo'lni
-oching va binary'ni ro'yxatga sudrab tashlang. Yo'lni Jarvis jurnalda
-ko'rsatadi.
+Tuzatish: **Tizim sozlamalari → Maxfiylik va xavfsizlik → Mikrofon**
+ro'yxatida Python yoqilgan bo'lishi kerak.
+
+Diqqat: bu ro'yxatga **qo'lda qo'shib bo'lmaydi** — unda `+` tugmasi yo'q.
+Unda faqat mikrofonni haqiqatan **so'ragan** dasturlar paydo bo'ladi. Ya'ni
+Python u yerda yo'q bo'lsa, demak yadro hali biror marta ham to'g'ri ishga
+tushmagan (yoki eski, bash orqali ishlaydigan sozlama qolgan).
+
+Ishonchli zaxira yo'l — **«Jarvis ishga tushirish.command»**: u Terminal
+orqali ishga tushadi, Terminalda esa mikrofon ruxsati bor. Uni *Tizim
+sozlamalari → Asosiy → Kirish elementlari* ga qo'shsangiz, kompyuter
+yoqilganda o'zi ishga tushadi.
 
 Vaqtinchalik yechim — terminaldan ishlatish (u ruxsatga ega):
 
@@ -259,6 +307,18 @@ menyu panelini ham bekitgan va chiqish faqat sahifaning JS'iga bog'liq
 bo'lgan. Sahifa esa qora ekran bo'lib qolgan va foydalanuvchi kompyuterni
 qayta yoqishga majbur bo'lgan.
 
+**Ochilmayaptimi?** Avval oynaning o'zini tekshiring — u chaqiruv zanjiridan
+(mikrofon → yadro → WebSocket) mustaqil ochiladi:
+
+```bash
+cd ui && npm start -- --desk    # HUD darhol ochiladi
+```
+
+Ochilsa, muammo chaqiruvda; ochilmasa — oynada. `⌘⇧J` ni boshqa ilova
+egallab olgan bo'lishi mumkin: shu holda `⌘⌥J`, so'ng `⌘⇧F12` sinaladi va
+ishlagan kombinatsiya ishga tushirish jurnaliga yoziladi. O'zingiznikini
+tanlash: `JARVIS_HOTKEY="Control+Alt+J"`.
+
 **Jonli fon rejimi.** Oyna emas, doimiy fon sifatida kerak bo'lsa (oynalar
 ORQASIDA turadigan Rainmeter uslubi):
 
@@ -268,32 +328,54 @@ JARVIS_DESKTOP=ambient ./scripts/run.sh
 
 Butunlay o'chirish: `JARVIS_DESKTOP=0`. Kichik burchak-vidjet har doim qoladi.
 
-Sahnada nima bor:
+### Wallpaperning o'zi jonli
 
-- **Markazda zirh chizmasi** — «Hey Jarvis» deganingizda ko'zlari yonadi,
-  reaktori kuchayadi, orqasidagi halqalar tezlashadi.
-- **Chapda ilovalar paneli** — Finder, Safari, Terminal va boshqalar; bosilsa ochiladi.
-- **Tizim bloki** — ish vaqti, CPU, xotira, disk (jonli, har 2 soniyada).
-- **O'ngda sariq ovoz datchigi** — gapirganingizda ustunlar ko'tarilib tushadi.
-- **Dumaloq o'lchagich** — CPU/RAM/disk yoylari.
-- **Ob-havo** — bugun/ertaga (open-meteo, kalitsiz; `JARVIS_LAT`/`JARVIS_LON`).
-- **Soat, sana, hafta kunlari, papkalar, tezkor havolalar** — hammasi jonli.
-- **Chap pastda dumaloq JARVIS** — bosilsa bo'g'in siferblatlari paneli ochiladi.
+Ekranda o'sha SHIELD OS wallpaperi turadi — **dizayn bir zarra ham
+o'zgarmagan**: o'sha panellar, o'sha yozuvlar, o'sha ranglar. Farqi shundaki,
+rasmdagi raqamlar endi qotib qolgan emas.
 
-**Standart fon — SHIELD OS wallpaperi.** Mashhur Iron Man HUD wallpaperi
-(`ui/renderer/assets/markaz.jpg`, MIT litsenziyali ochiq repodan) o'rnatilgan
-holda keladi va butun ekranni egallaydi. Uning ustida hammasi jonli:
+Ishlashi oddiy (`ui/renderer/live.js`): eski qiymat rasmning **o'zidan**
+olingan toza ustun bilan yopiladi — fon naqshi ham, gradienti ham aynan mos
+tushadi — so'ng o'sha joyga, o'sha o'lchamda yangi qiymat chiziladi. Shrift
+har kompyuterda turlicha bo'lgani uchun har bir yozuv rasmdagi harf
+balandligiga moslab cho'ziladi.
 
-- «Hey Jarvis» deganingizda **Iron Man'ning ko'zlari yonadi**, ko'kragidagi
-  reaktor kuchayib aylanadi;
-- rasmdagi ilova tugmalari, saytlar ro'yxati va papkalar **haqiqatan bosiladi**
-  (Safari, Sozlamalar, YouTube, Yuklamalar...);
-- reaktorga bossangiz — Jarvis uyg'onadi;
-- chap pastdagi JARVIS doirasiga bossangiz — bo'g'in siferblatlari ochiladi;
-- o'ng chetda sariq ovoz datchigi, pastda jonli soat va CPU/RAM/disk.
+Nimalar jonlandi:
 
-**Boshqa rasm qo'yish.** Istalgan rasmni HUD ustiga sudrab tashlang — saqlanadi
-va uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor).
+| Rasmdagi joy | Endi nimani ko'rsatadi |
+|---|---|
+| Pastdagi katta soat (aksi bilan), o'ngdagi `23:52`, `TIME/DATE` paneli, radial menyu yonidagi soat | haqiqiy vaqt — soat, daqiqa; sekundlar alohida katakda |
+| `21 AUGUST WEDNESDAY` bloki, `Tuesday / August 20, 2013`, `20-Aug., Tuesday` | bugungi sana va hafta kuni |
+| Taqvim qatori (`Su Mo Tu …` va sonlar) | shu hafta; bugungi ustun rasmdagidek yoritiladi |
+| `SYSTEM`: CPU / RAM / SWAP foizlari va zargaldoq chiziqlari | haqiqiy yuk, har 2 soniyada |
+| `RAM USAGE 50%`, `Used:` / `Free:` | haqiqiy xotira, gigabaytda |
+| `DISK` paneli (`C:\`, `D:\`), `FILESYSTEMS` qatorlari, `DRIVE` (HD C / HD D) | haqiqiy disklar: band/umumiy hajm va foiz |
+| `Speed:` / `Total:`, `UPLOAD` / `DOWNLOAD`, chapdagi `653.5 GIB - 50.0 B/S` | tarmoq tezligi va umumiy hajm |
+| `28°C` | ob-havo (open-meteo; `JARVIS_LAT`/`JARVIS_LON`) |
+| `Recycle Bin` (`23 items 2.57 GB`) | axlat qutisidagi fayllar soni va hajmi |
+| `BATTERY 100% / no battery` va `Currently power level is at 100 percent` | batareya zaryadi va quvvat holati |
+| O'ng chetdagi zargaldoq ustun | tizim ovozi — bosgan joyingiz yangi daraja bo'ladi |
+| Pleyer `0:00` va ijro chizig'i | ochiq Spotify/Music'dagi qo'shiq vaqti |
+| Rasmdagi dumaloq siferblatlar | sekin aylanib turadi |
+| Ko'zlar va reaktor | «Hey Jarvis» deganda yonadi |
+
+Bosiladigan joylar ham rasmning o'zida:
+
+- chapdagi Chrome / Control Panel / VLC / Firefox / uTorrent / Skype tugmalari
+  va yuqoridagi dok — mos ilovalarni ochadi;
+- `GOOGLE / GMAIL / FACEBOOK / YOUTUBE / IMDB / YAHOO / WIKIPEDIA` ro'yxati va
+  o'ngdagi radial menyu (Mail, Google, Youtube, Twitter, Facebook) — brauzerda;
+- `Downloads / Documents / Dropbox / Pictures / Music / Videos` — Finder'da;
+- Recycle Bin — axlat qutisi; pleyer tugmalari — ochiq pleyerga;
+- ko'kragidagi reaktor — Jarvis'ni chaqiradi; chap pastdagi JARVIS doirasi —
+  bo'g'in siferblatlari paneli.
+
+Sichqonchani olib borsangiz, bosiladigan joy siyon ramka bilan belgilanadi.
+
+**O'z rasmingizni qo'yish.** Boshqa rasmni HUD ustiga sudrab tashlang —
+saqlanadi va uch bosishda sozlanadi (chap ko'z, o'ng ko'z, reaktor). Shundan
+keyin o'sha rasmning ko'zlari yonadi. `Backspace` — o'rnatilgan wallpaperga
+qaytaradi.
 
 ### HUD nimani ko'rsatadi
 
@@ -353,6 +435,54 @@ conversation:
 Agar Jarvis o'z ovozidan bo'linib ketsa (dinamik juda baland), `barge_in_margin`
 ni 3.0 ga ko'taring. Aksincha, sizni eshitmasa — 1.5 ga tushiring yoki
 quloqchin ishlating.
+
+### Sukut holati: ekranda hech narsa, lekin eshitib turadi
+
+Kompyuterni yoqasiz — ekranda **hech narsa yo'q**. Orb ham, sahna ham
+ko'rinmaydi. Lekin Jarvis ishlab turadi va sizni eshitadi. «Hey Jarvis»
+deysiz — o'sha zahoti paydo bo'ladi.
+
+Xuddi shu holatga uch yo'l bilan qaytiladi:
+
+| | |
+|---|---|
+| **O'zi** | muloqotsiz 5 daqiqa o'tsa |
+| **Ovoz bilan** | «bekor qil», «cancel», «bo'ldi bas», «keyin gaplashamiz» |
+| **Tugma bilan** | `Esc` · `⌘M` · `⌘W` · `⌘⇧J` |
+
+Bu **o'chish emas**. Mikrofon ishlashda davom etadi, chaqiruv eshitilaveradi —
+«Hey Jarvis» (yoki «Jarvis», «Salom Jarvis», qarsak, `⌘⇧J`) bilan hammasi
+qaytadi.
+
+`⌘M` ataylab faqat sahna ochiq turganda ushlanadi: u macOS'ning «oynani
+yig'ish» tugmasi va uni doimiy egallab olish butun tizimda o'sha tugmani
+buzardi.
+
+```yaml
+# config/jarvis.yaml
+conversation:
+  standby_after_sec: 300   # 5 daqiqa. 0 — hech qachon so'nmasin
+```
+
+Har qanday muloqot hisobni qaytadan boshlaydi: ovozli chaqiruv, qarsak,
+tugma, telefondan yozilgan matn.
+
+Boshqa ilovaga o'tganingizda (⌘Tab) oyna shunchaki yashirinadi — bu sukut
+emas, suhbat davom etishi mumkin. Sukutga faqat **ataylab yopganingizda**
+o'tadi.
+
+Orb doim ko'rinib tursin desangiz: `standby_after_sec: 0`.
+
+### Salomlashuv: bir so'z
+
+Chaqirilganda aytiladigan javob — bu javob emas, «eshitdim» degan belgi.
+Kuniga o'nlab marta eshitiladi, shuning uchun u ataylab bir so'z: **«Aha»**,
+«Labbay», «Ha». O'zgartirmoqchi bo'lsangiz:
+
+```yaml
+conversation:
+  greetings: ["Aha.", "Labbay.", "Ha."]
+```
 
 ## Telefonda ishlatish
 
@@ -499,118 +629,138 @@ qiymatlarni qaytaring. Rostini aytganda, eng katta farqni yaxshi mikrofon
 beradi: MacBook'ning ichki mikrofoni 1–2 metrgacha yaxshi ishlaydi, undan
 narisiga tashqi mikrofon kerak.
 
-## Telegram — to'liq boshqaruv
+### Eshitishni almashtirish
 
-Telegramda ikki xil ulanish bor va farqi katta:
+Qaysi provayder to'g'ri kelishini faqat o'z ovozingiz, o'z mikrofoningiz va
+o'z internetingiz bilan sinab bilasiz. Shuning uchun YAML faylni qo'lda
+ochish shart emas:
 
-| | Bot (`TELEGRAM_BOT_TOKEN`) | Hisob (`TELEGRAM_API_ID`) |
-| --- | --- | --- |
-| Sizga xabar yuborish | ha | ha |
-| Suhbatlaringizni o'qish | yo'q | ha |
-| Kanal/guruh ochish | yo'q | ha |
-| Odam qo'shish, admin qilish | yo'q | ha |
-| **Papkalar** | yo'q | ha |
-
-Papkalar bot API'da umuman mavjud emas — bu mijoz xususiyati. Shuning uchun
-«kanallarni papkaga yig'» degan ish faqat hisob orqali bo'ladi.
-
-**Ulash — bir marta:**
-
-1. [my.telegram.org](https://my.telegram.org) > API development tools >
-   ilova yarating. `api_id` va `api_hash` chiqadi.
-2. `.env` ga yozing:
-
-   ```bash
-   TELEGRAM_API_ID=1234567
-   TELEGRAM_API_HASH=abcdef...
-   ```
-
-3. Terminalda kiring — Telegram ilovangizga kod keladi:
-
-   ```bash
-   source .venv/bin/activate
-   python -m jarvis telegram-login
-   ```
-
-Kirish ataylab terminalda bo'ladi: kod va ikki bosqichli parol hisobingizga
-kalit, ularni modelga aytdirib bo'lmaydi. Natija `~/.jarvis/telegram.session`
-faylida saqlanadi — **u parolingiz bilan bir xil darajada maxfiy**. Uzish:
-`python -m jarvis telegram-logout`.
-
-**Shundan keyin ovoz bilan aytish mumkin:**
-
-| Siz aytasiz | Jarvis nima qiladi |
-| --- | --- |
-| «Ish degan papka och, ichiga Click Jobs va UzDev Jobsni sol» | papka yaratadi va kanallarni qo'shadi |
-| «Yangi kanal och, nomi Loyihalarim» | kanal yaratadi va havolasini beradi |
-| «Alisherni Dev guruhiga qo'sh va admin qil» | qo'shadi, so'ng admin qiladi |
-| «Click Jobsdagi oxirgi yigirmata e'lonni ko'r, frontendga tegishlisini menga yubor» | o'qiydi, saralaydi, Saqlangan xabarlarga yuboradi |
-| «Bu guruhdan falonchini chiqar» | **so'raydi**, «ha» desangiz chiqaradi |
-
-**Nima so'raydi, nima so'ramaydi.** Kundalik ishlar — kanal ochish, odam
-qo'shish, admin qilish, papka yig'ish, xabar yuborish — so'ramasdan
-bajariladi. Qaytarib bo'lmaydiganlari har safar alohida so'raydi:
-
-- suhbat yoki kanalni o'chirish
-- xabarlarni o'chirish
-- odamni chiqarib yuborish / bloklash
-- kanaldan chiqish
-- papkani o'chirish
-
-«Har safar» degani jiddiy: oddiy amallarda bir marta bergan ruxsatingiz
-seans oxirigacha eslab qolinadi, bularda esa — yo'q. Qaysi amal qaysi
-guruhga tushishini `config/jarvis.yaml` dagi `safety.rules` va
-`safety.always_ask` belgilaydi.
-
-**Pul bilan bog'liq hech narsa yo'q.** Sovg'a, Stars, Premium sotib olish
-asboblari umuman yozilmagan — ya'ni Jarvis xato bilan ham pul sarflay olmaydi.
-Kerak bo'lsa, buni o'zi qo'shishi mumkin (pastdagi bo'limga qarang), lekin
-o'shanda ham tasdiqsiz o'tmaydi.
-
-**Halol ogohlantirish.** Avtomatlashtirilgan hisob Telegram cheklovlariga
-tushishi mumkin — ayniqsa qisqa vaqtda ko'p odam qo'shsangiz yoki ko'p xabar
-yuborsangiz. Ommaviy yuborish uchun asbob ataylab qo'shilmagan.
-
-## O'zini o'zi yaxshilash
-
-Odatiy javob — «xo'p, keyingi versiyada tuzatamiz». Bu yerda boshqacha:
-Jarvisning kodi shu kompyuterda, u esa kod yoza oladi.
-
-«Bu menga yoqmadi», «juda sekin javob beryapsan», «bunday emas, anaqa qil» —
-bularning hammasi topshiriq. Jarvis quyidagicha yo'l tutadi:
-
-1. Kamchilikni daftarga yozadi (`~/.jarvis/improvements.jsonl`).
-2. Ekranda **«O'Z USTIDA ISHLAMOQDA»** yozuvi paydo bo'ladi — orbda ham,
-   to'liq ekranli HUD'da ham. Bu yozuv turganida buyruq bermang: u kod
-   ustida, gapingiz behuda ketadi.
-3. Git'da orqaga qaytish nuqtasi saqlanadi.
-4. Kodni o'zgartiradi, so'ng testlar va linterni ishga tushiradi.
-5. Yozuv o'chadi va nima o'zgarganini aytadi. Yangi kod kuchga kirishi uchun
-   qayta ishga tushishni taklif qiladi — «ha» desangiz, o'zini o'zi qayta
-   ishga tushiradi (orb yopilmaydi, bir-ikki soniyada qaytadi).
-
-Yoqmasa: **«orqaga qaytar»** — oxirgi o'zgarishlar bekor qilinadi.
-
-Jarvis o'z xatolarini ham ko'radi: javob berishda yuz bergan har bir xato
-o'sha daftarga tushadi va takrorlangani sanaladi. «O'zingni yaxshila»
-desangiz, ro'yxatdan eng ko'p takrorlanganini oladi.
-
-Bu ruxsat `config/jarvis.yaml` da yoqiladi:
-
-```yaml
-safety:
-  self_edit: true        # repo papkasi yoziladigan joylar ro'yxatiga qo'shiladi
+```bash
+python -m jarvis stt                # hozir qaysi biri
+python -m jarvis stt whisper_local  # almashtirish
 ```
 
-`false` qilsangiz, Jarvis o'z kodiga umuman tegolmaydi va tizim
-ko'rsatmasidan ham bu bo'lim olib tashlanadi.
+| Provayder | Qanday |
+|---|---|
+| `elevenlabs` | eng aniq va tez; internet va kalit kerak, har so'rov pullik |
+| `mohir` | o'zbek tiliga ixtisoslashgan; internet va kalit kerak |
+| `whisper_local` | oflayn va bepul; M-seriyali Mac'da tez |
+| `whisper_cpp` (`rubai`) | oflayn va bepul; aniq, lekin sezilarli kechikish beradi |
 
-Uni xavfsiz qiladigan uchta narsa:
+Kechikish sezilsa birinchi navbatda shu qatorni almashtiring: oflayn model
+avval butun audioni matnga aylantiradi, ya'ni javob boshlanishidan oldin
+qo'shimcha vaqt ketadi.
 
-- fayl yozish va shell buyruqlari baribir tasdiq so'raydi;
-- har o'zgarishdan oldin git'da surat olinadi;
-- qayta ishga tushirishdan oldin testlar va linter ishlaydi — yiqilsa,
-  qayta ishga tushirish taklif qilinmaydi.
+### Qachon javob berishni boshlaydi
+
+Jimlik taymeri bitta savolga ikki xil javob bera olmaydi: «bir soniya
+jimlik» — bu gap tugagani ham, odam o'ylanib qolgani ham bo'lishi mumkin.
+Qisqa kutsa gapni bo'ladi, uzoq kutsa har bir javob kechikadi.
+
+Shuning uchun qaror **aytilgan gap bo'yicha** qabul qilinadi:
+
+| Gap qanday tugadi | Nima bo'ladi |
+|---|---|
+| «…Instagramga kir» | 1 soniyadan keyin javob beradi |
+| «…kir va» · «…keyin» · «…chunki» | davomini kutadi |
+| «aaa» · «mmm» | davomini kutadi |
+| «…aytib ber.» (nuqta bilan) | darhol javob beradi |
+
+```yaml
+audio:
+  endpointing:
+    silence_ms: 1000       # gap tugagach shuncha kutadi
+conversation:
+  continue_wait_sec: 2.0   # tugamagan gapning davomini shuncha kutadi
+  continue_tries: 2        # shuncha marta
+```
+
+Ya'ni tez javob uchun `silence_ms` ni pasaytiring; o'ylanib gapiradigan
+bo'lsangiz `continue_wait_sec` ni ko'taring. Ikkalasi bir-biriga xalaqit
+bermaydi.
+
+### Gapni bo'lganda boshi yo'qolmasin
+
+«To'xta, Instagramga kirib buni qil» — odam Jarvisning gapini bo'lib,
+darhol buyruqni aytadi. Bu yerda ikkita tuzoq bor edi.
+
+**Birinchisi:** «to'xta» so'zi gapning boshida turgani uchun butun gap
+«gapirishni to'xtat» deb o'qilib, tashlab yuborilardi. Endi faqat
+**yolg'iz** «to'xta» shunday o'qiladi; orqasidan buyruq kelsa — bu buyruq.
+
+**Ikkinchisi:** bo'lish qarori ~350 ms nutqdan keyin qabul qilinadi va
+undan keyin ham ijroni to'xtatishga vaqt ketadi. 300 ms lik preroll bunga
+yetmasdi — Jarvis gapni o'rtasidan eshitardi. Endi orqaga qarash oynasi
+alohida sozlanadi:
+
+```yaml
+conversation:
+  interrupt_lookback_ms: 1200
+```
+
+### Mikrofon o'lib qolsa — o'zi tiklanadi
+
+macOS audio qurilmani almashtirganda (quloqchin ulandi, boshqa ilova
+chiqishni o'zgartirdi) PortAudio oqimi **jimgina** to'xtaydi: na xato, na
+kadr keladi. Tashqaridan bu «Jarvis to'satdan kar bo'lib qoldi» bo'lib
+ko'rinadi — chaqiruv ham, orbni bosish ham, `⌘⇧J` ham ishlamaydi.
+
+Ikkita himoya bor:
+
+* kadr kelmasa, oqim jim kadr beradi — asosiy sikl qotib qolmaydi va
+  tugmalar ishlashda davom etadi;
+* qo'riqchi 6 soniya kadr kelmaganini sezsa, mikrofonni **o'zi qaytadan
+  ochadi** va jurnalga yozadi.
+
+Shu paytda HUD'dagi mikrofon siferblati qizaradi — ya'ni nima
+bo'layotgani ko'rinib turadi.
+
+### Musiqa chalinib turganda
+
+Siz gapira boshlaganingizda musiqa **butunlay jim bo'ladi** — pasaymaydi,
+o'chadi. Sababi oddiy: pasaytirilgan musiqani ham mikrofon eshitadi va u
+sizning gapingiz bilan aralashib, matnga aylantirishni buzadi.
+
+Gapirib bo'lganingizdan keyin avvalgi daraja qaytariladi — ya'ni Jarvis
+ishni bajarayotganda musiqa chalinaveradi.
+
+```yaml
+audio:
+  duck_while_listening: true
+  duck_volume: 0        # 0 — butunlay jim; 20 — pasaytirish
+```
+
+Quloqchin taqsangiz bu umuman kerak emas: `duck_while_listening: false`.
+
+### Ovozni sinash
+
+Almashtirgandan keyin darhol eshitib ko'rish uchun:
+
+```bash
+python -m jarvis say
+python -m jarvis say "Salom, bu sinov"
+```
+
+U avval **nima ishlatilayotganini yozadi** (provayder, ovoz, kalitlar
+joyidami), keyin o'sha bilan gapiradi. «Sozlamani o'zgartirdim, lekin ovoz
+o'sha-o'sha» degan holatda birinchi navbatda shu buyruqni bering: u
+sozlama haqiqatan o'zgarganini yoki eski nusxa ishlab turganini ajratib
+beradi.
+
+### Gapirishni almashtirish — aksent shu yerda hal bo'ladi
+
+```bash
+python -m jarvis tts              # hozir qaysi ovoz
+python -m jarvis tts azure        # haqiqiy o'zbek ovozi
+python -m jarvis tts azure uz-UZ-MadinaNeural
+```
+
+macOS'ning o'z ovozlari orasida o'zbekchasi **yo'q** — ular o'zbek matnini
+ingliz talaffuzi bilan o'qiydi. ElevenLabs tabiiyroq, lekin uning ham
+o'zbekchasi begona aksent bilan chiqadi. Yagona haqiqiy o'zbek ovozi —
+Azure'ning `uz-UZ-SardorNeural` va `uz-UZ-MadinaNeural` ovozlari.
+
+Kerak: `.env` da `AZURE_SPEECH_KEY` va `AZURE_SPEECH_REGION`.
 
 ## O'zbek tili uchun ovoz: qaysi provayderni tanlash
 
@@ -638,6 +788,207 @@ voice:
     provider: "azure"          # elevenlabs | azure | mohir | macos
     voice: "uz-UZ-SardorNeural"
 ```
+
+## Telegram: o'z akkauntingiz bilan
+
+Ikki xil Telegram ulanishi bor va ular chalkashtirilmasligi kerak.
+
+| | Bot (`@sizning_botingiz`) | **Shaxsiy akkaunt** |
+|---|---|---|
+| Kim nomidan yozadi | botning nomidan | **sizning nomingizdan** |
+| Kimga yoza oladi | faqat botga /start yozgan odamga | istalgan tanishingizga |
+| Chatlaringizni ko'radimi | yo'q | **ha** |
+| Nima uchun kerak | «ish tugadi» deb sizga xabar berish | «Ibrat nima yozdi?», «Ibratga yoz: juma muborak» |
+| Sozlash | `.env` da `TELEGRAM_BOT_TOKEN` | `python -m jarvis telegram-login` |
+
+Ya'ni «Jarvis, Ibratga yoz» degan gap faqat shaxsiy akkaunt orqali ishlaydi —
+bot buni qila olmaydi, chunki bot boshqa shaxs.
+
+### Ulash (bir marta, qo'lda)
+
+```bash
+pip install -e '.[telegram]'          # Telethon (MTProto kutubxonasi)
+python -m jarvis telegram-login
+```
+
+Buyruq ketma-ket so'raydi: **api_id**, **api_hash** (ikkalasi
+[my.telegram.org](https://my.telegram.org) → *API development tools* dan),
+telefon raqamingiz, Telegramdan kelgan **kod** va ikki bosqichli **parol**
+(agar yoqilgan bo'lsa).
+
+`api_id` va `api_hash` bir marta kiritilgach darhol saqlanadi — keyingi
+qadamlardan biri to'xtab qolsa ham (raqam xato, kod kelmadi) ularni qaytadan
+yozib o'tirmaysiz.
+
+Ikki joyda ko'p adashiladi, shuning uchun buyruq ularni o'zi to'g'rilaydi:
+
+* **Raqam mamlakat kodi bilan bo'lishi kerak** — `+998935991333`. `935991333`,
+  `998935991333` yoki `93-599-13-33` deb yozsangiz ham to'g'ri ko'rinishga
+  keltiriladi va qanday o'qilgani ko'rsatiladi.
+* **Kod SMS bilan kelmaydi** — u Telegram ilovasidagi rasmiy «Telegram»
+  chatiga keladi va har urinishda yangilanadi. Xato kiritsangiz qaytadan
+  so'raydi, muddati o'tgan bo'lsa yangi kod yubortiradi.
+
+Bularning hammasini siz terminalga o'zingiz kiritasiz. Ular modelga
+ko'rsatilmaydi, jurnalga yozilmaydi va repozitoriyga tushmaydi: api_id/api_hash
+`~/.jarvis/telegram.json` (faqat siz o'qiy olasiz), seansning o'zi esa
+`~/.jarvis/telegram.session` da saqlanadi. **Seans fayli parolga teng** — uni
+hech kimga bermang.
+
+Tekshirish: `python -m jarvis doctor` → «Telegram (shaxsiy akkaunt)» qatorida
+kirilgan akkaunt ismi chiqadi.
+
+Bekor qilish: `python -m jarvis telegram-logout` — seans Telegram tomonida ham
+bekor qilinadi va fayl o'chiriladi.
+
+### Nima deyish mumkin
+
+| Gap | Nima bo'ladi |
+|---|---|
+| «Telegramda nima yangilik?» | o'qilmagan chatlarni sanab beradi |
+| «Ibrat nima yozdi?» | o'sha chatning oxirgi xabarlarini o'qib beradi |
+| «Ibratga yoz: juma muborak» | Telegramni o'sha chatda ochadi va yuboradi |
+| «Unday emas, "Bayramingiz bilan" deb yoz» | oxirgi xabarni tuzatadi |
+| «O'chir» / «bekor qil» | oxirgi xabarni olib tashlaydi — u yerda ham yo'qoladi |
+| «Ish guruhiga o'sha shartnomani tashla» | faylni kompyuterdan topib yuboradi |
+| «Buni dumaloq video qilib yubor» | video note sifatida yuboradi |
+| «Guruhga so'rovnoma tashla: qachon uchrashamiz — ertaga, indinga» | poll yaratadi |
+| «Loyiha guruhini och, Ibrat bilan Asadni qo'sh» | guruh yaratadi va odam qo'shadi |
+| «Telegramni analiz qilib ber» | nechta chat, nima o'qilmagan, qaysi kanallar jim |
+| «Bu kanaldan chiqib ket» | guruh yoki kanaldan chiqadi |
+
+### «Bir vaqtlar tashlagan edim…»
+
+Eng ko'p kerak bo'ladigan narsa — qachonligi esdan chiqqan xabar.
+`telegram_search` butun akkaunt bo'ylab qidiradi: qaysi chat ekanini
+bilish shart emas.
+
+> — Jarvis, bir vaqtlar kimgadir shartnoma shablonini tashlagan edim, topib ber.
+>
+> — 23-fevralda Asad bilan yozishganingizda tashlagansiz. Men uni
+>   saqlangan xabarlaringizga ko'chirib qo'ydim — tez topib olasiz.
+
+Saqlangan xabarlar oddiy chat sifatida ishlaydi: `kim: men` deb qidirish
+yoki o'sha yerga yozish mumkin.
+
+### Tasdiq o'rniga — ko'rib turish
+
+Har bir xabar uchun «ha yoki yo'q deb ayting» deb turish ish jarayonini
+buzadi: aytdingiz, javob kutdingiz, keyin yuborildi. Shuning uchun boshqa
+yo'l tanlangan:
+
+1. Yuborishdan **oldin** Telegram ilovasi o'sha chatda ochiladi;
+2. xabar ko'z oldingizda paydo bo'ladi — kimga va nima ketganini ko'rasiz;
+3. xato ketsa **«tahrirla»** yoki **«o'chir»** deysiz. O'chirilgan xabar
+   qabul qiluvchining ekranidan ham yo'qoladi (`revoke`).
+
+Telegram tahrirlash va o'chirishga 48 soat beradi — undan keyin xabar
+o'zgarmas bo'lib qoladi.
+
+Eski xatti-harakat (har safar tasdiq) kerak bo'lsa, `config/jarvis.yaml` ga:
+
+```yaml
+safety:
+  rules:
+    mcp__jarvis__telegram_send: "ask"
+```
+
+### Papkalar, adminlik va guruhni boshqarish
+
+Papkalar (Telegram atamasida «folders») bot API'da umuman yo'q — bu mijoz
+xususiyati. Akkaunt ulangani uchun Jarvis ularni ham yig'a oladi:
+
+> — Jarvis, «Ish» degan papka och, ichiga Click Jobs, UzDev Jobs va
+>   Freelancer Uzni sol.
+>
+> — «Ish» papkasi yaratildi, uchta kanal qo'shildi.
+
+Bir gapda o'nlab kanalni sanab ketsangiz ham bo'ladi. Papka bo'lmasa
+yaratiladi, bo'lsa ustiga qo'shiladi; bir xil kanal ikki marta tushmaydi.
+Kanal chatlaringiz orasida bo'lishi kerak — bo'lmasa «qo'shil» deng,
+`telegram_join` uni @username yoki `t.me/+...` havolasi bilan topadi.
+
+Guruh boshqaruvi ham o'sha joyda:
+
+| Siz aytasiz | Asbob |
+| --- | --- |
+| «Alisherni Dev guruhiga qo'sh va admin qil» | `telegram_add_members` → `telegram_promote` |
+| «Uni adminlikdan ol» | `telegram_demote` |
+| «Falonchini guruhdan chiqar» | `telegram_kick` (tasdiq so'raydi) |
+| «Guruh nomini o'zgartir» | `telegram_rename` |
+| «Bu xabarni qadab qo'y» | `telegram_pin` |
+| «Bu chatni arxivga sol / ovozini o'chir» | `telegram_archive` / `telegram_mute` |
+| «Kim bor guruhda?» | `telegram_members` |
+| «Havolasini ber» | `telegram_link` |
+
+Odam qo'shilmasligi mumkin — ko'pchilikda Telegram maxfiyligi buni to'sadi.
+Bu xato emas: Jarvis sababini aytadi va taklifnoma havolasini beradi.
+
+### Nima har safar so'raladi
+
+Kundalik ishlar so'ramasdan bajariladi. Qaytarib bo'lmaydiganlari esa **har
+safar alohida** so'raydi — bir marta «ha» degan javob keyingisiga o'tmaydi,
+va `jarvis trust on` ham buni yumshata olmaydi:
+
+- chat yoki kanalni o'chirish
+- xabarlarni o'chirish
+- odamni chiqarib yuborish / bloklash
+- kanaldan chiqish
+- papkani o'chirish
+
+Ro'yxat `config/jarvis.yaml` dagi `safety.always_ask` da — o'zgartirish mumkin.
+
+Pul bilan bog'liq asboblar (sovg'a, Stars, Premium) umuman yozilmagan: Jarvis
+xato bilan ham pul sarflay olmaydi.
+
+Diqqat: shaxsiy akkauntni avtomatlashtirish Telegram qoidalari bo'yicha ehtiyot
+talab qiladi. Ommaviy tarqatma yubormang — akkaunt cheklanishi mumkin.
+
+## O'zini o'zi yaxshilash
+
+Odatiy javob — «xo'p, keyingi versiyada tuzatamiz». Bu yerda boshqacha:
+Jarvisning kodi shu kompyuterda turibdi, u esa kod yoza oladi.
+
+«Bu menga yoqmadi», «juda sekin javob beryapsan», «bunday emas, anaqa qil» —
+bularning hammasi topshiriq:
+
+1. Kamchilikni daftarga yozadi (`~/.jarvis/improvements.jsonl`).
+2. Ekranda **«O'Z USTIDA ISHLAMOQDA»** yozuvi paydo bo'ladi — orbda ham,
+   to'liq ekranli HUD'da ham. Bu yozuv turganida buyruq bermang: u kod
+   ustida, gapingiz behuda ketadi.
+3. Git'da orqaga qaytish nuqtasi saqlanadi.
+4. Kodni o'zgartiradi, so'ng testlar va linterni ishga tushiradi.
+5. Yozuv o'chadi va nima o'zgarganini aytadi. Yangi kod kuchga kirishi uchun
+   qayta ishga tushishni taklif qiladi — «ha» desangiz o'zini o'zi qayta
+   ishga tushiradi (orb yopilmaydi, bir-ikki soniyada qaytadi).
+
+Yoqmasa: **«orqaga qaytar»** — oxirgi o'zgarishlar bekor qilinadi.
+
+Jarvis o'z xatolarini ham ko'radi: javob berishda yuz bergan har bir xato
+o'sha daftarga tushadi va takrorlangani sanaladi. «O'zingni yaxshila»
+desangiz, ro'yxatdan eng ko'p takrorlanganini oladi.
+
+Ruxsat `config/jarvis.yaml` da yoqiladi:
+
+```yaml
+safety:
+  self_edit: true        # repo papkasi yoziladigan joylar ro'yxatiga qo'shiladi
+```
+
+`false` qilsangiz, Jarvis o'z kodiga umuman tegolmaydi va tizim
+ko'rsatmasidan ham bu bo'lim olib tashlanadi.
+
+Uni xavfsiz qiladigan uchta narsa:
+
+- har o'zgarishdan oldin git'da surat olinadi;
+- qayta ishga tushirishdan oldin testlar va linter ishlaydi — yiqilsa,
+  qayta ishga tushirish taklif qilinmaydi;
+- «orqaga qaytar» bitta gap.
+
+Halol cheklov: Jarvis o'zining **ishlayotgan** kodini o'zgartiradi. Ya'ni
+noto'g'ri o'zgarish uni ishlamaydigan qilib qo'yishi mumkin. Shuning uchun
+git tarixi va `self_revert` bor — lekin baribir bu ruxsatni ishonch
+ortgan sari beriladigan narsa deb qarang.
 
 ## Xavfsizlik — eng muhim qism
 
@@ -691,6 +1042,26 @@ Uch qatlam:
 Hammasi `~/.jarvis/audit.log` ga yoziladi. **Boshidan to'liq erkinlik bermang** —
 ishonch ortgan sari qoidalarni yumshating.
 
+### Tasdiq so'rashni butunlay o'chirish
+
+Har bir amal uchun «ha yoki yo'q» deb turish halaqit bera boshlasa:
+
+```bash
+python -m jarvis trust on      # holatni ko'rish: trust status
+```
+
+Terminalsiz: `scripts/**Jarvis ishonch rejimi.command**` ni ikki marta bosing.
+
+Shundan keyin «qil» deganingizda darhol bajaradi. Lekin bu «hamma narsaga
+ruxsat» degani emas — ikki qatlam ataylab qoladi:
+
+* `forbidden_patterns` — `rm -rf /`, `mkfs`, `sudo rm` hech qachon bajarilmaydi;
+* `writable_roots` — yozish faqat ruxsat etilgan papkalarda.
+
+Telegramda sizning nomingizdan yozish ham tasdiq so'ramaydi. Uning himoyasi
+boshqacha: chat ko'z oldingizda ochiladi va xato ketgan xabarni «tahrirla»
+yoki «o'chir» deb tuzatasiz.
+
 ## Halol cheklovlar
 
 Buni oldindan bilib qo'ying, keyin ko'ngil qolmasin:
@@ -731,25 +1102,25 @@ jarvis/
 │   ├── memory.py   barqaror faktlar va suhbatlar
 │   └── prompts.py  o'zbekcha tizim ko'rsatmasi
 ├── safety/         xavfsizlik darvozasi va audit
-├── tools/
-│   ├── server.py   asboblar MCP serveri (xotira, agenda, macOS, Telegram, o'zi)
-│   ├── telegram.py Telegram hisobi orqali to'liq boshqaruv (MTProto)
-│   ├── macos.py    ilovalar, Messages, Shortcuts
-│   └── channels.py Telegram bot va n8n (chiqish kanallari)
+├── tools/          xotira, agenda, macOS, Telegram, Shortcuts asboblari
+│   └── telegram_user.py  shaxsiy Telegram akkaunt (MTProto)
 ├── ui/             orb va telefon uchun HTTP + WebSocket server
 ├── selfwork.py     o'z kodini o'zgartirish: daftar, git, tekshiruv, restart
-├── tglogin.py      Telegram hisobiga kirish (`jarvis telegram-login`)
 ├── scheduler.py    vaqti kelgan ishlarni o'zi aytadi
+├── idle.py         sukut holati taymeri
 ├── bus.py          hodisa shinasi
 ├── health.py       bo'g'inlar tirikligi — HUD siferblatlari shundan
 ├── doctor.py       diagnostika (`jarvis doctor`)
 └── __main__.py     asosiy sikl
 
 ui/
-├── main.js         Electron oynasi
+├── main.js         Electron oynalari + tizim ko'rsatkichlari (CPU, disk, batareya…)
 └── renderer/
     ├── palette.js  ranglar — yagona manba
-    ├── hud.js      HUD chizuvchisi (siferblatlar, yadro, yozuv)
+    ├── hud.js      bo'g'in siferblatlari
+    ├── suit.js     zirh chizmasi (ko'zlar, reaktor)
+    ├── desktop.js  ish stoli sahnasi va rasm ustidagi nur effektlari
+    ├── live.js     wallpaperdagi raqamlarni jonlantiruvchi qatlam
     ├── orb.js      yadro bilan aloqa va kadrlar sikli
     └── phone.html  telefon sahifasi (bitta faylda)
 ```
@@ -761,8 +1132,6 @@ python -m jarvis                     # ishga tushirish
 python -m jarvis doctor              # har bir qismni alohida tekshirish
 python -m jarvis wake-test           # chaqiruv ballini o'lchash
 python -m jarvis wake-set 0.33 0.25  # chegarani sozlamaga yozish
-python -m jarvis telegram-login      # Telegram hisobini ulash (bir marta)
-python -m jarvis telegram-logout     # Telegram hisobini uzish
 ```
 
 `wake-set` sozlama faylini o'zi tahrirlaydi va izohlarni saqlaydi. Qo'lda
@@ -786,7 +1155,8 @@ Ovoz bilan aytishingiz mumkin:
 | «Har kuni ertalab 9 da iLevel hisobotini tekshir» | takrorlanuvchi vazifa yaratadi |
 | «Loyihalarim qaysi bosqichda?» | har birining holati va keyingi qadamini aytadi |
 | «iLevel loyihasi test bosqichida, keyingi qadam — deploy» | loyiha holatini yangilaydi |
-| «Alisherga yoz, kechikaman de» | aloqani topib, Telegram/SMS yuboradi |
+| «Alisherga yoz, kechikaman de» | aloqani topib, Telegram/SMS yuboradi (tasdiqdan keyin) |
+| «Telegramda nima yangilik?» | o'qilmagan chatlarni o'qib beradi |
 | «Bugun nima ishlarim bor?» | kunlik ro'yxatni aytadi |
 | «Shu papkadagi kodni ko'r va testlarni ishga tushir» | o'qiydi, bajaradi, natijani aytadi |
 | «Roshkaning Ishondingmi qo'shig'ini qo'y» | YouTube'dan topib, brauzerda qo'yadi |

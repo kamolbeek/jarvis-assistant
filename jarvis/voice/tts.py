@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import subprocess
+import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 
@@ -238,22 +240,79 @@ class MohirTts(TtsProvider):
 class MacosSayTts(TtsProvider):
     """macOS `say` — o'zbek ovozi yo'q, lekin kalitlarsiz darhol sinab ko'rish uchun qulay."""
 
-    def __init__(self, voice: str = "Samantha", speed: float = 1.0) -> None:
+    def __init__(self, voice: str = "Samantha", speed: float = 1.0,
+                 gender: str = "female") -> None:
         self.sample_rate = 22050
         self._voice = voice
+        self._gender = gender
         self._rate = int(175 * speed)
+        self._checked = False
+
+    def _installed_voices(self) -> list[str]:
+        """`say -v ?` ro'yxati. Nom ikki so'zli bo'lishi mumkin ("Grandma (Enhanced)")."""
+        try:
+            out = subprocess.run(["say", "-v", "?"], capture_output=True,
+                                 text=True, timeout=5).stdout
+        except Exception:
+            return []
+        names = []
+        for line in out.splitlines():
+            # "Samantha           en_US    # Hello, my name is Samantha."
+            head = line.split("#", 1)[0].rstrip()
+            parts = head.rsplit(None, 1)          # oxirgi ustun — til kodi
+            if len(parts) == 2 and parts[0].strip():
+                names.append(parts[0].strip())
+        return names
+
+    def _resolve_voice(self) -> str:
+        """Sozlamadagi ovoz shu Mac'da bormi? Bo'lmasa — mavjudiga tushamiz.
+
+        Sozlamada ko'pincha ElevenLabs ovozi (masalan «Aria») turadi. `say`
+        uni bilmaydi va butun gapirish yiqiladi — shuning uchun tekshiramiz.
+        """
+        if self._checked:
+            return self._voice
+        self._checked = True
+        names = self._installed_voices()
+        if not names:
+            return self._voice
+        if self._voice in names:
+            return self._voice
+        for fallback in (_default_voice("macos", self._gender), "Samantha", "Daniel"):
+            if fallback in names:
+                log.warning("macOS'da «%s» ovozi yo'q — «%s» ishlatiladi", self._voice, fallback)
+                self._voice = fallback
+                return self._voice
+        log.warning("macOS'da «%s» ovozi yo'q — tizimning standart ovozi ishlatiladi", self._voice)
+        self._voice = ""          # bo'sh bo'lsa, `-v` umuman qo'shilmaydi
+        return self._voice
 
     async def stream(self, text: str) -> AsyncIterator[np.ndarray]:
         if not shutil.which("say"):
             raise RuntimeError("`say` buyrug'i topilmadi — bu backend faqat macOS'da ishlaydi")
 
+        voice = await asyncio.to_thread(self._resolve_voice)
+
         def run() -> bytes:
-            result = subprocess.run(
-                ["say", "-v", self._voice, "-r", str(self._rate),
-                 "--data-format=LEI16@22050", "-o", "-", text],
-                capture_output=True, check=True,
-            )
-            return result.stdout
+            # `say -o -` (stdout'ga yozish) ba'zi macOS versiyalarida ishlamaydi
+            # va butun gapirish yiqiladi. Vaqtinchalik fayl har joyda ishlaydi.
+            handle, path = tempfile.mkstemp(prefix="jarvis-say-", suffix=".wav")
+            os.close(handle)
+            try:
+                args = ["say"]
+                if voice:
+                    args += ["-v", voice]
+                args += ["-r", str(self._rate),
+                         "--data-format=LEI16@22050", "--file-format=WAVE",
+                         "-o", path, text]
+                subprocess.run(args, capture_output=True, check=True)
+                with open(path, "rb") as file:
+                    return file.read()
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
         yield _pcm_from_wav(await asyncio.to_thread(run))
 
@@ -309,8 +368,20 @@ class Speaker:
 
         self._stop.clear()
         self._speaking = True
+
+        # Sozlamada dinamik nomi turgan bo'lishi mumkin — indeksga aylantiramiz.
+        # Topilmasa jim qolgandan ko'ra standart chiqishdan gapirgani yaxshi.
+        from ..audio.devices import resolve_output_device
+
+        device = self._device
+        try:
+            device = resolve_output_device(self._device)
+        except ValueError as exc:
+            log.warning("%s\nTizim standart chiqishi bilan davom etamiz.", exc)
+            device = None
+
         stream = sd.OutputStream(
-            samplerate=sample_rate, channels=1, dtype="int16", device=self._device
+            samplerate=sample_rate, channels=1, dtype="int16", device=device
         )
         stream.start()
         completed = True
@@ -376,5 +447,6 @@ def build_tts(cfg: dict) -> TtsProvider:
             voice=(voice if voice and not voice.startswith("uz-")
                    else _default_voice("macos", gender)),
             speed=speed,
+            gender=gender,
         )
     raise ValueError(f"Noma'lum TTS provayderi: {provider}")

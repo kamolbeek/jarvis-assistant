@@ -18,11 +18,16 @@ Misollar:
   jarvis            Jarvis'ni ishga tushirish
   jarvis doctor     Har bir qismni alohida tekshirish (birinchi ishga tushirishdan oldin)
   jarvis wake-test  Chaqiruv ballini o'lchash va chegarani sozlash
+  jarvis mic-test   Mikrofonlarni yonma-yon o'lchash (qaysi biri toza signal beradi)
   jarvis wake-set 0.33 0.25   Chegarani sozlamaga yozish
+  jarvis telegram-login   Shaxsiy Telegram akkauntga kirish (bir marta)
+  jarvis telegram-logout  Telegram seansini bekor qilish
+  jarvis stt              Eshitish (STT) provayderini ko'rish/almashtirish
+  jarvis tts azure        Gapirish ovozini almashtirish (o'zbekcha aksent)
+  jarvis say              Hozirgi sozlama bilan bitta jumlani aytib ko'rish
+  jarvis trust status     Ishonch rejimi yoqilganmi
   jarvis trust on   Har bir amal uchun tasdiq so'ramasin
   jarvis trust off  Tasdiqni qaytarish
-  jarvis telegram-login    Telegram hisobini ulash (bir marta, shu terminalda)
-  jarvis telegram-logout   Telegram hisobini uzish
   jarvis -v         Batafsil jurnal bilan
 """
 
@@ -49,31 +54,47 @@ def main() -> int:
         "command",
         nargs="?",
         default="run",
-        choices=["run", "doctor", "wake-test", "wake-set", "trust",
+        choices=["run", "doctor", "wake-test", "wake-set", "mic-test", "trust", "stt", "tts", "say",
                  "telegram-login", "telegram-logout"],
         help="run — ishga tushirish (standart); doctor — diagnostika; "
              "wake-test — chaqiruv ballini o'lchash; wake-set — chegarani yozish; "
-             "trust on|off — tasdiq so'rashni o'chirish/yoqish; "
-             "telegram-login / telegram-logout — Telegram hisobini ulash/uzish",
+             "mic-test — mikrofonlarni o'lchash; "
+             "stt / tts — eshitish va gapirish provayderi; "
+             "say — ovozni sinash; "
+             "telegram-login / telegram-logout — shaxsiy Telegram akkaunt; "
+             "trust on|off|status — tasdiq so'rashni o'chirish/yoqish",
     )
-    parser.add_argument("values", nargs="*", help="wake-set uchun: chegara [shubhali]")
+    parser.add_argument("values", nargs="*",
+                        help="wake-set uchun: chegara [shubhali]; stt uchun: provayder")
     parser.add_argument("-v", "--verbose", action="store_true", help="Batafsil jurnal")
     args = parser.parse_args()
+
+    if args.command in ("telegram-login", "telegram-logout"):
+        logging.basicConfig(level=logging.ERROR)
+        from .telegramlogin import main as telegram_main
+
+        return telegram_main(["logout" if args.command == "telegram-logout" else "login"])
+
+    if args.command == "stt":
+        from .sttswitch import apply as apply_stt
+
+        return apply_stt(args.values)
+
+    if args.command == "say":
+        logging.basicConfig(level=logging.ERROR)
+        from .saytest import main as say_main
+
+        return say_main(args.values)
+
+    if args.command == "tts":
+        from .sttswitch import apply_tts
+
+        return apply_tts(args.values)
 
     if args.command == "trust":
         from .trust import apply
 
         return apply(args.values[0] if args.values else "")
-
-    if args.command in ("telegram-login", "telegram-logout"):
-        # Kirish oqimi kod va parol so'raydi — jurnal ularni to'sib qo'ymasin.
-        logging.basicConfig(level=logging.ERROR)
-        # `.env` dagi api_id/api_hash shu yerda kerak bo'ladi.
-        from .config import load_config
-        from .tglogin import main as telegram_main
-
-        load_config()
-        return telegram_main("logout" if args.command.endswith("logout") else "login")
 
     if args.command == "wake-set":
         from .waketune import apply_thresholds
@@ -92,6 +113,12 @@ def main() -> int:
         from .waketune import main as wake_main
 
         return wake_main()
+
+    if args.command == "mic-test":
+        logging.basicConfig(level=logging.ERROR)
+        from .mictest import main as mic_main
+
+        return mic_main(args.values)
 
     configure_logging(args.verbose)
 

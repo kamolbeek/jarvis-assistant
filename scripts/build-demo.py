@@ -20,6 +20,7 @@ SOURCES = [
     ROOT / "ui" / "renderer" / "suit.js",
     ROOT / "ui" / "renderer" / "hud.js",
     ROOT / "ui" / "renderer" / "desktop.js",
+    ROOT / "ui" / "renderer" / "live.js",
 ]
 
 MARKER = "/*INJECT*/"

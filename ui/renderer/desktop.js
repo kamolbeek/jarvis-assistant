@@ -368,6 +368,22 @@ const DESK = (() => {
    * hammasi ko'rinadi, lekin ko'zlar o'chgan va yorug'lik pasaygan — Jarvis
    * hali uyquda. Foydalanuvchi gapirganda 1 ga ko'tariladi.
    */
+  // Ko'z va reaktor yorqinligi. Wallpaper rejimida sahna chizilmaydi, lekin
+  // bu qiymatlar baribir kerak — shuning uchun alohida funksiya.
+  function lights(f) {
+    const t = f.t || 0;
+    const boot = f.boot === undefined ? 1 : Math.max(0, Math.min(1, f.boot));
+    const mood = P.STATE_MOOD[f.state] || P.STATE_MOOD.idle;
+    const flash = f.flash || 0;
+    // Ko'zlar: kutishda xira, uyg'onganda chaqnaydi, o'ylashda sekin pulsatsiya.
+    // Uyqu holatida butunlay o'chadi — bu eng ko'zga tashlanadigan belgi.
+    let eyes = 0.25 + mood.glow * 0.5 + flash * 0.6;
+    if (f.state === "thinking") eyes = 0.45 + Math.abs(Math.sin(t * 2.2)) * 0.3;
+    eyes = Math.min(1, eyes) * boot * boot;
+    const surge = Math.min(1, mood.core * 0.6 + flash + (f.level || 0) * 0.6) * boot;
+    return { eyes, surge };
+  }
+
   function draw(ctx, f) {
     const { width: W, height: H, t } = f;
     const L = layout(W, H);
@@ -378,11 +394,7 @@ const DESK = (() => {
     const active = f.state === "listening" || f.state === "speaking";
     const energy = Math.min(1, mood.glow + f.flash * 0.5) * (0.28 + 0.72 * boot);
 
-    // Ko'zlar: kutishda xira, uyg'onganda chaqnaydi, o'ylashda sekin pulsatsiya.
-    // Uyqu holatida butunlay o'chadi — bu eng ko'zga tashlanadigan belgi.
-    let eyes = 0.25 + mood.glow * 0.5 + f.flash * 0.6;
-    if (f.state === "thinking") eyes = 0.45 + Math.abs(Math.sin(t * 2.2)) * 0.3;
-    eyes = Math.min(1, eyes) * boot * boot;
+    const eyes = lights(f).eyes;
 
     // Rasm rejimida to'r chizilmaydi — foydalanuvchi rasmi o'zi to'liq fon
     if (!f.figure) drawGrid(ctx, W, H);
@@ -573,7 +585,7 @@ const DESK = (() => {
     return null;
   }
 
-  return { draw, hit, layout, drawFigureFx, drawEmblemPulse, BUNDLED };
+  return { draw, hit, layout, lights, drawVeil, drawFigureFx, drawEmblemPulse, BUNDLED };
 })();
 
 if (typeof module !== "undefined") module.exports = DESK;

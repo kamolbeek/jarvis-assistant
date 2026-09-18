@@ -155,13 +155,13 @@ async def test_always_ask_repeats_the_question():
     tasdiqlangan «kanalni o'chir» keyingisini jimgina o'tkazib yuborardi.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        gate = _gate(tmp, always_ask=["mcp__jarvis__tg_delete_chat"])
+        gate = _gate(tmp, always_ask=["mcp__jarvis__telegram_delete_chat"])
         asked: list[int] = []
         _auto_answer(gate, True, asked)
 
         for _ in range(2):
             decision = await gate.evaluate(
-                "mcp__jarvis__tg_delete_chat", {"qayerda": "Eski kanal"}
+                "mcp__jarvis__telegram_delete_chat", {"qayerda": "Eski kanal"}
             )
             assert decision.allowed is True
 
@@ -172,13 +172,13 @@ async def test_always_ask_overrides_allow_rule():
     with tempfile.TemporaryDirectory() as tmp:
         gate = _gate(
             tmp,
-            rules={"mcp__jarvis__tg_delete_chat": "allow"},
-            always_ask=["mcp__jarvis__tg_delete_chat"],
+            rules={"mcp__jarvis__telegram_delete_chat": "allow"},
+            always_ask=["mcp__jarvis__telegram_delete_chat"],
         )
         asked: list[int] = []
         _auto_answer(gate, True, asked)
 
-        decision = await gate.evaluate("mcp__jarvis__tg_delete_chat", {"qayerda": "K"})
+        decision = await gate.evaluate("mcp__jarvis__telegram_delete_chat", {"qayerda": "K"})
 
         assert decision.allowed is True
         assert len(asked) == 1, "«allow» bo'lsa ham so'ralishi kerak edi"
@@ -187,8 +187,8 @@ async def test_always_ask_overrides_allow_rule():
 async def test_ordinary_telegram_action_passes_without_asking():
     """Kundalik amallar so'ramasdan o'tadi — yordamchi tugmaga aylanmasin."""
     with tempfile.TemporaryDirectory() as tmp:
-        gate = _gate(tmp, rules={"mcp__jarvis__tg_send": "allow"})
-        decision = await gate.evaluate("mcp__jarvis__tg_send", {"matn": "salom"})
+        gate = _gate(tmp, rules={"mcp__jarvis__telegram_send": "allow"})
+        decision = await gate.evaluate("mcp__jarvis__telegram_send", {"matn": "salom"})
         assert decision.allowed is True
         assert decision.asked is False
 
@@ -197,10 +197,10 @@ async def test_deny_still_wins_over_always_ask():
     with tempfile.TemporaryDirectory() as tmp:
         gate = _gate(
             tmp,
-            rules={"mcp__jarvis__tg_delete_chat": "deny"},
-            always_ask=["mcp__jarvis__tg_delete_chat"],
+            rules={"mcp__jarvis__telegram_delete_chat": "deny"},
+            always_ask=["mcp__jarvis__telegram_delete_chat"],
         )
-        decision = await gate.evaluate("mcp__jarvis__tg_delete_chat", {"qayerda": "K"})
+        decision = await gate.evaluate("mcp__jarvis__telegram_delete_chat", {"qayerda": "K"})
         assert decision.allowed is False
         assert decision.asked is False
 

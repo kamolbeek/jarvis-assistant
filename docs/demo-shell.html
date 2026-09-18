@@ -38,14 +38,6 @@
   body.wallpaper #links, body.wallpaper #weather, body.wallpaper #disk,
   body.wallpaper #clock, body.wallpaper #folders, body.wallpaper #vertical-tag { display: none; }
   /* Jonli ma'lumotlar chizig'i — rasm ostidagi qatorda */
-  #live-pill {
-    left: 50%; bottom: 8px; transform: translateX(-50%);
-    padding: 5px 14px; border-radius: 8px;
-    background: rgba(3, 8, 12, 0.92); border: 1px solid var(--edge);
-    font: 600 11px var(--mono); letter-spacing: 0.1em; color: var(--cyan);
-    display: none; white-space: nowrap;
-  }
-  body.wallpaper #live-pill { display: block; }
 
   /* ---------- umumiy HUD bloklari ---------- */
 
@@ -195,7 +187,7 @@
   /* ---------- demo boshqaruvi (haqiqiy ish stolida yo'q) ---------- */
 
   #drawer {
-    right: 26px; top: 26px;
+    left: 50%; top: 500px; transform: translateX(-50%);
     z-index: 5;
   }
   #drawer summary {
@@ -317,14 +309,13 @@
   </div>
 
   <!-- Suhbat matni -->
-  <div class="blk" id="live-pill"></div>
   <div class="blk" id="caption"><b></b><span></span></div>
 
   <!-- Emblema bosilganda: bo'g'in siferblatlari -->
   <div class="blk" id="dial-panel"><canvas id="dial-canvas"></canvas></div>
 
   <!-- Demo boshqaruvi -->
-  <details class="blk" id="drawer" open>
+  <details class="blk" id="drawer">
     <summary>DEMO BOSHQARUVI</summary>
     <div class="body">
       <button class="wide" id="play">▶ Suhbat: qarsakdan javobgacha</button>
@@ -360,6 +351,22 @@ let emblemHover = false;
 
 // Tizim ko'rsatkichlari — demo uchun jonli taqlid
 const stats = { cpu: 18, ram: 58, disk: 62 };
+
+// Wallpaperdagi raqamlar shu obyektdan o'qiladi (haqiqiy ilovada — kompyuterdan)
+const live = {
+  cpu: 18, ram: 58, swap: 12, ramUsedGb: 9.3, ramTotalGb: 16,
+  disks: [
+    { name: "C", usedGb: 280.7, totalGb: 916.7, percent: 30.6 },
+    { name: "D", usedGb: 13.2, totalGb: 14.7, percent: 89.8 },
+  ],
+  battery: { percent: 78, charging: false },
+  net: { down: 1.2e6, up: 240e3, totalGb: 653.5 },
+  volume: 45,
+  trash: { count: 23, sizeGb: 2.57 },
+  weather: { today: { max: 31, min: 19, code: 0 }, tomorrow: { max: 29, min: 18, code: 2 } },
+  media: { title: "Back In Black", artist: "AC/DC", playing: true, position: 74, duration: 255 },
+  hover: null,
+};
 
 // Bo'g'inlar — siferblat paneli uchun
 const LABELS = { mic:"MIKROFON", wake:"UYG'OTISH", stt:"NUTQ", brain:"MIYA", tts:"OVOZ",
@@ -542,50 +549,40 @@ if (FIGURE_B64 && !FIGURE_B64.startsWith("/*")) {
   };
 }
 
-// Bosiladigan maydonlar: rasmga nisbatan koordinatada qidiramiz
-function hotspotAt(clientX, clientY) {
+// Bosiladigan maydonlar — hammasi live.js da, rasmning o'z piksellarida
+function zoneAt(clientX, clientY) {
   if (!bundled) return null;
   const rect = figureRect();
   if (!rect) return null;
   const nx = (clientX - rect.x) / rect.w;
   const ny = (clientY - rect.y) / rect.h;
-  const e = DESK.BUNDLED.emblem;
-  if (Math.hypot(nx - e.c[0], ny - e.c[1]) <= e.r * 0.6) return { emblem: true, title: "Bo'g'inlar paneli" };
-  for (const h of DESK.BUNDLED.hotspots) {
-    if (h.circle) {
-      if (Math.hypot(nx - h.circle[0], ny - h.circle[1]) <= h.circle[2]) return h;
-    } else if (h.rect) {
-      const [x, y, w, hh] = h.rect;
-      if (nx >= x && nx <= x + w && ny >= y && ny <= y + hh) return h;
-    }
-  }
-  return null;
+  if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return null;
+  return LIVE.hitTest(nx, ny);
 }
 
 document.addEventListener("mousemove", (e) => {
-  const h = hotspotAt(e.clientX, e.clientY);
-  document.body.style.cursor = h ? "pointer" : "";
+  const zone = zoneAt(e.clientX, e.clientY);
+  live.hover = zone;
+  document.body.style.cursor = zone ? "pointer" : "";
 });
 
 document.addEventListener("click", (e) => {
   if (e.target.closest("#drawer") || e.target.closest("#dial-panel")) return;
-  const h = hotspotAt(e.clientX, e.clientY);
-  if (!h) return;
-  if (h.emblem) { dialPanel.classList.toggle("on"); return; }
-  if (h.activate) { setState("wake"); setTimeout(() => setState("listening"), 900); caption("Jarvis", "Buyrug'ingizni kutyapman."); return; }
-  if (h.url) { window.open(h.url, "_blank"); return; }
-  if (h.app) caption("Demo", `Haqiqiy ish stolida «${h.title}» ochiladi`);
-  if (h.folder) caption("Demo", `Haqiqiy ish stolida «${h.title}» papkasi ochiladi`);
+  const zone = zoneAt(e.clientX, e.clientY);
+  if (!zone) return;
+  if (zone.dials) { dialPanel.classList.toggle("on"); return; }
+  if (zone.activate) { document.getElementById("play").click(); return; }
+  if (zone.url) { window.open(zone.url, "_blank"); return; }
+  if (zone.app) { caption("Demo", `Haqiqiy ish stolida «${zone.title}» ochiladi`); return; }
+  if (zone.folder) { caption("Demo", `Haqiqiy ish stolida «${zone.title}» papkasi ochiladi`); return; }
+  if (zone.trash) { caption("Demo", "Haqiqiy ish stolida axlat qutisi ochiladi"); return; }
+  if (zone.media) { caption("Demo", `Media: ${zone.title}`); return; }
+  if (zone.volume) {
+    const rect = figureRect();
+    live.volume = LIVE.volumeAt((e.clientY - rect.y) / rect.h);
+    caption("Demo", `Tizim ovozi ${live.volume}% ga qo'yiladi`);
+  }
 });
-
-// Jonli qator: soat + CPU/RAM/disk — rasm ostida
-setInterval(() => {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  document.getElementById("live-pill").textContent =
-    `${hh}:${mm}  ·  CPU ${Math.round(stats.cpu)}%  ·  RAM ${Math.round(stats.ram)}%  ·  DISK ${Math.round(stats.disk)}%`;
-}, 1000);
 
 function fxResize() {
   const dpr = window.devicePixelRatio || 1;
@@ -657,12 +654,20 @@ frame = function patchedFrame(now) {
   flash *= 0.93; if (flash < 0.01) flash = 0;
 
   const rect = figureOn ? figureRect() : null;
-  lastFx = DESK.draw(ctx, {
-    width: W, height: H, t, state, level: smoothLevel, flash, stats,
-    emblemHover, figure: figureOn, figureRect: bundled ? rect : null,
-  }) || lastFx;
+  if (bundled) {
+    // Wallpaper rejimi: dizayn o'zgarmaydi — sahna canvas'i bo'sh, hamma
+    // ish rasm ustidagi jonli qatlamda.
+    ctx.clearRect(0, 0, W, H);
+    lastFx = DESK.lights({ state, flash, level: smoothLevel, boot: 1, t });
+  } else {
+    lastFx = DESK.draw(ctx, {
+      width: W, height: H, t, state, level: smoothLevel, flash, stats,
+      emblemHover, figure: figureOn, figureRect: null,
+    }) || lastFx;
+  }
 
   fxCtx.clearRect(0, 0, innerWidth, innerHeight);
+  if (bundled && rect) LIVE.draw(fxCtx, figureImg, rect, live, t);
   if (figureOn && figureCal && rect) {
     DESK.drawFigureFx(fxCtx, rect, figureCal, t, lastFx.eyes, lastFx.surge);
     if (bundled) DESK.drawEmblemPulse(fxCtx, rect, DESK.BUNDLED.emblem, t, lastFx.eyes);
@@ -678,6 +683,21 @@ frame = function patchedFrame(now) {
   }
   requestAnimationFrame(frame);
 };
+
+// Demo uchun jonli o'zgarish: CPU/RAM/tarmoq sekin tebranadi
+setInterval(() => {
+  live.cpu = Math.max(4, Math.min(96, live.cpu + (Math.random() - 0.5) * 16));
+  live.ram = Math.max(35, Math.min(88, live.ram + (Math.random() - 0.5) * 5));
+  live.swap = Math.max(0, Math.min(60, live.swap + (Math.random() - 0.5) * 4));
+  live.ramUsedGb = live.ramTotalGb * live.ram / 100;
+  live.net = {
+    down: Math.max(0, live.net.down + (Math.random() - 0.5) * 1.6e6),
+    up: Math.max(0, live.net.up + (Math.random() - 0.5) * 3e5),
+    totalGb: live.net.totalGb + 0.002,
+  };
+  live.media = { ...live.media, position: (live.media.position + 2) % live.media.duration };
+  stats.cpu = live.cpu; stats.ram = live.ram;
+}, 2000);
 
 window.addEventListener("resize", () => { resize(); fxResize(); });
 resize();
