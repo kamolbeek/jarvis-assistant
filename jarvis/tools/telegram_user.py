@@ -1203,3 +1203,584 @@ async def delete_chat(chat: str, everyone: bool = False) -> str:
 
     log.warning("Telegram: «%s» o'chirildi (faqat sizda)", name)
     return f"«{name}» o'chirildi (faqat sizda)"
+
+
+# --- Odamlar: bloklash va kontaktlar ----------------------------------------
+
+
+async def block(who: str, unblock: bool = False) -> str:
+    """Odamni bloklaydi yoki blokdan chiqaradi.
+
+    Guruhdan chiqarish bilan aralashtirmang: bu butun akkaunt darajasida —
+    u sizga umuman yoza olmaydi va profilingizni ko'rmaydi.
+    """
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+    client = await get_client()
+    entity, name = await resolve(client, who)
+
+    request = functions.contacts.UnblockRequest if unblock else functions.contacts.BlockRequest
+    try:
+        await client(request(entity))
+    except Exception as exc:  # noqa: BLE001 — Telethon xatolari xilma-xil
+        raise TelegramUserError(f"Bajarib bo'lmadi: {exc}") from exc
+
+    log.info("Telegram: %s — %s", name, "blokdan chiqarildi" if unblock else "bloklandi")
+    return f"{name} {'blokdan chiqarildi' if unblock else 'bloklandi'}"
+
+
+async def blocked_list(limit: int = 50) -> list[str]:
+    """Bloklanganlar ro'yxati."""
+    telethon = _import_telethon()
+    client = await get_client()
+    result = await client(telethon.tl.functions.contacts.GetBlockedRequest(
+        offset=0, limit=max(1, min(int(limit), 100)),
+    ))
+    return [_name_of(user) for user in getattr(result, "users", [])]
+
+
+async def contacts_list(query: str = "") -> list[dict[str, Any]]:
+    """Telegram kontaktlari (Jarvisning o'z aloqalar daftari emas)."""
+    telethon = _import_telethon()
+    client = await get_client()
+    result = await client(telethon.tl.functions.contacts.GetContactsRequest(hash=0))
+
+    needle = query.strip().casefold()
+    rows: list[dict[str, Any]] = []
+    for user in getattr(result, "users", []):
+        name = _name_of(user)
+        if needle and needle not in name.casefold():
+            continue
+        rows.append({
+            "ism": name,
+            "username": f"@{user.username}" if user.username else "",
+            "telefon": user.phone or "",
+        })
+    return rows
+
+
+async def contact_add(phone: str, first_name: str, last_name: str = "") -> str:
+    """Telefon raqami bo'yicha kontakt qo'shadi."""
+    telethon = _import_telethon()
+    functions, types = telethon.tl.functions, telethon.tl.types
+    client = await get_client()
+
+    number = phone.strip()
+    if not number:
+        raise TelegramUserError("Telefon raqam kerak")
+
+    result = await client(functions.contacts.ImportContactsRequest([
+        types.InputPhoneContact(
+            client_id=0, phone=number,
+            first_name=first_name.strip() or number, last_name=last_name.strip(),
+        )
+    ]))
+    if not getattr(result, "users", []):
+        raise TelegramUserError(
+            f"{number} Telegramda topilmadi (yoki maxfiylik sozlamasi to'sdi)"
+        )
+    return f"Kontakt qo'shildi: {_name_of(result.users[0])}"
+
+
+async def contact_delete(who: str) -> str:
+    """Kontaktni o'chiradi. Chat va yozishmalar joyida qoladi."""
+    telethon = _import_telethon()
+    client = await get_client()
+    entity, name = await resolve(client, who)
+    await client(telethon.tl.functions.contacts.DeleteContactsRequest([entity]))
+    return f"{name} kontaktlardan o'chirildi"
+
+
+# --- Xabar ustidagi amallar -------------------------------------------------
+
+
+async def react(chat: str, message_id: int, emoji: str = "👍", remove: bool = False) -> str:
+    """Xabarga reaksiya qo'yadi yoki olib tashlaydi."""
+    telethon = _import_telethon()
+    functions, types = telethon.tl.functions, telethon.tl.types
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+
+    reaction = None if remove else [types.ReactionEmoji(emoticon=emoji)]
+    try:
+        await client(functions.messages.SendReactionRequest(
+            peer=entity, msg_id=int(message_id), reaction=reaction,
+        ))
+    except Exception as exc:  # noqa: BLE001 — emoji qo'llab-quvvatlanmasligi mumkin
+        raise TelegramUserError(f"Reaksiya qo'yib bo'lmadi: {exc}") from exc
+
+    return f"«{name}»: reaksiya {'olindi' if remove else emoji}"
+
+
+async def mark_read(chat: str) -> str:
+    """Chatni o'qilgan deb belgilaydi."""
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+    await client.send_read_acknowledge(entity)
+    return f"«{name}» o'qilgan deb belgilandi"
+
+
+async def send_gif(chat: str, query: str) -> str:
+    """GIF yuboradi: @gif inline botidan qidiradi.
+
+    Telegram mijozlari ham aynan shunday qiladi — GIF qidiruvi alohida API
+    emas, o'sha inline bot. Topilmasa, saqlangan GIF'lardan olamiz.
+    """
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+
+    text = query.strip()
+    try:
+        bot = await client.get_input_entity("gif")
+        results = await client(functions.messages.GetInlineBotResultsRequest(
+            bot=bot, peer=entity, query=text, offset="",
+        ))
+        if results.results:
+            chosen = random.choice(results.results[:10])
+            await client(functions.messages.SendInlineBotResultRequest(
+                peer=entity, query_id=results.query_id, id=chosen.id, hide_via=True,
+            ))
+            await open_chat(entity)
+            return f"«{name}» ga GIF yuborildi: {text}"
+    except Exception as exc:  # noqa: BLE001 — inline bot javob bermasligi mumkin
+        log.warning("GIF qidiruvi ishlamadi: %s", exc)
+
+    saved = await client(functions.messages.GetSavedGifsRequest(hash=0))
+    gifs = list(getattr(saved, "gifs", []))
+    if not gifs:
+        raise TelegramUserError(f"«{text}» uchun GIF topilmadi")
+    await client.send_file(entity, random.choice(gifs))
+    await open_chat(entity)
+    return f"«{name}» ga saqlangan GIF yuborildi"
+
+
+async def send_later(chat: str, text: str, when: Any) -> str:
+    """Xabarni belgilangan vaqtda yuboradi (Telegram o'zi jo'natadi).
+
+    Jarvisning eslatmasidan farqi: kompyuter o'chiq bo'lsa ham yuboriladi,
+    chunki xabar Telegram serverida turadi.
+    """
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+    if not text.strip():
+        raise TelegramUserError("Xabar matni kerak")
+    try:
+        await client.send_message(entity, text, schedule=when)
+    except Exception as exc:  # noqa: BLE001 — vaqt o'tmishda bo'lishi mumkin
+        raise TelegramUserError(f"Rejaga qo'yib bo'lmadi: {exc}") from exc
+    return f"«{name}» ga rejalashtirildi"
+
+
+async def scheduled(chat: str) -> list[dict[str, Any]]:
+    """Shu chat uchun rejalashtirilgan xabarlar."""
+    telethon = _import_telethon()
+    client = await get_client()
+    entity, _ = await resolve(client, chat)
+    result = await client(telethon.tl.functions.messages.GetScheduledHistoryRequest(
+        peer=entity, hash=0,
+    ))
+    return [
+        {"id": m.id, "vaqt": _when(m), "matn": (m.message or "")[:200]}
+        for m in getattr(result, "messages", [])
+    ]
+
+
+# --- Storiyalar -------------------------------------------------------------
+
+
+async def story_post(path: str, caption: str = "", everyone: bool = True) -> str:
+    """Storiya qo'yadi. `path` — rasm yoki video fayl yo'li."""
+    telethon = _import_telethon()
+    functions, types = telethon.tl.functions, telethon.tl.types
+    client = await get_client()
+
+    source = Path(path).expanduser()
+    if not source.exists():
+        raise TelegramUserError(f"Fayl topilmadi: {source}")
+
+    uploaded = await client.upload_file(str(source))
+    suffix = source.suffix.lower()
+    if suffix in (".mp4", ".mov", ".m4v"):
+        media = types.InputMediaUploadedDocument(
+            file=uploaded, mime_type="video/mp4",
+            attributes=[types.DocumentAttributeVideo(
+                duration=0, w=0, h=0, supports_streaming=True,
+            )],
+        )
+    else:
+        media = types.InputMediaUploadedPhoto(file=uploaded)
+
+    # Kimga ko'rinishi: hammaga yoki faqat kontaktlarga.
+    rules = ([types.InputPrivacyValueAllowAll()] if everyone
+             else [types.InputPrivacyValueAllowContacts()])
+
+    try:
+        await client(functions.stories.SendStoryRequest(
+            peer=types.InputPeerSelf(), media=media,
+            privacy_rules=rules, caption=caption.strip() or None,
+            random_id=random.getrandbits(63),
+        ))
+    except Exception as exc:  # noqa: BLE001 — Premium yoki format cheklovi
+        raise TelegramUserError(f"Storiya qo'yib bo'lmadi: {exc}") from exc
+
+    log.info("Telegram: storiya qo'yildi — %s", source.name)
+    return f"Storiya qo'yildi: {source.name}"
+
+
+async def stories_of(who: str = "men") -> list[dict[str, Any]]:
+    """Kimningdir (yoki o'zingizning) faol storiyalaringiz."""
+    telethon = _import_telethon()
+    client = await get_client()
+    entity, name = await resolve(client, who)
+    result = await client(telethon.tl.functions.stories.GetPeerStoriesRequest(peer=entity))
+    stories = getattr(getattr(result, "stories", None), "stories", [])
+    return [
+        {
+            "id": s.id,
+            "kim": name,
+            "izoh": (getattr(s, "caption", "") or "")[:200],
+            "korilgan": getattr(getattr(s, "views", None), "views_count", 0),
+        }
+        for s in stories
+    ]
+
+
+async def story_delete(story_ids: list[int]) -> str:
+    """O'z storiyalaringizni o'chiradi."""
+    telethon = _import_telethon()
+    types = telethon.tl.types
+    client = await get_client()
+    if not story_ids:
+        raise TelegramUserError("Qaysi storiyani o'chirishni ayting")
+    await client(telethon.tl.functions.stories.DeleteStoriesRequest(
+        peer=types.InputPeerSelf(), id=[int(i) for i in story_ids],
+    ))
+    return f"{len(story_ids)} ta storiya o'chirildi"
+
+
+# --- Ovozli chat va jonli efir ----------------------------------------------
+#
+# Halol chegara: Jarvis ovozli chatni OCHADI va jonli efir uchun havola
+# beradi, lekin o'zi gapirmaydi va video uzatmaydi. Buning uchun WebRTC
+# oqimi kerak — bu alohida katta qism (pytgcalls) va ovozli yordamchining
+# mikrofoni bilan to'qnashadi. Efirni OBS yoki shunga o'xshash dastur
+# quyidagi havola bilan uzatadi.
+
+
+async def voice_chat_start(chat: str, title: str = "", rtmp: bool = False) -> str:
+    """Guruh/kanalda ovozli chat (yoki efir) ochadi."""
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+
+    try:
+        await client(functions.phone.CreateGroupCallRequest(
+            peer=entity, random_id=random.getrandbits(31),
+            title=title.strip() or None, rtmp_stream=True if rtmp else None,
+        ))
+    except Exception as exc:  # noqa: BLE001 — huquq yetmasligi mumkin
+        raise TelegramUserError(f"Ochib bo'lmadi: {exc}") from exc
+
+    what = "Jonli efir" if rtmp else "Ovozli chat"
+    log.info("Telegram: %s ochildi — %s", what.lower(), name)
+    return f"«{name}» da {what.lower()} ochildi"
+
+
+async def voice_chat_stop(chat: str) -> str:
+    """Ochiq ovozli chatni yopadi."""
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+
+    full = await client(functions.channels.GetFullChannelRequest(entity)) \
+        if hasattr(entity, "broadcast") else None
+    call = getattr(getattr(full, "full_chat", None), "call", None)
+    if call is None:
+        raise TelegramUserError(f"«{name}» da ochiq ovozli chat yo'q")
+
+    await client(functions.phone.DiscardGroupCallRequest(call=call))
+    return f"«{name}» dagi ovozli chat yopildi"
+
+
+async def live_stream_url(chat: str, new_key: bool = False) -> dict[str, str]:
+    """Jonli efir uchun RTMP havolasi va kaliti (OBS shularni so'raydi)."""
+    telethon = _import_telethon()
+    functions = telethon.tl.functions
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+
+    try:
+        result = await client(functions.phone.GetGroupCallStreamRtmpUrlRequest(
+            peer=entity, revoke=bool(new_key),
+        ))
+    except Exception as exc:  # noqa: BLE001 — huquq yetmasligi mumkin
+        raise TelegramUserError(f"Havola olinmadi: {exc}") from exc
+
+    return {"chat": name, "url": result.url, "kalit": result.key}
+
+
+# --- Profil va akkaunt ------------------------------------------------------
+
+
+async def profile_set(first_name: str = "", last_name: str = "", bio: str = "") -> str:
+    """Ism, familiya va bio'ni o'zgartiradi. Bo'sh maydonlarga tegilmaydi."""
+    telethon = _import_telethon()
+    client = await get_client()
+    if not any((first_name.strip(), last_name.strip(), bio.strip())):
+        raise TelegramUserError("Nimani o'zgartirishni ayting")
+
+    await client(telethon.tl.functions.account.UpdateProfileRequest(
+        first_name=first_name.strip() or None,
+        last_name=last_name.strip() or None,
+        about=bio.strip() or None,
+    ))
+    return "Profil yangilandi"
+
+
+async def username_set(username: str) -> str:
+    """@username ni o'zgartiradi."""
+    telethon = _import_telethon()
+    client = await get_client()
+    handle = username.strip().lstrip("@")
+    try:
+        await client(telethon.tl.functions.account.UpdateUsernameRequest(handle))
+    except Exception as exc:  # noqa: BLE001 — band bo'lishi mumkin
+        raise TelegramUserError(f"@{handle} olinmadi: {exc}") from exc
+    return f"Endi siz @{handle}"
+
+
+async def profile_photo(path: str) -> str:
+    """Profil rasmini almashtiradi."""
+    telethon = _import_telethon()
+    client = await get_client()
+    source = Path(path).expanduser()
+    if not source.exists():
+        raise TelegramUserError(f"Fayl topilmadi: {source}")
+
+    uploaded = await client.upload_file(str(source))
+    await client(telethon.tl.functions.photos.UploadProfilePhotoRequest(file=uploaded))
+    return f"Profil rasmi almashtirildi: {source.name}"
+
+
+async def sessions() -> list[dict[str, Any]]:
+    """Akkauntga kirgan qurilmalar."""
+    telethon = _import_telethon()
+    client = await get_client()
+    result = await client(telethon.tl.functions.account.GetAuthorizationsRequest())
+    return [
+        {
+            "qurilma": f"{a.device_model} · {a.platform} {a.system_version}".strip(),
+            "dastur": f"{a.app_name} {a.app_version}".strip(),
+            "joy": a.country or "",
+            "hozirgi": bool(a.current),
+            "hash": str(a.hash),
+        }
+        for a in getattr(result, "authorizations", [])
+    ]
+
+
+async def session_kill(session_hash: str) -> str:
+    """Boshqa qurilmadagi seansni uzadi."""
+    telethon = _import_telethon()
+    client = await get_client()
+    try:
+        await client(telethon.tl.functions.account.ResetAuthorizationRequest(
+            hash=int(session_hash),
+        ))
+    except Exception as exc:  # noqa: BLE001 — hozirgi seansni uzib bo'lmaydi
+        raise TelegramUserError(f"Uzib bo'lmadi: {exc}") from exc
+    return "Seans uzildi"
+
+
+# Maxfiylik sozlamalarining o'zbekcha nomlari.
+PRIVACY_KEYS = {
+    "oxirgi_korilgan": "StatusTimestamp",
+    "telefon": "PhoneNumber",
+    "rasm": "ProfilePhoto",
+    "yoshi": "Birthday",
+    "bio": "About",
+    "uzatish": "Forwards",
+    "qongiroq": "PhoneCall",
+    "guruhga_qoshish": "ChatInvite",
+    "ovozli_xabar": "VoiceMessages",
+}
+
+
+async def privacy_set(what: str, who: str = "hamma") -> str:
+    """Maxfiylik sozlamasini o'zgartiradi.
+
+    `what` — PRIVACY_KEYS dagi nom, `who` — hamma | kontaktlar | hech_kim.
+    """
+    telethon = _import_telethon()
+    functions, types = telethon.tl.functions, telethon.tl.types
+    client = await get_client()
+
+    key_name = PRIVACY_KEYS.get(what.strip().casefold())
+    if key_name is None:
+        raise TelegramUserError(
+            "Noma'lum sozlama. Mumkin: " + ", ".join(sorted(PRIVACY_KEYS))
+        )
+    rules = {
+        "hamma": types.InputPrivacyValueAllowAll,
+        "kontaktlar": types.InputPrivacyValueAllowContacts,
+        "hech_kim": types.InputPrivacyValueDisallowAll,
+    }
+    rule = rules.get(who.strip().casefold())
+    if rule is None:
+        raise TelegramUserError("`kim` — hamma | kontaktlar | hech_kim")
+
+    await client(functions.account.SetPrivacyRequest(
+        key=getattr(types, f"InputPrivacyKey{key_name}")(), rules=[rule()],
+    ))
+    return f"«{what}» endi: {who}"
+
+
+# --- Guruh sozlamalari ------------------------------------------------------
+
+
+async def slow_mode(chat: str, seconds: int = 0) -> str:
+    """Sekin rejim: a'zolar shuncha soniyada bir marta yoza oladi. 0 — o'chirish."""
+    telethon = _import_telethon()
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+    try:
+        await client(telethon.tl.functions.channels.ToggleSlowModeRequest(
+            channel=entity, seconds=int(seconds),
+        ))
+    except Exception as exc:  # noqa: BLE001 — huquq yoki qiymat cheklovi
+        raise TelegramUserError(f"O'rnatib bo'lmadi: {exc}") from exc
+    if not seconds:
+        return f"«{name}»: sekin rejim o'chirildi"
+    return f"«{name}»: sekin rejim {seconds} soniya"
+
+
+async def chat_permissions(chat: str, can_write: bool = True, can_media: bool = True,
+                           can_invite: bool = True) -> str:
+    """Guruhdagi oddiy a'zolar nima qila olishini belgilaydi."""
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+    try:
+        await client.edit_permissions(
+            entity,
+            send_messages=can_write,
+            send_media=can_media, send_stickers=can_media,
+            send_gifs=can_media, send_polls=can_media,
+            invite_users=can_invite,
+        )
+    except Exception as exc:  # noqa: BLE001 — huquq yetmasligi mumkin
+        raise TelegramUserError(f"O'zgartirib bo'lmadi: {exc}") from exc
+    return f"«{name}»: a'zolar huquqlari yangilandi"
+
+
+async def admin_log(chat: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Adminlar jurnali — guruhda kim nima qilgani."""
+    telethon = _import_telethon()
+    client = await get_client()
+    entity, _ = await resolve(client, chat)
+    try:
+        result = await client(telethon.tl.functions.channels.GetAdminLogRequest(
+            channel=entity, q="", max_id=0, min_id=0,
+            limit=max(1, min(int(limit), 100)),
+        ))
+    except Exception as exc:  # noqa: BLE001 — admin bo'lish shart
+        raise TelegramUserError(f"Jurnalni ko'rib bo'lmadi: {exc}") from exc
+
+    users = {u.id: _name_of(u) for u in getattr(result, "users", [])}
+    return [
+        {
+            "vaqt": event.date.astimezone().strftime("%Y-%m-%d %H:%M") if event.date else "",
+            "kim": users.get(event.user_id, str(event.user_id)),
+            "nima": type(event.action).__name__.replace("ChannelAdminLogEventAction", ""),
+        }
+        for event in getattr(result, "events", [])
+    ]
+
+
+# --- Sovg'alar --------------------------------------------------------------
+#
+# Bu yerda faqat ikkita amal bor: ro'yxatni ko'rish va NFT sovg'ani boshqa
+# odamga o'tkazish. Sotib olish ataylab yo'q — u to'g'ridan-to'g'ri hisobdan
+# pul yechadi va xato qilishning oqibati eng og'iri. O'tkazish ham darvozadan
+# har safar alohida so'rab o'tadi (`safety.always_ask`), chunki uni qaytarib
+# bo'lmaydi.
+
+
+async def gifts(limit: int = 50) -> list[dict[str, Any]]:
+    """Hisobingizdagi sovg'alar."""
+    telethon = _import_telethon()
+    functions, types = telethon.tl.functions, telethon.tl.types
+    client = await get_client()
+
+    try:
+        result = await client(functions.payments.GetSavedStarGiftsRequest(
+            peer=types.InputPeerSelf(), offset="", limit=max(1, min(int(limit), 100)),
+        ))
+    except Exception as exc:  # noqa: BLE001 — API versiyasi farq qilishi mumkin
+        raise TelegramUserError(f"Sovg'alarni ko'rib bo'lmadi: {exc}") from exc
+
+    rows: list[dict[str, Any]] = []
+    for saved in getattr(result, "gifts", []):
+        gift = getattr(saved, "gift", None)
+        unique = type(gift).__name__ == "StarGiftUnique"
+        rows.append({
+            "nom": getattr(gift, "title", "") or getattr(gift, "slug", "") or "sovg'a",
+            "nft": unique,
+            "otkazsa_boladi": bool(getattr(saved, "can_transfer_at", None) is not None
+                                   or getattr(saved, "transfer_stars", None) is not None),
+            "narxi_stars": getattr(saved, "transfer_stars", 0) or 0,
+            "id": getattr(saved, "msg_id", 0),
+            "slug": getattr(gift, "slug", ""),
+        })
+    return rows
+
+
+async def gift_transfer(gift: str, to: str) -> str:
+    """NFT sovg'ani boshqa odamga o'tkazadi.
+
+    Faqat unique (NFT) sovg'alar o'tkaziladi va bu Stars talab qilishi
+    mumkin. Qaytarib bo'lmaydi — shuning uchun darvoza har safar so'raydi.
+    """
+    telethon = _import_telethon()
+    functions, types = telethon.tl.functions, telethon.tl.types
+    client = await get_client()
+    entity, name = await resolve(client, to)
+
+    needle = str(gift).strip().casefold()
+    if not needle:
+        raise TelegramUserError("Qaysi sovg'ani o'tkazishni ayting")
+
+    result = await client(functions.payments.GetSavedStarGiftsRequest(
+        peer=types.InputPeerSelf(), offset="", limit=100,
+    ))
+    match = None
+    for saved in getattr(result, "gifts", []):
+        item = getattr(saved, "gift", None)
+        label = f"{getattr(item, 'title', '')} {getattr(item, 'slug', '')}".casefold()
+        if needle in label:
+            match = saved
+            break
+    if match is None:
+        raise TelegramUserError(
+            f"«{gift}» nomli sovg'a topilmadi. `telegram_gifts` bilan ro'yxatni ko'ring."
+        )
+    if type(getattr(match, "gift", None)).__name__ != "StarGiftUnique":
+        raise TelegramUserError(
+            "Bu oddiy sovg'a — uni o'tkazib bo'lmaydi. Faqat NFT (unique) "
+            "sovg'alar boshqa odamga o'tadi."
+        )
+
+    saved_id = types.InputSavedStarGiftUser(msg_id=match.msg_id) \
+        if hasattr(types, "InputSavedStarGiftUser") else match.msg_id
+    try:
+        await client(functions.payments.TransferStarGiftRequest(
+            stargift=saved_id, to_id=await client.get_input_entity(entity),
+        ))
+    except Exception as exc:  # noqa: BLE001 — Stars yetmasligi yoki muddat
+        raise TelegramUserError(f"O'tkazib bo'lmadi: {exc}") from exc
+
+    log.warning("Telegram: sovg'a o'tkazildi — %s -> %s", gift, name)
+    return f"Sovg'a {name} ga o'tkazildi"

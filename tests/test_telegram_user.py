@@ -716,3 +716,172 @@ def test_peer_key_ignores_access_hash():
     second = types.InputPeerChannel(channel_id=9, access_hash=222)
     assert tg._peer_key(first) == tg._peer_key(second)
     assert tg._peer_key(first) != tg._peer_key(types.InputPeerUser(user_id=9, access_hash=111))
+
+
+# --- Akkauntning qolgan qismi -------------------------------------------------
+
+
+class _RawClient(_FakeClient):
+    """Xom MTProto so'rovlarini yozib boruvchi soxta mijoz."""
+
+    def __init__(self, names: list[str], reply: dict | None = None) -> None:
+        super().__init__(names)
+        self.requests: list = []
+        self._reply = reply or {}
+
+    async def get_input_entity(self, entity):
+        return types.InputPeerUser(user_id=1, access_hash=0)
+
+    async def __call__(self, request):
+        self.requests.append(request)
+        return self._reply.get(type(request).__name__)
+
+
+def _wire_raw(monkeypatch, names: list[str], reply: dict | None = None) -> _RawClient:
+    client = _RawClient(names, reply)
+
+    async def fake_client():
+        return client
+
+    monkeypatch.setattr(tg, "get_client", fake_client)
+    return client
+
+
+async def test_block_and_unblock_use_different_requests(monkeypatch):
+    client = _wire_raw(monkeypatch, ["Falonchi"])
+
+    assert "bloklandi" in await tg.block("Falonchi")
+    assert type(client.requests[-1]).__name__ == "BlockRequest"
+
+    assert "blokdan chiqarildi" in await tg.block("Falonchi", unblock=True)
+    assert type(client.requests[-1]).__name__ == "UnblockRequest"
+
+
+async def test_react_sends_the_emoji(monkeypatch):
+    client = _wire_raw(monkeypatch, ["Asad"])
+
+    await tg.react("Asad", 42, emoji="❤️")
+
+    request = client.requests[-1]
+    assert request.msg_id == 42
+    assert request.reaction[0].emoticon == "❤️"
+
+
+async def test_removing_a_reaction_sends_nothing(monkeypatch):
+    """Reaksiyani olish — bo'sh ro'yxat emas, `None` yuborish demak."""
+    client = _wire_raw(monkeypatch, ["Asad"])
+
+    await tg.react("Asad", 42, remove=True)
+
+    assert client.requests[-1].reaction is None
+
+
+async def test_privacy_rejects_an_unknown_setting(monkeypatch):
+    _wire_raw(monkeypatch, [])
+
+    with pytest.raises(tg.TelegramUserError, match="Mumkin:"):
+        await tg.privacy_set("nimadir", "hamma")
+
+
+async def test_privacy_rejects_an_unknown_audience(monkeypatch):
+    _wire_raw(monkeypatch, [])
+
+    with pytest.raises(tg.TelegramUserError, match="hech_kim"):
+        await tg.privacy_set("telefon", "faqat ozimga")
+
+
+async def test_privacy_maps_uzbek_names_to_telegram_keys(monkeypatch):
+    client = _wire_raw(monkeypatch, [])
+
+    await tg.privacy_set("oxirgi_korilgan", "kontaktlar")
+
+    request = client.requests[-1]
+    assert type(request.key).__name__ == "InputPrivacyKeyStatusTimestamp"
+    assert type(request.rules[0]).__name__ == "InputPrivacyValueAllowContacts"
+
+
+async def test_story_needs_an_existing_file(monkeypatch):
+    _wire_raw(monkeypatch, [])
+
+    with pytest.raises(tg.TelegramUserError, match="topilmadi"):
+        await tg.story_post("/bunday/fayl/yoq.jpg")
+
+
+async def test_scheduled_message_needs_text(monkeypatch):
+    _wire_raw(monkeypatch, ["Asad"])
+
+    with pytest.raises(tg.TelegramUserError, match="matni kerak"):
+        await tg.send_later("Asad", "   ", None)
+
+
+async def test_slow_mode_off_says_so(monkeypatch):
+    client = _wire_raw(monkeypatch, ["Dev guruhi"])
+
+    message = await tg.slow_mode("Dev guruhi", 0)
+
+    assert "o'chirildi" in message
+    assert client.requests[-1].seconds == 0
+
+
+# --- Sovg'alar ---
+#
+# Pul bilan bog'liq yagona amal — NFT o'tkazish. Eng muhim ikki xossa:
+# oddiy sovg'ani o'tkazib bo'lmasligi va topilmagan sovg'ada to'xtash.
+
+
+class _GiftClient(_RawClient):
+    def __init__(self, gifts: list) -> None:
+        super().__init__(["Asad"])
+        self._gifts = gifts
+
+    async def __call__(self, request):
+        self.requests.append(request)
+        if type(request).__name__ == "GetSavedStarGiftsRequest":
+            return SimpleNamespace(gifts=self._gifts)
+        return None
+
+
+def _saved_gift(kind: str, title: str):
+    gift = type(kind, (), {"title": title, "slug": title.lower()})()
+    return SimpleNamespace(gift=gift, msg_id=7, transfer_stars=25)
+
+
+async def test_gift_transfer_refuses_an_ordinary_gift(monkeypatch):
+    client = _GiftClient([_saved_gift("StarGift", "Ayiqcha")])
+
+    async def fake_client():
+        return client
+
+    monkeypatch.setattr(tg, "get_client", fake_client)
+
+    with pytest.raises(tg.TelegramUserError, match="NFT"):
+        await tg.gift_transfer("Ayiqcha", "Asad")
+
+
+async def test_gift_transfer_reports_a_missing_gift(monkeypatch):
+    client = _GiftClient([_saved_gift("StarGiftUnique", "Ayiqcha")])
+
+    async def fake_client():
+        return client
+
+    monkeypatch.setattr(tg, "get_client", fake_client)
+
+    with pytest.raises(tg.TelegramUserError, match="telegram_gifts"):
+        await tg.gift_transfer("Bunday sovg'a yo'q", "Asad")
+
+
+async def test_gift_list_marks_nft_items(monkeypatch):
+    client = _GiftClient([
+        _saved_gift("StarGiftUnique", "Ayiqcha"),
+        _saved_gift("StarGift", "Gul"),
+    ])
+
+    async def fake_client():
+        return client
+
+    monkeypatch.setattr(tg, "get_client", fake_client)
+
+    rows = await tg.gifts()
+
+    assert [r["nft"] for r in rows] == [True, False]
+    assert rows[0]["narxi_stars"] == 25

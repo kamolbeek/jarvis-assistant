@@ -61,6 +61,9 @@ TOOL_LABELS = {
     "mcp__jarvis__telegram_folder_delete": "Telegram papkasini o'chirish",
     "mcp__jarvis__telegram_kick": "Odamni Telegram guruhidan chiqarish",
     "mcp__jarvis__telegram_leave": "Telegram kanalidan chiqish",
+    "mcp__jarvis__telegram_story_delete": "Storiyani o'chirish",
+    "mcp__jarvis__telegram_gift_transfer": "Sovg'ani boshqa odamga o'tkazish",
+    "mcp__jarvis__telegram_session_kill": "Telegram seansini uzish",
     "mcp__jarvis__self_restart": "Jarvisni qayta ishga tushirish",
     "mcp__jarvis__self_revert": "Kod o'zgarishlarini bekor qilish",
 }

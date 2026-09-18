@@ -56,6 +56,12 @@ flowchart TD
 - **Ertalab kunni tushuntiradi** — belgilangan vaqtda bugungi ishlarni aytib beradi.
 - **Sizning nomingizdan yozadi** — «Alisherga yoz, kechikaman de» desangiz,
   Telegram yoki SMS orqali yuboradi.
+- **Telegram akkauntingizni boshqaradi** — kanal va guruh ochadi, odam
+  qo'shadi, admin qiladi, chiqaradi, bloklaydi, papkalarga yig'adi, storiya
+  qo'yadi, ovozli chat ochadi. Ellikdan ortiq amal — «Telegram» bo'limiga qarang.
+- **O'zini o'zi tuzatadi** — «bu menga yoqmadi» desangiz, o'z kodini
+  o'zgartiradi, testlardan o'tkazadi va qayta ishga tushadi. Bu paytda ekranda
+  «o'z ustida ishlamoqda» yozuvi turadi.
 - **Telefonda ham ishlaydi** — telefon brauzeridan bosib-gapirish sahifasi.
 - **Har bir xavfli amal uchun so'raydi** — HUD'da ✅/❌ chiqadi, hammasi jurnalga yoziladi.
 
@@ -923,6 +929,57 @@ Guruh boshqaruvi ham o'sha joyda:
 
 Odam qo'shilmasligi mumkin — ko'pchilikda Telegram maxfiyligi buni to'sadi.
 Bu xato emas: Jarvis sababini aytadi va taklifnoma havolasini beradi.
+
+### Akkauntning qolgan qismi
+
+Telegramda o'zingiz qila oladigan ishlarning ko'pi asbob sifatida bor:
+
+| Nima | Asbob |
+| --- | --- |
+| Odamni bloklash / blokdan chiqarish | `telegram_block`, `telegram_blocked` |
+| Telegram kontaktlari | `telegram_contacts`, `telegram_contact_add`, `telegram_contact_delete` |
+| Xabarga reaksiya | `telegram_react` |
+| GIF qidirib yuborish | `telegram_gif` |
+| Belgilangan vaqtda yuborish (Telegram o'zi jo'natadi) | `telegram_send_later`, `telegram_scheduled` |
+| Storiya qo'yish va o'chirish | `telegram_story`, `telegram_stories`, `telegram_story_delete` |
+| Ovozli chat / jonli efir ochish | `telegram_voice_chat`, `telegram_live_url` |
+| Profil, bio, @username, rasm | `telegram_profile`, `telegram_username`, `telegram_photo` |
+| Kirgan qurilmalar va seansni uzish | `telegram_sessions`, `telegram_session_kill` |
+| Maxfiylik sozlamalari | `telegram_privacy` |
+| Sekin rejim, a'zolar huquqlari, admin jurnali | `telegram_slow_mode`, `telegram_permissions`, `telegram_admin_log` |
+| Sovg'alar va NFT o'tkazish | `telegram_gifts`, `telegram_gift_transfer` |
+
+Misollar:
+
+> — Falonchini blokla.
+>
+> — Ertaga soat to'qqizda Asadga «yig'ilish boshlandi» deb yubor.
+>   *(Telegram o'zi jo'natadi — kompyuter o'chiq bo'lsa ham.)*
+>
+> — Shu rasmni storiyaga qo'y, faqat kontaktlarga ko'rinsin.
+>
+> — Dev guruhida ovozli chat och.
+>
+> — Bio'mni «Ishga ochiq» deb o'zgartir.
+
+### Nima qila olmaydi — halol ro'yxat
+
+Bularni ochiq aytish kerak, aks holda «ishlamadi» degan hafsala qoladi:
+
+- **Jonli efirda o'zi gapirmaydi va video uzatmaydi.** Ovozli chatni ochadi va
+  RTMP havolasi bilan kalitini beradi — efirni OBS yoki shunga o'xshash dastur
+  uzatadi. Ovoz oqimini Jarvisning o'zidan chiqarish alohida katta ish
+  (WebRTC) va u ovozli yordamchining mikrofoni bilan to'qnashadi.
+- **Bir kishilik qo'ng'iroq qilmaydi** (audio/video call) — xuddi shu sabab.
+- **Sovg'a sotib olmaydi.** Faqat boringini ko'radi va NFT'sini o'tkazadi.
+  Sotib olish hisobdan to'g'ridan-to'g'ri pul yechadi — uni sinovdan
+  o'tkazmasdan qo'yish noto'g'ri bo'lardi.
+- **Forum mavzularini (topics) yaratmaydi** — Telethon'ning joriy versiyasida
+  bu so'rov yo'q. Kutubxona yangilanganda qo'shiladi.
+- **Ommaviy yuborish yo'q.** Bitta odamga qayta-qayta yozish yoki bir xil
+  xabarni ko'pchilikka ketma-ket jo'natish uchun asbob yozilmagan: bu
+  odamlarni bezovta qilish va akkaunt cheklanishining eng tez yo'li.
+  Kanalga bitta e'lon yoki rejalashtirilgan xabar — bemalol.
 
 ### Nima har safar so'raladi
 

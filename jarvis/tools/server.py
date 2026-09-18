@@ -36,7 +36,9 @@ READ_ONLY_TOOLS = [
     "list_projects", "list_tasks", "daily_brief",
     "list_contacts", "find_contact",
     "telegram_chats", "telegram_read", "telegram_search", "telegram_overview",
-    "telegram_folders", "telegram_members",
+    "telegram_folders", "telegram_members", "telegram_blocked",
+    "telegram_contacts", "telegram_scheduled", "telegram_stories",
+    "telegram_sessions", "telegram_admin_log", "telegram_gifts",
     "frontmost_app", "list_shortcuts",
     "self_issues", "self_status",
 ]
@@ -841,6 +843,343 @@ def _system_tools(agenda: Agenda) -> list[Any]:
         except telegram_user.TelegramUserError as exc:
             return _fail(str(exc))
 
+    # --- Odamlar, kontent va akkauntning o'zi ---
+
+    @tool(
+        "telegram_block",
+        "Odamni bloklaydi. Guruhdan chiqarish emas — u sizga umuman yoza "
+        "olmaydi. `ochirilsinmi` true bo'lsa, blokdan chiqaradi.",
+        {"kim": str, "ochirilsinmi": bool},
+    )
+    async def telegram_block(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.block(
+                str(args.get("kim", "")), unblock=bool(args.get("ochirilsinmi")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool("telegram_blocked", "Bloklanganlar ro'yxati.", {}, annotations=READ_ONLY)
+    async def telegram_blocked(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.blocked_list()
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _ok("\n".join(rows) if rows else "Bloklangan odam yo'q")
+
+    @tool(
+        "telegram_contacts",
+        "Telegram kontaktlari ro'yxati (Jarvisning o'z aloqalar daftari emas).",
+        {"qidiruv": str},
+        annotations=READ_ONLY,
+    )
+    async def telegram_contacts(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.contacts_list(str(args.get("qidiruv") or ""))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Kontakt topilmadi")
+
+    @tool(
+        "telegram_contact_add",
+        "Telefon raqami bo'yicha Telegram kontakti qo'shadi.",
+        {"telefon": str, "ism": str, "familiya": str},
+    )
+    async def telegram_contact_add(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.contact_add(
+                str(args.get("telefon", "")), str(args.get("ism", "")),
+                str(args.get("familiya") or ""),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool("telegram_contact_delete", "Telegram kontaktini o'chiradi.", {"kim": str})
+    async def telegram_contact_delete(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.contact_delete(str(args.get("kim", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_react",
+        "Xabarga reaksiya qo'yadi. `emoji` — masalan 👍 yoki ❤️. "
+        "`olinsinmi` true bo'lsa, reaksiyani olib tashlaydi.",
+        {"chat": str, "id": int, "emoji": str, "olinsinmi": bool},
+    )
+    async def telegram_react(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.react(
+                str(args.get("chat", "")), int(args.get("id") or 0),
+                emoji=str(args.get("emoji") or "👍"),
+                remove=bool(args.get("olinsinmi")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool("telegram_mark_read", "Chatni o'qilgan deb belgilaydi.", {"chat": str})
+    async def telegram_mark_read(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.mark_read(str(args.get("chat", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_gif",
+        "GIF qidirib yuboradi. `nima` — qidiruv so'zi, masalan 'salom' yoki 'kulgu'.",
+        {"kimga": str, "nima": str},
+    )
+    async def telegram_gif(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.send_gif(
+                str(args.get("kimga", "")), str(args.get("nima") or ""),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_send_later",
+        "Xabarni belgilangan vaqtda yuborishga qo'yadi — Telegram o'zi jo'natadi, "
+        "kompyuter o'chiq bo'lsa ham. Vaqt: 2026-09-20T09:00.",
+        {"kimga": str, "matn": str, "vaqt": str},
+    )
+    async def telegram_send_later(args: dict[str, Any]) -> dict[str, Any]:
+        when = parse_when(args.get("vaqt"))
+        if when is None:
+            return _fail("Vaqtni tushunmadim. Masalan: 2026-09-20T09:00")
+        try:
+            return _ok(await telegram_user.send_later(
+                str(args.get("kimga", "")), str(args.get("matn", "")), when,
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_scheduled", "Shu chat uchun rejalashtirilgan xabarlar.",
+        {"chat": str}, annotations=READ_ONLY,
+    )
+    async def telegram_scheduled(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.scheduled(str(args.get("chat", "")))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Rejalashtirilgan xabar yo'q")
+
+    # --- Storiyalar ---
+
+    @tool(
+        "telegram_story",
+        "Storiya qo'yadi. `fayl` — rasm yoki video yo'li. `hammagami` false "
+        "bo'lsa, faqat kontaktlarga ko'rinadi.",
+        {"fayl": str, "izoh": str, "hammagami": bool},
+    )
+    async def telegram_story(args: dict[str, Any]) -> dict[str, Any]:
+        everyone = args.get("hammagami")
+        try:
+            return _ok(await telegram_user.story_post(
+                str(args.get("fayl", "")), caption=str(args.get("izoh") or ""),
+                everyone=True if everyone is None else bool(everyone),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_stories", "Faol storiyalar (standart — o'zingizniki).",
+        {"kim": str}, annotations=READ_ONLY,
+    )
+    async def telegram_stories(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.stories_of(str(args.get("kim") or "men"))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Faol storiya yo'q")
+
+    @tool("telegram_story_delete", "O'z storiyangizni o'chiradi.", {"idlar": str})
+    async def telegram_story_delete(args: dict[str, Any]) -> dict[str, Any]:
+        ids = [int(p) for p in str(args.get("idlar") or "").split(",") if p.strip().isdigit()]
+        try:
+            return _ok(await telegram_user.story_delete(ids))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    # --- Ovozli chat va jonli efir ---
+
+    @tool(
+        "telegram_voice_chat",
+        "Guruh yoki kanalda ovozli chat ochadi. `efirmi` true bo'lsa — jonli "
+        "efir rejimi (video uzatish uchun). `yopilsinmi` true — ochiqni yopadi.",
+        {"chat": str, "nom": str, "efirmi": bool, "yopilsinmi": bool},
+    )
+    async def telegram_voice_chat(args: dict[str, Any]) -> dict[str, Any]:
+        chat = str(args.get("chat", ""))
+        try:
+            if bool(args.get("yopilsinmi")):
+                return _ok(await telegram_user.voice_chat_stop(chat))
+            return _ok(await telegram_user.voice_chat_start(
+                chat, title=str(args.get("nom") or ""), rtmp=bool(args.get("efirmi")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_live_url",
+        "Jonli efir uchun RTMP havolasi va kalitini beradi — OBS shularni "
+        "so'raydi. `yangi_kalit` true bo'lsa, eski kalit bekor qilinadi.",
+        {"chat": str, "yangi_kalit": bool},
+    )
+    async def telegram_live_url(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _json(await telegram_user.live_stream_url(
+                str(args.get("chat", "")), new_key=bool(args.get("yangi_kalit")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    # --- Profil va akkaunt ---
+
+    @tool(
+        "telegram_profile",
+        "Telegram profilini o'zgartiradi: ism, familiya, bio. Faqat "
+        "berilgan maydonlar o'zgaradi.",
+        {"ism": str, "familiya": str, "bio": str},
+    )
+    async def telegram_profile(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.profile_set(
+                str(args.get("ism") or ""), str(args.get("familiya") or ""),
+                str(args.get("bio") or ""),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool("telegram_username", "@username ni o'zgartiradi.", {"username": str})
+    async def telegram_username(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.username_set(str(args.get("username", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool("telegram_photo", "Profil rasmini almashtiradi.", {"fayl": str})
+    async def telegram_photo(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.profile_photo(str(args.get("fayl", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_sessions",
+        "Akkauntga kirgan qurilmalar ro'yxati. Notanish qurilma ko'rinsa, "
+        "`telegram_session_kill` bilan uzing.",
+        {},
+        annotations=READ_ONLY,
+    )
+    async def telegram_sessions(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.sessions()
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows)
+
+    @tool("telegram_session_kill", "Boshqa qurilmadagi seansni uzadi.", {"hash": str})
+    async def telegram_session_kill(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.session_kill(str(args.get("hash", ""))))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_privacy",
+        "Maxfiylik sozlamasi. `nima`: oxirgi_korilgan | telefon | rasm | bio | "
+        "uzatish | qongiroq | guruhga_qoshish | ovozli_xabar | yoshi. "
+        "`kim`: hamma | kontaktlar | hech_kim.",
+        {"nima": str, "kim": str},
+    )
+    async def telegram_privacy(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.privacy_set(
+                str(args.get("nima", "")), str(args.get("kim") or "hamma"),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    # --- Guruh sozlamalari ---
+
+    @tool(
+        "telegram_slow_mode",
+        "Sekin rejim: a'zolar shuncha soniyada bir marta yoza oladi. 0 — o'chirish.",
+        {"guruh": str, "soniya": int},
+    )
+    async def telegram_slow_mode(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.slow_mode(
+                str(args.get("guruh", "")), int(args.get("soniya") or 0),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_permissions",
+        "Guruhdagi oddiy a'zolar nima qila olishini belgilaydi.",
+        {"guruh": str, "yozsinmi": bool, "media_yuborsinmi": bool, "odam_qoshsinmi": bool},
+    )
+    async def telegram_permissions(args: dict[str, Any]) -> dict[str, Any]:
+        def flag(key: str) -> bool:
+            value = args.get(key)
+            return True if value is None else bool(value)
+
+        try:
+            return _ok(await telegram_user.chat_permissions(
+                str(args.get("guruh", "")),
+                can_write=flag("yozsinmi"), can_media=flag("media_yuborsinmi"),
+                can_invite=flag("odam_qoshsinmi"),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_admin_log", "Guruhda kim nima qilgani (adminlar jurnali).",
+        {"guruh": str, "nechta": int}, annotations=READ_ONLY,
+    )
+    async def telegram_admin_log(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.admin_log(
+                str(args.get("guruh", "")), limit=int(args.get("nechta") or 20),
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Jurnal bo'sh")
+
+    # --- Sovg'alar ---
+
+    @tool(
+        "telegram_gifts",
+        "Hisobingizdagi sovg'alar: qaysi biri NFT, o'tkazsa bo'ladimi va "
+        "qancha Stars turadi.",
+        {},
+        annotations=READ_ONLY,
+    )
+    async def telegram_gifts(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.gifts()
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Sovg'a yo'q")
+
+    @tool(
+        "telegram_gift_transfer",
+        "NFT sovg'ani boshqa odamga o'tkazadi. Faqat unique (NFT) sovg'alar "
+        "o'tadi, Stars talab qilishi mumkin va QAYTARIB BO'LMAYDI. "
+        "O'tkazishdan oldin `telegram_gifts` bilan aniq nomini tekshiring.",
+        {"sovga": str, "kimga": str},
+    )
+    async def telegram_gift_transfer(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _ok(await telegram_user.gift_transfer(
+                str(args.get("sovga", "")), str(args.get("kimga", "")),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
     @tool(
         "telegram_edit",
         "Telegramda oxirgi yuborilgan xabarni tuzatadi. Foydalanuvchi «unday emas», "
@@ -929,6 +1268,16 @@ def _system_tools(agenda: Agenda) -> list[Any]:
             telegram_kick, telegram_unban, telegram_join, telegram_link,
             telegram_rename, telegram_pin, telegram_archive, telegram_mute,
             telegram_forward, telegram_delete_messages, telegram_delete_chat,
+            telegram_block, telegram_blocked, telegram_contacts,
+            telegram_contact_add, telegram_contact_delete,
+            telegram_react, telegram_mark_read, telegram_gif,
+            telegram_send_later, telegram_scheduled,
+            telegram_story, telegram_stories, telegram_story_delete,
+            telegram_voice_chat, telegram_live_url,
+            telegram_profile, telegram_username, telegram_photo,
+            telegram_sessions, telegram_session_kill, telegram_privacy,
+            telegram_slow_mode, telegram_permissions, telegram_admin_log,
+            telegram_gifts, telegram_gift_transfer,
             list_shortcuts, run_shortcut, call_n8n]
 
 

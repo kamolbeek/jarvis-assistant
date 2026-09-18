@@ -246,6 +246,15 @@ safety:
     mcp__jarvis__telegram_archive: "allow"
     mcp__jarvis__telegram_mute: "allow"
     mcp__jarvis__telegram_forward: "allow"
+    mcp__jarvis__telegram_block: "allow"
+    mcp__jarvis__telegram_react: "allow"
+    mcp__jarvis__telegram_gif: "allow"
+    mcp__jarvis__telegram_send_later: "allow"
+    mcp__jarvis__telegram_story: "allow"
+    mcp__jarvis__telegram_voice_chat: "allow"
+    mcp__jarvis__telegram_profile: "allow"
+    mcp__jarvis__telegram_slow_mode: "allow"
+    mcp__jarvis__telegram_permissions: "allow"
 
     # O'z ustida ishlash — pastdagi `self_edit` ga qarang.
     mcp__jarvis__self_note: "allow"
@@ -264,6 +273,11 @@ safety:
     - "mcp__jarvis__telegram_delete_messages"
     - "mcp__jarvis__telegram_delete_chat"
     - "mcp__jarvis__telegram_folder_delete"
+    - "mcp__jarvis__telegram_story_delete"
+    # Sovg'a o'tkazish Stars yechadi va qaytarib bo'lmaydi.
+    - "mcp__jarvis__telegram_gift_transfer"
+    # Seansni uzish — noto'g'ri qurilma tanlansa, o'zingiz chiqib qolasiz.
+    - "mcp__jarvis__telegram_session_kill"
     - "mcp__jarvis__self_revert"
 
   # Jarvis o'z kodini o'zgartira olsinmi. Yoqilganda repo papkasi
