@@ -1044,6 +1044,45 @@ Bularni ochiq aytish kerak, aks holda «ishlamadi» degan hafsala qoladi:
   odamlarni bezovta qilish va akkaunt cheklanishining eng tez yo'li.
   Kanalga bitta e'lon yoki rejalashtirilgan xabar — bemalol.
 
+### Ovozli xabarlar ichidan qidirish
+
+Telegram qidiruvi ovozli xabarni **topa olmaydi** — uning ichida matn yo'q,
+faqat audio. Shuning uchun alohida yo'l bor:
+
+| Nima | Asbob |
+| --- | --- |
+| Ovozlilar ichidan so'z qidirish | `telegram_voice_search` |
+| Ovozlilarni matnga aylantirib o'qish | `telegram_voice_read` |
+| Butun suhbatni faylga yozish (ovozlilar bilan) | `telegram_export` |
+
+Aylantirish ikki yo'l bilan bo'ladi, shu tartibda:
+
+1. **Telegramning o'zi** (Premium xususiyati) — tez, fayl yuklab olinmaydi.
+2. **O'zimizniki** — fayl yuklab olinadi, `ffmpeg` bilan o'giriladi va
+   sozlamadagi STT provayderiga beriladi. Buning uchun `brew install ffmpeg`
+   kerak.
+
+Bir marta aylantirilgan yozuv `~/.jarvis/telegram_transcripts.json` da
+saqlanadi: birinchi qidiruv sekin, keyingilari darhol.
+
+**Kelishmovchilikda** («men aytganman, u aytmagan deydi») bitta xabarni
+topish yetarli emas — `telegram_export` butun yozishmani matn faylga
+yozadi, ovozlilarni ham o'z o'rniga qo'yadi:
+
+```
+[2026-03-01 12:04] Asad: qachon berasiz?
+[2026-03-01 12:07] Siz: [ovozli] kecha besh ming berib yubordim
+```
+
+Fayl `~/jarvis-workspace/` ga tushadi — uni saqlash va kerak bo'lsa
+ko'rsatish mumkin.
+
+**Halol ogohlantirish.** Ovozdan aylantirilgan matn — taxminiy. O'zbek
+tili uchun xato ehtimoli bor, ayniqsa ism va raqamlarda. Shuning uchun
+muhim joy topilganda Jarvis xabarning **sanasi va raqamini** aytadi:
+asl yozuvni o'zingiz eshitib tekshiring. Rasmiy dalil sifatida
+ishlatmoqchi bo'lsangiz, asl audio bilan birga ishlating.
+
 ### Nima har safar so'raladi
 
 Kundalik ishlar so'ramasdan bajariladi. Qaytarib bo'lmaydiganlari esa **har

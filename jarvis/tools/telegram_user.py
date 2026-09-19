@@ -27,7 +27,9 @@ import json
 import logging
 import os
 import random
+import re
 import stat
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -1784,3 +1786,296 @@ async def gift_transfer(gift: str, to: str) -> str:
 
     log.warning("Telegram: sovg'a o'tkazildi — %s -> %s", gift, name)
     return f"Sovg'a {name} ga o'tkazildi"
+
+
+# --- Ovozli xabarlarni matnga aylantirish ------------------------------------
+#
+# Telegram qidiruvi ovozli xabarni TOPA OLMAYDI: uning ichida matn yo'q,
+# faqat audio. «Bir vaqtlar ovozlida aytgan edim» degan narsani topish uchun
+# avval o'sha yozuvlarni matnga aylantirish kerak.
+#
+# Ikki yo'l bor va tartib shunday:
+#
+#   1. Telegramning O'ZI aylantiradi (Premium xususiyati). Tez, yuklab
+#      olish shart emas, kompyuterni yuklamaydi.
+#   2. Bo'lmasa — fayl yuklab olinadi, ffmpeg bilan WAV ga o'giriladi va
+#      Jarvisning o'z STT provayderiga beriladi (sozlamadagi qaysi bo'lsa).
+#
+# Natija keshlanadi: bir marta aylantirilgan xabar ikkinchi qidiruvda
+# darhol topiladi. Aks holda har qidiruv qaytadan daqiqalab ishlardi.
+
+TRANSCRIPT_CACHE = STATE_DIR / "telegram_transcripts.json"
+
+# Bir chaqiruvda shuncha ovozli xabar ko'riladi. Cheksiz qilib bo'lmaydi:
+# har biri uchun tarmoq va hisoblash ketadi.
+MAX_VOICE_SCAN = 200
+
+_stt_provider: Any = None
+
+
+def _load_cache() -> dict[str, str]:
+    try:
+        return json.loads(TRANSCRIPT_CACHE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    except OSError:
+        log.exception("Transkript keshini o'qib bo'lmadi")
+        return {}
+
+
+def _save_cache(cache: dict[str, str]) -> None:
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        TRANSCRIPT_CACHE.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
+        TRANSCRIPT_CACHE.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        log.exception("Transkript keshini yozib bo'lmadi")
+
+
+async def _telegram_transcribe(client: Any, entity: Any, msg_id: int) -> str:
+    """Telegramning o'z aylantiruvchisi (Premium). Bo'lmasa — bo'sh satr."""
+    telethon = _import_telethon()
+    try:
+        result = await client(telethon.tl.functions.messages.TranscribeAudioRequest(
+            peer=entity, msg_id=int(msg_id),
+        ))
+    except Exception as exc:  # noqa: BLE001 — Premium yo'q yoki limit tugagan
+        log.debug("Telegram transkripsiyasi ishlamadi: %s", exc)
+        return ""
+    # `pending=True` — hali tayyor emas; kutib o'tirmaymiz, lokal yo'lga o'tamiz.
+    if getattr(result, "pending", False):
+        return ""
+    return str(getattr(result, "text", "") or "").strip()
+
+
+def _get_stt() -> Any:
+    """Sozlamadagi STT provayderi. Bir marta quriladi."""
+    global _stt_provider
+    if _stt_provider is None:
+        from ..config import load_config  # noqa: PLC0415 — aylanma importdan qochish
+        from ..voice.stt import build_stt  # noqa: PLC0415
+
+        _stt_provider = build_stt(load_config().section("voice.stt"))
+    return _stt_provider
+
+
+async def _local_transcribe(path: Path) -> str:
+    """Yuklab olingan ovozli faylni matnga aylantiradi.
+
+    Telegram ovozli xabarni OGG/Opus da saqlaydi, STT esa 16 kHz mono WAV
+    kutadi — o'rtada ffmpeg kerak bo'ladi. Bu yagona tashqi talab va uni
+    aniq aytish kerak, aks holda xato tushunarsiz bo'lib qoladi.
+    """
+    import shutil as _shutil  # noqa: PLC0415 — faqat shu yerda kerak
+
+    ffmpeg = _shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise TelegramUserError(
+            "Ovozli xabarni matnga aylantirish uchun ffmpeg kerak:\n"
+            "    brew install ffmpeg"
+        )
+
+    wav = path.with_suffix(".wav")
+    process = await asyncio.create_subprocess_exec(
+        ffmpeg, "-y", "-loglevel", "error", "-i", str(path),
+        "-ar", "16000", "-ac", "1", str(wav),
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+    )
+    _, err = await process.communicate()
+    if process.returncode != 0 or not wav.exists():
+        raise TelegramUserError(f"Audio o'girilmadi: {err.decode('utf-8', 'replace')[:200]}")
+
+    import wave as _wave  # noqa: PLC0415
+
+    import numpy as _np  # noqa: PLC0415
+
+    with _wave.open(str(wav), "rb") as handle:
+        frames = handle.readframes(handle.getnframes())
+    audio = _np.frombuffer(frames, dtype=_np.int16)
+    wav.unlink(missing_ok=True)
+
+    return (await _get_stt().transcribe(audio, 16000)).strip()
+
+
+async def voice_transcripts(chat: str, limit: int = 30) -> list[dict[str, Any]]:
+    """Chatdagi ovozli xabarlarni matnga aylantiradi (yangisidan eskisiga).
+
+    Bir marta aylantirilgani keshda qoladi — keyingi chaqiruv darhol javob
+    beradi.
+    """
+    telethon = _import_telethon()
+    types = telethon.tl.types
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+
+    cache = _load_cache()
+    dirty = False
+    rows: list[dict[str, Any]] = []
+    count = max(1, min(int(limit), MAX_VOICE_SCAN))
+
+    # Ovozli xabar ham, doira-video ham bir xil ishlanadi — ikkalasi ham
+    # «gapirib yuborilgan» xabar.
+    # Ikki filtr bo'yicha aylaniladi (ovozli va doira-video), shuning uchun
+    # bitta xabar ikki marta tushmasligini alohida qarab turamiz — va
+    # chegara ikkalasiga BIRGA tegishli, har biriga alohida emas.
+    seen: set[int] = set()
+    for media_filter in (types.InputMessagesFilterVoice(),
+                         types.InputMessagesFilterRoundVoice()):
+        if len(rows) >= count:
+            break
+        async for message in client.iter_messages(
+            entity, limit=count, filter=media_filter
+        ):
+            if message.id in seen:
+                continue
+            seen.add(message.id)
+
+            key = f"{getattr(entity, 'id', chat)}:{message.id}"
+            text = cache.get(key, "")
+
+            if not text:
+                text = await _telegram_transcribe(client, entity, message.id)
+                if not text:
+                    with tempfile.TemporaryDirectory() as tmp:
+                        path = await client.download_media(message, file=tmp)
+                        if not path:
+                            continue
+                        text = await _local_transcribe(Path(path))
+                cache[key] = text
+                dirty = True
+
+            rows.append({
+                "id": message.id,
+                "vaqt": _when(message),
+                "kim": _sender_name(message),
+                "matn": text,
+            })
+            if len(rows) >= count:
+                break
+
+    if dirty:
+        _save_cache(cache)
+
+    rows.sort(key=lambda row: row["id"], reverse=True)
+    log.info("Telegram: «%s» dan %d ta ovozli xabar matnga aylantirildi", name, len(rows))
+    return rows
+
+
+async def voice_search(chat: str, query: str, limit: int = 60) -> dict[str, Any]:
+    """Ovozli xabarlar ichidan so'z qidiradi.
+
+    Telegramning o'z qidiruvi buni qila olmaydi — ovozli xabarda matn yo'q.
+    Shuning uchun avval aylantiriladi, keyin qidiriladi.
+    """
+    needle = str(query).strip().casefold()
+    if not needle:
+        raise TelegramUserError("Nimani qidirishni ayting")
+
+    rows = await voice_transcripts(chat, limit=limit)
+    found = [row for row in rows if needle in row["matn"].casefold()]
+
+    return {
+        "qidirildi": len(rows),
+        "topildi": len(found),
+        "natijalar": found[:20],
+    }
+
+
+# --- To'liq eksport ----------------------------------------------------------
+#
+# Qidiruv «bittasini topish» uchun. Ba'zan esa BUTUN suhbatni ko'rib chiqish
+# kerak bo'ladi — masalan kelishmovchilikda, «aytdim / aytmadim» degan
+# savolda. Bunda natija ekranda emas, FAYLDA bo'lishi kerak: uni saqlash,
+# qayta o'qish va kerak bo'lsa boshqa odamga ko'rsatish mumkin.
+#
+# Ovozli xabarlar ham matnga aylantirilib, o'z o'rniga qo'yiladi — ya'ni
+# suhbatning to'liq, vaqt bo'yicha tartiblangan yozuvi chiqadi.
+
+# Bir eksportda shuncha xabar ko'riladi.
+MAX_EXPORT = 5000
+
+
+async def export_chat(chat: str, limit: int = 1000, voice: bool = True,
+                      out_dir: str = "") -> dict[str, Any]:
+    """Suhbatni matn faylga yozadi (eskisidan yangisiga).
+
+    `voice=True` bo'lsa, ovozli xabarlar va doira-videolar ham matnga
+    aylantiriladi. Ular odatda eng muhim joyi bo'ladi va qidiruv ularni
+    umuman ko'rmaydi.
+    """
+    client = await get_client()
+    entity, name = await resolve(client, chat)
+    count = max(1, min(int(limit), MAX_EXPORT))
+
+    cache = _load_cache() if voice else {}
+    dirty = False
+    lines: list[str] = []
+    totals = {"xabar": 0, "ovozli": 0, "media": 0}
+
+    async for message in client.iter_messages(entity, limit=count, reverse=True):
+        when = _when(message)
+        who = _sender_name(message)
+        text = (message.message or "").strip()
+        marker = ""
+
+        if voice and _is_voice(message):
+            key = f"{getattr(entity, 'id', chat)}:{message.id}"
+            spoken = cache.get(key, "")
+            if not spoken:
+                spoken = await _telegram_transcribe(client, entity, message.id)
+                if not spoken:
+                    try:
+                        with tempfile.TemporaryDirectory() as tmp:
+                            path = await client.download_media(message, file=tmp)
+                            if path:
+                                spoken = await _local_transcribe(Path(path))
+                    except TelegramUserError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001 — bitta yozuv butun ishni to'xtatmasin
+                        log.warning("Xabar %s aylantirilmadi: %s", message.id, exc)
+                        spoken = ""
+                cache[key] = spoken
+                dirty = True
+            marker = "[ovozli] "
+            text = spoken or "(aylantirilmadi)"
+            totals["ovozli"] += 1
+        elif message.media and not text:
+            marker = "[media] "
+            text = f"({type(message.media).__name__})"
+            totals["media"] += 1
+
+        if not text:
+            continue
+
+        totals["xabar"] += 1
+        lines.append(f"[{when}] {who}: {marker}{text}")
+
+    if dirty:
+        _save_cache(cache)
+
+    target = Path(out_dir).expanduser() if out_dir else Path.home() / "jarvis-workspace"
+    target.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^\w\- ]+", "", name).strip().replace(" ", "_") or "suhbat"
+    path = target / f"telegram-{safe}-{datetime.now().strftime('%Y%m%d-%H%M')}.txt"
+
+    header = (
+        f"Telegram suhbati: {name}\n"
+        f"Eksport: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+        f"Xabarlar: {totals['xabar']} (shundan ovozli: {totals['ovozli']})\n"
+        f"{'=' * 60}\n\n"
+    )
+    path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+
+    log.info("Telegram: «%s» eksport qilindi — %d xabar", name, totals["xabar"])
+    return {"chat": name, "fayl": str(path), **totals}
+
+
+def _is_voice(message: Any) -> bool:
+    """Ovozli xabar yoki doira-videomi?"""
+    document = getattr(getattr(message, "media", None), "document", None)
+    for attribute in getattr(document, "attributes", []) or []:
+        if getattr(attribute, "voice", False) or getattr(attribute, "round_message", False):
+            return True
+    return False

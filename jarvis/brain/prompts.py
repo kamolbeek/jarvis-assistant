@@ -79,6 +79,8 @@ ishlaysan. Asboblar:
     telegram_sessions / telegram_session_kill / telegram_privacy
     telegram_slow_mode / telegram_permissions / telegram_admin_log
     telegram_gifts / telegram_gift_transfer    sovg'alar (faqat NFT o'tadi)
+    telegram_voice_search / telegram_voice_read  OVOZLI xabarlar ichidan qidirish
+    telegram_export                    butun suhbatni faylga yozish (dalil uchun)
 
 `send_telegram` esa boshqa narsa: u bot orqali faqat foydalanuvchining
 o'ziga yozadi (uzoq ish tugaganini bildirish uchun).
@@ -93,6 +95,25 @@ so'ramasdan.
 top (Glob yoki Bash bilan), keyin `telegram_send_file` ga to'liq yo'lni
 ber. Qaysi fayl ekani noaniq bo'lsa — topilganlarni sanab ber va
 so'ra, taxmin bilan yuborma.
+
+Xabar OVOZLI aytilgan bo'lsa («ovozlida aytgan edi», «gapirganda
+aytgandi») — `telegram_search` foydasiz: ovozli xabarning ichida matn
+yo'q, Telegram uni ko'rmaydi. Bunda `telegram_voice_search` ni ishlat: u
+avval ovozli yozuvlarni matnga aylantiradi, keyin qidiradi. Birinchi
+marta sekin bo'lishini oldindan aytib qo'y («bir necha daqiqa ketadi»),
+chunki har bir yozuv alohida aylantiriladi. Ikkinchi marta darhol
+topiladi — natija saqlanadi.
+
+Kelishmovchilikda («men aytganman, u aytmagan deydi», «pul berganman»)
+bitta xabarni topish yetarli emas — BUTUN suhbatni ko'rib chiqish kerak.
+Bunda `telegram_export` ni ishlat: u yozishmani matn faylga yozadi,
+ovozli xabarlarni ham o'z o'rniga qo'yadi. Keyin o'sha faylni Grep yoki
+Read bilan o'qib, topilgan joyni SANASI bilan ayt.
+
+Bunday ishda ehtiyot bo'l: topilmagan narsani «yo'q ekan» deb ayt,
+«bor» deb taxmin qilma. Ovozdan aylantirilgan matn xato bo'lishi mumkin —
+muhim joyni topganingda o'sha xabarning sanasi va raqamini ayt, toki
+foydalanuvchi asl yozuvni o'zi eshitib tekshira olsin.
 
 Eski xabarni qidirishda («bir vaqtlar Asadga tashlagan edim»,
 «saqlangan xabarlarimda bor edi») `telegram_search` ni ishlat va

@@ -1153,6 +1153,59 @@ def _system_tools(agenda: Agenda) -> list[Any]:
     # --- Sovg'alar ---
 
     @tool(
+        "telegram_voice_search",
+        "OVOZLI xabarlar ichidan so'z qidiradi. Telegramning o'z qidiruvi buni "
+        "qila olmaydi — ovozli xabarda matn yo'q, shuning uchun avval matnga "
+        "aylantiriladi. «Ovozlida aytgan edim», «gapirganda aytgandi» degan "
+        "so'rovlarda AYNAN shuni ishlating, `telegram_search` ni emas. "
+        "Birinchi marta sekin (har bir yozuv aylantiriladi), keyin tez.",
+        {"chat": str, "soz": str, "nechta": int},
+    )
+    async def telegram_voice_search(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return _json(await telegram_user.voice_search(
+                str(args.get("chat", "")), str(args.get("soz", "")),
+                limit=int(args.get("nechta") or 60),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
+        "telegram_voice_read",
+        "Chatdagi ovozli xabarlarni matnga aylantirib beradi (yangisidan "
+        "eskisiga). «Ovozlilarni o'qib ber», «nima deganini ayt» degan "
+        "so'rovlar uchun.",
+        {"chat": str, "nechta": int},
+    )
+    async def telegram_voice_read(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            rows = await telegram_user.voice_transcripts(
+                str(args.get("chat", "")), limit=int(args.get("nechta") or 20),
+            )
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+        return _json(rows) if rows else _ok("Ovozli xabar topilmadi")
+
+    @tool(
+        "telegram_export",
+        "BUTUN suhbatni matn faylga yozadi — ovozli xabarlar va doira-videolar "
+        "ham matnga aylantirilib, o'z o'rniga qo'yiladi. Kelishmovchilikda "
+        "(«aytdim / aytmadim», «berdim / bermadim») dalil sifatida ishlatiladi: "
+        "natija faylda qoladi, uni saqlash va ko'rsatish mumkin. Uzoq ish — "
+        "foydalanuvchini oldindan ogohlantiring.",
+        {"chat": str, "nechta": int, "ovozli_ham": bool},
+    )
+    async def telegram_export(args: dict[str, Any]) -> dict[str, Any]:
+        voice = args.get("ovozli_ham")
+        try:
+            return _json(await telegram_user.export_chat(
+                str(args.get("chat", "")), limit=int(args.get("nechta") or 1000),
+                voice=True if voice is None else bool(voice),
+            ))
+        except telegram_user.TelegramUserError as exc:
+            return _fail(str(exc))
+
+    @tool(
         "telegram_gifts",
         "Hisobingizdagi sovg'alar: qaysi biri NFT, o'tkazsa bo'ladimi va "
         "qancha Stars turadi.",
@@ -1279,6 +1332,7 @@ def _system_tools(agenda: Agenda) -> list[Any]:
             telegram_sessions, telegram_session_kill, telegram_privacy,
             telegram_slow_mode, telegram_permissions, telegram_admin_log,
             telegram_gifts, telegram_gift_transfer,
+            telegram_voice_search, telegram_voice_read, telegram_export,
             list_shortcuts, run_shortcut, call_n8n]
 
 
